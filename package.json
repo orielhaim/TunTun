@@ -1,0 +1,21 @@
+{
+  "name": "tuntun",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:management": "bun --env-file=.env --filter @tuntun/management dev",
+    "dev:dash": "bun --env-file=.env --filter @tuntun/dashboard dev",
+    "db:generate": "bun --env-file=.env --filter @tuntun/db generate",
+    "db:migrate": "bun --env-file=.env --filter @tuntun/db migrate",
+    "db:studio": "bun --env-file=.env --filter @tuntun/db studio",
+    "format": "biome format",
+    "lint": "biome lint",
+    "check": "biome check"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.2"
+  }
+}

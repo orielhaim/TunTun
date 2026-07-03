@@ -1,0 +1,22 @@
+{
+  "name": "@tuntun/management",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts"
+  },
+  "dependencies": {
+    "@elysiajs/cors": "^1.4.2",
+    "@tuntun/api": "workspace:*",
+    "@tuntun/db": "workspace:*",
+    "argon2": "^0.44.0",
+    "better-auth": "^1.6.23",
+    "drizzle-orm": "^0.45.2",
+    "elysia": "^1.4.29",
+    "hash-wasm": "^4.12.0",
+    "ky": "^2.0.2",
+    "zod": "^4.4.3"
+  }
+}

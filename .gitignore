@@ -1,0 +1,16 @@
+node_modules
+/target
+/crates/tuntun-agent/resources/wintun/
+.env
+.DS_Store
+dist
+dist-ssr
+*.local
+.nitro
+.tanstack
+.wrangler
+.output
+.vinxi
+__unconfig*
+todos.json
+*.key

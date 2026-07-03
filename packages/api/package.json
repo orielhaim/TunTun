@@ -1,0 +1,16 @@
+{
+  "name": "@tuntun/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./management": "./src/management/index.ts",
+    "./internal": "./src/internal/index.ts",
+    "./agent": "./src/agent/index.ts"
+  },
+  "dependencies": {
+    "ip-address": "^10.2.0",
+    "zod": "^4.4.3"
+  }
+}
