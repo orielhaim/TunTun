@@ -142,4 +142,4 @@ If you are reading this: consider sponsoring TunTun. Just for the irony. We woul
 
 ## License
 
-Open source. See the repository for license details.
+See [LICENSE](LICENSE) for license details
