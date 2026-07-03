@@ -1,8 +1,0 @@
-{
-  "name": "tuntun-scripts",
-  "private": true,
-  "type": "module",
-  "dependencies": {
-    "hash-wasm": "latest"
-  }
-}
