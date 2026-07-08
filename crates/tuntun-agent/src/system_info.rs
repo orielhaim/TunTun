@@ -10,10 +10,7 @@ pub fn collect_system_metadata(hostname: &str, agent_version: &str) -> serde_jso
     meta.insert("family".into(), std::env::consts::FAMILY.into());
     meta.insert("agentVersion".into(), agent_version.into());
     meta.insert("cpuCount".into(), cpu_count.into());
-    meta.insert(
-        "reportedAt".into(),
-        chrono::Utc::now().to_rfc3339().into(),
-    );
+    meta.insert("reportedAt".into(), chrono::Utc::now().to_rfc3339().into());
 
     if let Some(os_version) = read_os_version() {
         meta.insert("osVersion".into(), os_version.into());

@@ -34,6 +34,7 @@ export function createListenClient(connectionString?: string) {
 export {
   deviceAgentVersion,
   deviceHostname,
+  deviceKind,
   deviceOs,
   normalizeDeviceMetadata,
   parseDeviceMetadata,

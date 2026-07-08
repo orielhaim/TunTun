@@ -1,14 +1,15 @@
 import { createApiKeyBody } from "@tuntun/api/management";
-import { randomBytes } from "node:crypto";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { Elysia } from "elysia";
 import * as argon2 from "argon2";
 
 import { schema } from "@tuntun/db";
 
+import { generateApiKeySecret } from "../../lib/api-key-secret";
+
 import { getAuth } from "./middleware/authz";
 import { requireAdmin, requireAuth } from "./middleware/authz";
-import { sessionPlugin } from "./middleware/session";
+import { badRequest, sessionPlugin } from "./middleware/session";
 import { writeAudit } from "../../lib/audit";
 import { db } from "../../lib/db";
 import { toIso } from "../../lib/serialize";
@@ -19,10 +20,34 @@ function serializeApiKey(row: typeof schema.apiKeys.$inferSelect) {
     organizationId: row.organizationId,
     name: row.name,
     scopes: row.scopes,
+    networkIds: row.networkIds,
     expiresAt: toIso(row.expiresAt),
     revokedAt: toIso(row.revokedAt),
     createdAt: toIso(row.createdAt)!,
   };
+}
+
+async function resolveNetworkIds(
+  organizationId: string,
+  networkIds: string[] | null | undefined,
+): Promise<string[] | null> {
+  if (networkIds === undefined || networkIds === null) {
+    return null;
+  }
+
+  const rows = await db.query.networks.findMany({
+    where: and(
+      eq(schema.networks.organizationId, organizationId),
+      inArray(schema.networks.id, networkIds),
+    ),
+    columns: { id: true },
+  });
+
+  if (rows.length !== networkIds.length) {
+    throw new Error("One or more networks were not found in this organization");
+  }
+
+  return networkIds;
 }
 
 export const apiKeysRoutes = new Elysia()
@@ -44,8 +69,22 @@ export const apiKeysRoutes = new Elysia()
       .post("/organizations/:orgId/api-keys", async ({ authContext, body }) => {
         const auth = getAuth({ authContext });
         const parsed = createApiKeyBody.parse(body);
-        const secret = randomBytes(32).toString("base64url");
+        const { secret, secretPrefix } = generateApiKeySecret();
         const hashedSecret = await argon2.hash(secret);
+
+        let networkIds: string[] | null;
+        try {
+          networkIds = await resolveNetworkIds(
+            auth.organizationId,
+            parsed.networkIds ?? null,
+          );
+        } catch (error) {
+          return badRequest(
+            error instanceof Error
+              ? error.message
+              : "Invalid network selection",
+          );
+        }
 
         const row = await db.transaction(async (tx) => {
           const [created] = await tx
@@ -53,8 +92,10 @@ export const apiKeysRoutes = new Elysia()
             .values({
               organizationId: auth.organizationId,
               name: parsed.name,
+              secretPrefix,
               hashedSecret,
               scopes: parsed.scopes,
+              networkIds,
               expiresAt: parsed.expiresAt ? new Date(parsed.expiresAt) : null,
             })
             .returning();
@@ -68,7 +109,11 @@ export const apiKeysRoutes = new Elysia()
             actor: auth.user.id,
             action: "api_key.created",
             target: created.id,
-            metadata: { name: created.name },
+            metadata: {
+              name: created.name,
+              scopes: created.scopes,
+              networkIds: created.networkIds,
+            },
           });
 
           return created;

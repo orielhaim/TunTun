@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
-import type { ColumnDef } from "@tanstack/react-table";
-import { MoreHorizontalIcon, PlusIcon } from "lucide-react";
+import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
+import { MoreHorizontalIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -62,6 +62,8 @@ function MachinesPage() {
     endpointId: string;
     hostname: string;
   } | null>(null);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [confirmBulkRemove, setConfirmBulkRemove] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -75,6 +77,18 @@ function MachinesPage() {
         (m.os?.toLowerCase().includes(q) ?? false),
     );
   }, [machines, search]);
+
+  const selectedMachines = useMemo(() => {
+    if (!filtered.length) return [];
+    const selectedIds = new Set(
+      Object.entries(rowSelection)
+        .filter(([, selected]) => selected)
+        .map(([id]) => id),
+    );
+    return filtered.filter((machine) =>
+      selectedIds.has(`${machine.networkId}-${machine.endpointId}`),
+    );
+  }, [filtered, rowSelection]);
 
   const columns = useMemo<ColumnDef<AggregatedMachine>[]>(
     () => [
@@ -234,10 +248,25 @@ function MachinesPage() {
 
       <PageToolbar
         search={search}
-        onSearchChange={setSearch}
+        onSearchChange={(value) => {
+          setSearch(value);
+          setRowSelection({});
+        }}
         searchPlaceholder="Search by name, network, IP, OS..."
         count={filtered.length}
         countLabel={filtered.length === 1 ? "machine" : "machines"}
+        actions={
+          isAdmin && selectedMachines.length > 0 ? (
+            <Button
+              variant="destructive"
+              onClick={() => setConfirmBulkRemove(true)}
+            >
+              <Trash2Icon className="mr-2 size-4" />
+              Remove {selectedMachines.length}{" "}
+              {selectedMachines.length === 1 ? "machine" : "machines"}
+            </Button>
+          ) : null
+        }
       />
 
       {isPending ? (
@@ -257,6 +286,9 @@ function MachinesPage() {
           columns={columns}
           data={filtered}
           getRowId={(row) => `${row.networkId}-${row.endpointId}`}
+          selectable={isAdmin}
+          rowSelection={rowSelection}
+          onRowSelectionChange={setRowSelection}
         />
       )}
 
@@ -289,6 +321,40 @@ function MachinesPage() {
           } catch (err) {
             toast.error(
               err instanceof Error ? err.message : "Failed to remove",
+            );
+          }
+        }}
+      />
+
+      <ConfirmDialog
+        open={confirmBulkRemove}
+        onOpenChange={setConfirmBulkRemove}
+        title="Remove machines"
+        description={`Remove ${selectedMachines.length} ${
+          selectedMachines.length === 1 ? "machine" : "machines"
+        } from their networks? This cannot be undone.`}
+        confirmLabel="Remove"
+        destructive
+        loading={deviceMutations.removeMany.isPending}
+        onConfirm={async () => {
+          if (selectedMachines.length === 0) return;
+          try {
+            await deviceMutations.removeMany.mutateAsync(
+              selectedMachines.map((machine) => ({
+                networkId: machine.networkId,
+                endpointId: machine.endpointId,
+              })),
+            );
+            toast.success(
+              selectedMachines.length === 1
+                ? "Machine removed"
+                : `${selectedMachines.length} machines removed`,
+            );
+            setRowSelection({});
+            setConfirmBulkRemove(false);
+          } catch (err) {
+            toast.error(
+              err instanceof Error ? err.message : "Failed to remove machines",
             );
           }
         }}

@@ -1,5 +1,10 @@
 import { formatIp } from "@tuntun/db";
-import { deviceAgentVersion, deviceHostname, deviceOs } from "@tuntun/db";
+import {
+  deviceAgentVersion,
+  deviceHostname,
+  deviceKind,
+  deviceOs,
+} from "@tuntun/db";
 
 import { toIso } from "./serialize";
 
@@ -12,6 +17,7 @@ export function serializeDevice(row: {
   endpointId: string;
   organizationId: string;
   networkId: string;
+  type?: string;
   metadata: unknown;
   assignedIp: string;
   publicIp: string | null;
@@ -30,6 +36,7 @@ export function serializeDevice(row: {
     organizationId: row.organizationId,
     networkId: row.networkId,
     hostname: deviceHostname(row.metadata, row.endpointId),
+    type: deviceKind(row.type ?? "agent", row.metadata),
     os: deviceOs(row.metadata),
     agentVersion: deviceAgentVersion(row.metadata),
     assignedIp: formatIp(row.assignedIp),

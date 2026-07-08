@@ -37,14 +37,20 @@ export const membershipStatusValues = [
   "pending",
 ] as const;
 
+export const deviceTypeValues = ["agent", "sdk"] as const;
+
 export const apiKeys = pgTable("api_keys", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: text("organization_id")
     .notNull()
     .references(() => organization.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
+  /** First segment after `tt_` for fast lookup before argon2.verify. */
+  secretPrefix: text("secret_prefix"),
   hashedSecret: text("hashed_secret").notNull(),
   scopes: text("scopes").array().notNull().default([]),
+  /** When null, the key may access every network in the organization. */
+  networkIds: uuid("network_ids").array(),
   expiresAt: timestamp("expires_at", { withTimezone: true }),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
@@ -94,6 +100,7 @@ export const devices = pgTable(
     lastSeen: timestamp("last_seen", { withTimezone: true })
       .defaultNow()
       .notNull(),
+    type: text("type").notNull().default("agent"),
     metadata: jsonb("metadata").notNull().default({}),
   },
   (table) => [
@@ -101,6 +108,7 @@ export const devices = pgTable(
       "devices_endpoint_id_len",
       sql`char_length(${table.endpointId}) = 64`,
     ),
+    check("devices_type_check", sql`${table.type} IN ('agent', 'sdk')`),
     check(
       "devices_ipv6_enabled_at_check",
       sql`(NOT ${table.ipv6Enabled}) OR (${table.ipv6EnabledAt} IS NOT NULL)`,

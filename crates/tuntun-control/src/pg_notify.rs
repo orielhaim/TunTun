@@ -1,11 +1,9 @@
-//! Postgres LISTEN/NOTIFY fan-out for network changes across replicas.
-
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use sqlx::postgres::PgListener;
 use sqlx::PgPool;
+use sqlx::postgres::PgListener;
 use uuid::Uuid;
 
 use crate::ws_hub::WsHub;

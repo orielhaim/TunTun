@@ -6,4 +6,4 @@ export * from "./devices";
 export * from "./enrollment-tokens";
 export * from "./networks";
 export * from "./policies";
-export * from "./organization-policies";
+export * from "./sdk-nodes";

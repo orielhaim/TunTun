@@ -1,4 +1,5 @@
 import {
+  deleteDevicesBody,
   patchDeviceBody,
   patchDeviceMembershipBody,
 } from "@tuntun/api/management";
@@ -14,6 +15,7 @@ import { writeAudit } from "../../lib/audit";
 import { applyDevicePatch, getDeviceInOrg } from "../../lib/device";
 import { db } from "../../lib/db";
 import { bumpNetworkAndNotify, bumpOrgAndNotify } from "../../lib/notify";
+import { removeDeviceMembership } from "../../lib/remove-device-membership";
 import { serializeDevice } from "../../lib/serialize-device";
 
 async function getNetworkInOrg(networkId: string, organizationId: string) {
@@ -32,6 +34,7 @@ async function listDevicesOnNetwork(networkId: string) {
       organizationId: schema.devices.organizationId,
       networkId: schema.networkMemberships.networkId,
       metadata: schema.devices.metadata,
+      type: schema.devices.type,
       assignedIp: schema.networkMemberships.assignedIp,
       publicIp: schema.devices.publicIp,
       tenantIpv6: schema.devices.tenantIpv6,
@@ -194,6 +197,34 @@ export const devicesRoutes = new Elysia()
     app
       .use(requireAdmin)
       .delete(
+        "/organizations/:orgId/devices",
+        async ({ authContext, body }) => {
+          const auth = getAuth({ authContext });
+          const parsed = deleteDevicesBody.parse(body);
+
+          const seen = new Set<string>();
+          const items = parsed.items.filter((item) => {
+            const key = `${item.networkId}:${item.endpointId}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+
+          await db.transaction(async (tx) => {
+            for (const item of items) {
+              await removeDeviceMembership(tx, {
+                organizationId: auth.organizationId,
+                actor: auth.user.id,
+                networkId: item.networkId,
+                endpointId: item.endpointId,
+              });
+            }
+          });
+
+          return { ok: true as const, deleted: items.length };
+        },
+      )
+      .delete(
         "/organizations/:orgId/networks/:networkId/devices/:endpointId",
         async ({ authContext, params }) => {
           const auth = getAuth({ authContext });
@@ -204,56 +235,12 @@ export const devicesRoutes = new Elysia()
           if (!network) return notFound("Network not found");
 
           await db.transaction(async (tx) => {
-            const device = await tx.query.devices.findFirst({
-              where: and(
-                eq(schema.devices.endpointId, params.endpointId),
-                eq(schema.devices.organizationId, auth.organizationId),
-              ),
-            });
-            if (!device) {
-              throw new Error("Device not found");
-            }
-
-            const [deleted] = await tx
-              .delete(schema.networkMemberships)
-              .where(
-                and(
-                  eq(schema.networkMemberships.endpointId, params.endpointId),
-                  eq(schema.networkMemberships.networkId, params.networkId),
-                ),
-              )
-              .returning({ endpointId: schema.networkMemberships.endpointId });
-
-            if (!deleted) {
-              throw new Error("Device not found");
-            }
-
-            const remaining = await tx.query.networkMemberships.findMany({
-              where: eq(
-                schema.networkMemberships.endpointId,
-                params.endpointId,
-              ),
-            });
-            if (remaining.length === 0) {
-              await tx
-                .delete(schema.devices)
-                .where(eq(schema.devices.endpointId, params.endpointId));
-              await bumpOrgAndNotify(tx, auth.organizationId);
-            }
-
-            await writeAudit(tx, {
+            await removeDeviceMembership(tx, {
               organizationId: auth.organizationId,
               actor: auth.user.id,
-              action: "device.deleted",
-              target: deleted.endpointId,
-              metadata: { networkId: params.networkId },
+              networkId: params.networkId,
+              endpointId: params.endpointId,
             });
-
-            await bumpNetworkAndNotify(
-              tx,
-              params.networkId,
-              auth.organizationId,
-            );
           });
 
           return { ok: true };

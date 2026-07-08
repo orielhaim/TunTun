@@ -1,16 +1,11 @@
-//! Ed25519 signing key for the control plane's policy bundles.
-//! Prefer `TUNTUN_POLICY_KEY` (base64, 32 raw bytes) for shared replicas.
-
 use ed25519_dalek::SigningKey;
 use rand::RngCore;
 use std::path::Path;
 
 pub fn load(policy_key_env: Option<&str>, path: &str) -> anyhow::Result<SigningKey> {
     if let Some(encoded) = policy_key_env.filter(|s| !s.is_empty()) {
-        let bytes = base64::Engine::decode(
-            &base64::engine::general_purpose::STANDARD,
-            encoded.trim(),
-        )?;
+        let bytes =
+            base64::Engine::decode(&base64::engine::general_purpose::STANDARD, encoded.trim())?;
         if bytes.len() != 32 {
             anyhow::bail!(
                 "TUNTUN_POLICY_KEY decodes to {} bytes, expected 32",

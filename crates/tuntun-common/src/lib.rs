@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 use std::net::{Ipv4Addr, Ipv6Addr};
 use uuid::Uuid;
 
-/// Iroh EndpointId serialised as a lowercase-hex 32-byte public key (64 chars).
 pub type EndpointIdHex = String;
 
 /// ALPN identifier for our tunnel protocol.
@@ -133,4 +132,8 @@ pub fn validate_network_name(s: &str) -> bool {
         .chars()
         .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
     len_ok && chars_ok
+}
+
+pub fn network_topic_hex(id: &uuid::Uuid) -> String {
+    hex::encode(blake3::hash(id.as_bytes()).as_bytes())
 }

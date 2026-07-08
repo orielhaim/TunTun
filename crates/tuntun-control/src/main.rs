@@ -1,9 +1,9 @@
-mod device_metadata;
 mod admin;
 mod audit;
 mod auth;
 mod config;
 mod db;
+mod device_metadata;
 mod enrollment;
 mod http;
 mod ip_alloc;
@@ -13,6 +13,7 @@ mod pg_inet;
 mod pg_notify;
 mod policy_store;
 mod presence;
+mod register;
 mod service_auth;
 mod signing_key;
 mod snapshot;
@@ -95,6 +96,7 @@ async fn main() -> anyhow::Result<()> {
         pool: state.pool.clone(),
         ws_hub: state.ws_hub.clone(),
         service_auth: state.service_auth.clone(),
+        policy_key: state.policy_key.clone(),
         listen_connected: state.listen_connected.clone(),
         version: env!("CARGO_PKG_VERSION"),
     };

@@ -1,21 +1,13 @@
-//! TUN device + the two hot loops (TUN→iroh, iroh→TUN).
-//!
-//! For the portable path we use `tun-rs`'s async API; on Linux we opt in
-//! (via `crate::offload`) to the sync multi-queue + TSO/GSO path for the
-//! big throughput win. See `offload.rs` for that.
-
 use std::sync::Arc;
 
 use anyhow::Context;
 use bytes::Bytes;
 use tun_rs::{AsyncDevice, DeviceBuilder};
-
-use crate::enforcement::AclEngine;
-use crate::ip;
-use crate::iroh_io::{ConnPool, send_packet};
-use crate::metrics::AgentMetrics;
-use crate::routing::RoutingTable;
 use tuntun_common::policy::Direction;
+use tuntun_core::{AclEngine, ConnPool, RoutingTable, iroh_pool::send_datagram};
+
+use crate::ip;
+use crate::metrics::AgentMetrics;
 
 pub fn build_tun(
     ifname: &str,
@@ -28,7 +20,6 @@ pub fn build_tun(
         .name(ifname)
         .ipv4(ipv4, prefix, None)
         .mtu(mtu);
-
     #[cfg(windows)]
     let builder = {
         use crate::wintun_path;
@@ -38,7 +29,6 @@ pub fn build_tun(
             .wintun_file(path.display().to_string())
             .wintun_log(true)
     };
-
     let dev = builder.build_async().context("build_async TUN device")?;
     tracing::info!(%ipv4, prefix, mtu, "TUN device up");
     Ok(dev)
@@ -54,18 +44,11 @@ pub async fn run_outbound(
     let mut buf = vec![0u8; 65_536];
     tracing::info!("outbound TUN→iroh loop started");
     loop {
-        let n = match tun.recv(&mut buf).await {
-            Ok(n) => n,
-            Err(e) => {
-                tracing::error!(?e, "tun recv error");
-                return Err(e.into());
-            }
-        };
+        let n = tun.recv(&mut buf).await?;
         if n == 0 {
             continue;
         }
         let packet = &buf[..n];
-
         let Some(parsed) = ip::parse_ipv4(packet) else {
             metrics.dropped.with_label_values(&["non_ipv4"]).inc();
             continue;
@@ -74,7 +57,6 @@ pub async fn run_outbound(
             metrics.dropped.with_label_values(&["no_route"]).inc();
             continue;
         };
-
         if !acl.allow_packet(
             &peer.endpoint_hex,
             Some(parsed.dst),
@@ -85,26 +67,26 @@ pub async fn run_outbound(
             metrics.dropped.with_label_values(&["policy_deny"]).inc();
             continue;
         }
-
         let payload = Bytes::copy_from_slice(packet);
         let n = payload.len() as u64;
         let pool = pool.clone();
         let peer_endpoint = peer.endpoint;
-        let metrics_ = metrics.clone();
+        let m = metrics.clone();
         tokio::spawn(async move {
             match pool.get(peer_endpoint).await {
-                Ok(conn) => {
-                    if let Err(e) = send_packet(&conn, payload) {
-                        tracing::warn!(%peer_endpoint, ?e, "send_datagram failed");
-                        metrics_.dropped.with_label_values(&["send_failed"]).inc();
-                    } else {
-                        metrics_.packets.with_label_values(&["out"]).inc();
-                        metrics_.bytes.with_label_values(&["out"]).inc_by(n);
+                Ok(conn) => match send_datagram(&conn, payload) {
+                    Ok(()) => {
+                        m.packets.with_label_values(&["out"]).inc();
+                        m.bytes.with_label_values(&["out"]).inc_by(n);
                     }
-                }
+                    Err(e) => {
+                        tracing::warn!(%peer_endpoint, ?e, "send_datagram failed");
+                        m.dropped.with_label_values(&["send_failed"]).inc();
+                    }
+                },
                 Err(e) => {
                     tracing::warn!(%peer_endpoint, ?e, "dial failed");
-                    metrics_.dropped.with_label_values(&["dial_failed"]).inc();
+                    m.dropped.with_label_values(&["dial_failed"]).inc();
                 }
             }
         });
@@ -130,6 +112,9 @@ pub async fn run_inbound(
                     return;
                 }
             };
+            if conn.alpn() != tuntun_common::TUNNEL_ALPN {
+                return;
+            }
             let remote_id = conn.remote_id();
             let remote_hex = format!("{remote_id}");
             if !acl.allow_inbound_peer(&remote_hex) {
@@ -139,11 +124,9 @@ pub async fn run_inbound(
             }
             tracing::info!(%remote_id, "peer connected");
             metrics.active_conns.inc();
-
             loop {
                 match conn.read_datagram().await {
                     Ok(dg) => {
-                        // Packet-time filter (stateful/subnet abuse guard).
                         if let Some(parsed) = ip::parse_ipv4(&dg) {
                             if !acl.allow_packet(
                                 &remote_hex,
@@ -169,12 +152,11 @@ pub async fn run_inbound(
                         metrics.bytes.with_label_values(&["in"]).inc_by(n);
                     }
                     Err(e) => {
-                        tracing::debug!(?e, "read_datagram: connection closed");
+                        tracing::debug!(?e, "read_datagram closed");
                         break;
                     }
                 }
             }
-
             metrics.active_conns.dec();
             tracing::info!(%remote_id, "peer disconnected");
         });

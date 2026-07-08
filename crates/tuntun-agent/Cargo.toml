@@ -6,9 +6,9 @@ license.workspace = true
 
 [dependencies]
 tuntun-common.workspace = true
+tuntun-core.workspace = true
 
 tokio.workspace = true
-tokio-tungstenite.workspace = true
 futures-util.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
@@ -22,7 +22,6 @@ bytes.workspace = true
 dashmap.workspace = true
 parking_lot.workspace = true
 arc-swap.workspace = true
-reqwest.workspace = true
 hex.workspace = true
 base64.workspace = true
 chrono.workspace = true

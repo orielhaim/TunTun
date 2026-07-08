@@ -7,10 +7,7 @@ export function parseDeviceMetadata(metadata: unknown): DeviceMetadataRecord {
   return {};
 }
 
-export function deviceHostname(
-  metadata: unknown,
-  endpointId: string,
-): string {
+export function deviceHostname(metadata: unknown, endpointId: string): string {
   const value = parseDeviceMetadata(metadata).hostname;
   if (typeof value === "string" && value.length > 0) return value;
   return endpointId.slice(0, 8);
@@ -24,6 +21,13 @@ export function deviceOs(metadata: unknown): string | null {
 export function deviceAgentVersion(metadata: unknown): string | null {
   const value = parseDeviceMetadata(metadata).agentVersion;
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+export function deviceKind(type: string, metadata: unknown): "agent" | "sdk" {
+  if (type === "sdk" || type === "agent") return type;
+  const kind = parseDeviceMetadata(metadata).kind;
+  if (kind === "sdk" || kind === "agent") return kind;
+  return "agent";
 }
 
 export function normalizeDeviceMetadata(

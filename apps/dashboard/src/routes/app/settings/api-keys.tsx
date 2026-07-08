@@ -1,6 +1,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import type { ApiKey } from "@tuntun/api/management";
+import {
+  API_KEY_SCOPES,
+  type ApiKey,
+  type ApiKeyScope,
+} from "@tuntun/api/management";
 import { PlusIcon, TrashIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -10,9 +14,11 @@ import { CopyField } from "@/components/app/copy-field";
 import { DataTable } from "@/components/app/data-table";
 import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -23,7 +29,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { createManagementClient } from "@/lib/management-client";
-import { useApiKeys } from "@/lib/queries/management";
+import { useApiKeys, useNetworks } from "@/lib/queries/management";
 import { queryKeys } from "@/lib/query-keys";
 import { createFileRoute } from "@tanstack/react-router";
 
@@ -31,16 +37,39 @@ export const Route = createFileRoute("/app/settings/api-keys")({
   component: ApiKeysPage,
 });
 
+function formatNetworkAccess(
+  apiKey: ApiKey,
+  networkNames: Map<string, string>,
+): string {
+  if (apiKey.networkIds === null) {
+    return "All networks";
+  }
+  if (apiKey.networkIds.length === 0) {
+    return "No networks";
+  }
+  const names = apiKey.networkIds
+    .map((id) => networkNames.get(id) ?? id.slice(0, 8))
+    .join(", ");
+  return names;
+}
+
 function ApiKeysPage() {
   const { data: activeOrg } = useActiveOrganization();
   const orgId = activeOrg?.id;
   const { data: role } = useMemberRole(orgId);
   const isAdmin = isAdminRole(role);
   const { data: apiKeys, isPending } = useApiKeys(orgId);
+  const { data: networks } = useNetworks(orgId);
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [revokeId, setRevokeId] = useState<string | null>(null);
   const [newSecret, setNewSecret] = useState<string | null>(null);
+
+  const networkNames = useMemo(
+    () =>
+      new Map((networks ?? []).map((network) => [network.id, network.name])),
+    [networks],
+  );
 
   const revoke = useMutation({
     mutationFn: async (keyId: string) => {
@@ -62,6 +91,15 @@ function ApiKeysPage() {
         id: "name",
         header: "Name",
         cell: ({ row }) => row.original.name,
+      },
+      {
+        id: "networks",
+        header: "Networks",
+        cell: ({ row }) => (
+          <span className="text-sm">
+            {formatNetworkAccess(row.original, networkNames)}
+          </span>
+        ),
       },
       {
         id: "scopes",
@@ -102,7 +140,7 @@ function ApiKeysPage() {
           ]
         : []),
     ],
-    [isAdmin],
+    [isAdmin, networkNames],
   );
 
   return (
@@ -192,19 +230,58 @@ function CreateApiKeyDialog({
   onOpenChange: (open: boolean) => void;
   onCreated: (secret: string) => void;
 }) {
+  const { data: networks } = useNetworks(orgId);
   const [name, setName] = useState("");
+  const [allNetworks, setAllNetworks] = useState(true);
+  const [selectedNetworkIds, setSelectedNetworkIds] = useState<string[]>([]);
+  const [selectedScopes, setSelectedScopes] = useState<ApiKeyScope[]>([
+    "sdk:enroll",
+  ]);
   const [loading, setLoading] = useState(false);
+
+  function resetForm() {
+    setName("");
+    setAllNetworks(true);
+    setSelectedNetworkIds([]);
+    setSelectedScopes(["sdk:enroll"]);
+  }
+
+  function toggleNetwork(networkId: string, checked: boolean) {
+    setSelectedNetworkIds((current) =>
+      checked
+        ? [...current, networkId]
+        : current.filter((id) => id !== networkId),
+    );
+  }
+
+  function toggleScope(scope: ApiKeyScope, checked: boolean) {
+    setSelectedScopes((current) =>
+      checked ? [...current, scope] : current.filter((id) => id !== scope),
+    );
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!orgId) return;
+
+    if (!allNetworks && selectedNetworkIds.length === 0) {
+      toast.error("Select at least one network or allow all networks");
+      return;
+    }
+    if (selectedScopes.length === 0) {
+      toast.error("Select at least one scope");
+      return;
+    }
+
     setLoading(true);
     try {
       const result = await createManagementClient(orgId).createApiKey({
         name: name.trim(),
+        scopes: selectedScopes,
+        networkIds: allNetworks ? null : selectedNetworkIds,
       });
       toast.success("API key created");
-      setName("");
+      resetForm();
       onOpenChange(false);
       onCreated(result.secret);
     } catch (err) {
@@ -215,23 +292,118 @@ function CreateApiKeyDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) resetForm();
+        onOpenChange(next);
+      }}
+    >
+      <DialogContent className="sm:max-w-lg">
         <form onSubmit={(e) => void handleSubmit(e)}>
           <DialogHeader>
             <DialogTitle>Create API key</DialogTitle>
+            <DialogDescription>
+              Choose which networks this key can access and what it is allowed
+              to do.
+            </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
+
+          <div className="space-y-6 py-4">
             <div className="space-y-2">
               <Label htmlFor="key-name">Name</Label>
               <Input
                 id="key-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                placeholder="CI deploy key"
                 required
               />
             </div>
+
+            <div className="space-y-3">
+              <Label>Networks</Label>
+              <div className="flex items-start gap-3 rounded-lg border p-3">
+                <Checkbox
+                  checked={allNetworks}
+                  onCheckedChange={(checked) => {
+                    const enabled = checked === true;
+                    setAllNetworks(enabled);
+                    if (enabled) {
+                      setSelectedNetworkIds([]);
+                    }
+                  }}
+                />
+                <span className="space-y-1">
+                  <span className="block text-sm font-medium">
+                    All networks
+                  </span>
+                  <span className="text-muted-foreground block text-xs">
+                    Current and future networks in this organization.
+                  </span>
+                </span>
+              </div>
+
+              {!allNetworks ? (
+                <div className="space-y-2 rounded-lg border p-3">
+                  {(networks ?? []).length === 0 ? (
+                    <p className="text-muted-foreground text-xs">
+                      Create a network before restricting access.
+                    </p>
+                  ) : (
+                    (networks ?? []).map((network) => {
+                      const checked = selectedNetworkIds.includes(network.id);
+                      return (
+                        <div
+                          key={network.id}
+                          className="flex items-center gap-3 py-1"
+                        >
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(value) =>
+                              toggleNetwork(network.id, value === true)
+                            }
+                          />
+                          <span className="text-sm">{network.name}</span>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="space-y-3">
+              <Label>Scopes</Label>
+              <div className="space-y-2">
+                {API_KEY_SCOPES.map((scope) => {
+                  const checked = selectedScopes.includes(scope.id);
+                  return (
+                    <div
+                      key={scope.id}
+                      className="flex items-start gap-3 rounded-lg border p-3"
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(value) =>
+                          toggleScope(scope.id, value === true)
+                        }
+                      />
+                      <span className="space-y-1">
+                        <span className="block font-mono text-sm">
+                          {scope.id}
+                        </span>
+                        <span className="text-muted-foreground block text-xs">
+                          {scope.description}
+                        </span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
+
           <DialogFooter>
             <Button
               type="button"
@@ -240,7 +412,16 @@ function CreateApiKeyDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button
+              type="submit"
+              disabled={
+                loading ||
+                (!allNetworks &&
+                  (networks?.length ?? 0) > 0 &&
+                  selectedNetworkIds.length === 0) ||
+                selectedScopes.length === 0
+              }
+            >
               {loading ? "Creating..." : "Create key"}
             </Button>
           </DialogFooter>

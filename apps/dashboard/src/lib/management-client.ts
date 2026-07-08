@@ -10,6 +10,8 @@ import {
   deviceAddressesResponse,
   deviceDetailSchema,
   deviceListResponse,
+  deleteDevicesBody,
+  deleteDevicesResponse,
   enrollmentTokenListResponse,
   networkListResponse,
   networkSchema,
@@ -23,6 +25,7 @@ import {
   type CreateEnrollmentTokenBody,
   type CreateNetworkBody,
   type CreatePolicyBody,
+  type DeleteDeviceItem,
   type PatchDeviceBody,
   type PatchDeviceMembershipBody,
   type PatchNetworkBody,
@@ -163,6 +166,17 @@ export function createManagementClient(orgId: string) {
         orgId,
         org(`/networks/${networkId}/devices/${endpointId}`),
         { method: "DELETE" },
+      ),
+
+    deleteDevices: (items: DeleteDeviceItem[]) =>
+      request(
+        orgId,
+        org("/devices"),
+        {
+          method: "DELETE",
+          body: JSON.stringify(deleteDevicesBody.parse({ items })),
+        },
+        deleteDevicesResponse,
       ),
 
     listPolicies: (networkId: string) =>

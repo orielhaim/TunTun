@@ -30,6 +30,7 @@ export const deviceSchema = z.object({
   organizationId: z.string(),
   networkId: z.string().uuid(),
   hostname: z.string(),
+  type: z.enum(["agent", "sdk"]),
   os: z.string().nullable(),
   agentVersion: z.string().nullable(),
   assignedIp: z.string(),
@@ -77,6 +78,24 @@ export const patchDeviceMembershipBody = z.object({
 export const deviceListResponse = z.object({
   devices: z.array(deviceSchema),
 });
+
+export const deleteDeviceItemSchema = z.object({
+  networkId: z.string().uuid(),
+  endpointId: z.string().length(64),
+});
+
+export const deleteDevicesBody = z.object({
+  items: z.array(deleteDeviceItemSchema).min(1).max(100),
+});
+
+export const deleteDevicesResponse = z.object({
+  ok: z.literal(true),
+  deleted: z.number().int().nonnegative(),
+});
+
+export type DeleteDeviceItem = z.infer<typeof deleteDeviceItemSchema>;
+export type DeleteDevicesBody = z.infer<typeof deleteDevicesBody>;
+export type DeleteDevicesResponse = z.infer<typeof deleteDevicesResponse>;
 
 export type DeviceMetadata = z.infer<typeof deviceMetadataSchema>;
 export type DeviceMembership = z.infer<typeof deviceMembershipSchema>;

@@ -3,9 +3,12 @@ import {
   getCoreRowModel,
   useReactTable,
   type ColumnDef,
+  type OnChangeFn,
   type RowData,
+  type RowSelectionState,
 } from "@tanstack/react-table";
 
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -30,6 +33,9 @@ type DataTableProps<TData> = {
   getRowId?: (row: TData) => string;
   className?: string;
   emptyMessage?: string;
+  selectable?: boolean;
+  rowSelection?: RowSelectionState;
+  onRowSelectionChange?: OnChangeFn<RowSelectionState>;
 };
 
 export function DataTable<TData>({
@@ -38,11 +44,17 @@ export function DataTable<TData>({
   getRowId,
   className,
   emptyMessage = "No results.",
+  selectable = false,
+  rowSelection,
+  onRowSelectionChange,
 }: DataTableProps<TData>) {
   const table = useReactTable({
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
+    enableRowSelection: selectable,
+    onRowSelectionChange,
+    state: selectable ? { rowSelection: rowSelection ?? {} } : undefined,
     getRowId,
   });
 
@@ -52,6 +64,23 @@ export function DataTable<TData>({
         <TableHeader>
           {table.getHeaderGroups().map((headerGroup) => (
             <TableRow key={headerGroup.id}>
+              {selectable ? (
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={
+                      table.getIsAllPageRowsSelected()
+                        ? true
+                        : table.getIsSomePageRowsSelected()
+                          ? "indeterminate"
+                          : false
+                    }
+                    onCheckedChange={(value) =>
+                      table.toggleAllPageRowsSelected(value === true)
+                    }
+                    aria-label="Select all"
+                  />
+                </TableHead>
+              ) : null}
               {headerGroup.headers.map((header) => (
                 <TableHead
                   key={header.id}
@@ -71,7 +100,21 @@ export function DataTable<TData>({
         <TableBody>
           {table.getRowModel().rows.length > 0 ? (
             table.getRowModel().rows.map((row) => (
-              <TableRow key={row.id}>
+              <TableRow
+                key={row.id}
+                data-state={row.getIsSelected() ? "selected" : undefined}
+              >
+                {selectable ? (
+                  <TableCell>
+                    <Checkbox
+                      checked={row.getIsSelected()}
+                      onCheckedChange={(value) =>
+                        row.toggleSelected(value === true)
+                      }
+                      aria-label="Select row"
+                    />
+                  </TableCell>
+                ) : null}
                 {row.getVisibleCells().map((cell) => (
                   <TableCell
                     key={cell.id}
@@ -85,7 +128,7 @@ export function DataTable<TData>({
           ) : (
             <TableRow>
               <TableCell
-                colSpan={columns.length}
+                colSpan={columns.length + (selectable ? 1 : 0)}
                 className="text-muted-foreground h-24 text-center"
               >
                 {emptyMessage}

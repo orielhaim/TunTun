@@ -1,16 +1,3 @@
-//! Linux-only fast path: multi-queue TUN + TSO/GSO/GRO offload, dedicated
-//! OS threads per queue, `recv_multiple` / `send_multiple` for batch I/O.
-//!
-//! This module is a scaffold — the wiring for spawning threads and
-//! bridging into the async iroh side via crossbeam channels is spelled
-//! out below, but the tight loop still calls into the same
-//! `send_packet` logic as the portable path. Enabling offload requires
-//! tun-rs `>= 2` (already pinned in the workspace), and Linux kernel
-//! >= 6.2 for TUN UDP GSO/GRO.
-//!
-//! Set env var `TUNTUN_OFFLOAD=1` to opt in. When disabled, we fall
-//! through to the portable async path in `tun_io.rs`.
-
 #![cfg(target_os = "linux")]
 
 use std::sync::Arc;
@@ -20,12 +7,10 @@ use crossbeam_channel::{Receiver, Sender, bounded};
 use iroh::EndpointId;
 use tun_rs::{DeviceBuilder, SyncDevice};
 
-use crate::enforcement::AclEngine;
 use crate::ip;
-use crate::iroh_io::{ConnPool, send_packet};
 use crate::metrics::AgentMetrics;
-use crate::routing::RoutingTable;
 use tuntun_common::policy::Direction;
+use tuntun_core::{AclEngine, ConnPool, RoutingTable, iroh_pool::send_datagram};
 
 pub struct OffloadedTun {
     pub queues: Vec<Arc<SyncDevice>>,
@@ -42,9 +27,6 @@ pub fn build(
     mtu: u16,
     queues: usize,
 ) -> anyhow::Result<OffloadedTun> {
-    // Building a multi-queue TUN with offload. Ownership pattern here is a
-    // little awkward because tun-rs models the "primary" device and then
-    // additional queues obtained via `try_clone`.
     let dev = DeviceBuilder::new()
         .name(ifname)
         .ipv4(ipv4, prefix, None)
@@ -66,9 +48,6 @@ pub fn build(
     Ok(OffloadedTun { queues: all })
 }
 
-/// Start dedicated OS threads per queue for the outbound (TUN → iroh) path.
-/// Each thread pushes packets into per-peer bounded crossbeam channels, which
-/// are drained by tokio tasks that call `send_datagram`.
 pub fn spawn_outbound_threads(
     tun: OffloadedTun,
     routes: RoutingTable,
@@ -77,7 +56,6 @@ pub fn spawn_outbound_threads(
     metrics: AgentMetrics,
     runtime: tokio::runtime::Handle,
 ) {
-    // Per-peer async senders. Created lazily.
     let peer_senders: Arc<dashmap::DashMap<EndpointId, Sender<Bytes>>> =
         Arc::new(dashmap::DashMap::new());
 
@@ -154,7 +132,6 @@ fn run_outbound_thread(
             continue;
         }
 
-        // Find or create the per-peer async pipe.
         let sender = peer_senders
             .entry(peer.endpoint)
             .or_insert_with(|| {
@@ -193,7 +170,6 @@ fn spawn_peer_drain(
     metrics: AgentMetrics,
 ) {
     rt.spawn(async move {
-        // Establish the connection once and stream datagrams onto it.
         let conn = match pool.get(peer).await {
             Ok(c) => c,
             Err(e) => {
@@ -201,11 +177,10 @@ fn spawn_peer_drain(
                 return;
             }
         };
-        // Blocking `rx.recv()` inside async is a no-no; use try_recv + yield.
         loop {
             match rx.try_recv() {
                 Ok(pkt) => {
-                    if let Err(e) = send_packet(&conn, pkt) {
+                    if let Err(e) = send_datagram(&conn, pkt) {
                         tracing::warn!(%peer, ?e, "peer drain: send failed");
                         metrics.dropped.with_label_values(&["send_failed"]).inc();
                         break;

@@ -121,144 +121,42 @@ async fn enroll_inner(
         )
     })?;
 
-    let tenant_ipv6 = tuntun_common::ipv6::derive_tenant_ipv6(&req.endpoint_id)
-        .map_err(|_| (StatusCode::BAD_REQUEST, "invalid endpoint_id".into()))?;
-
-    let alloc = crate::ip_alloc::allocate(&mut tx, network_id, &req.endpoint_id)
-        .await
-        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("ip alloc: {e}")))?;
-
-    let initial_metadata = crate::device_metadata::initial_enroll_metadata(
-        &req.hostname,
-        &req.os,
-        &req.agent_version,
-        req.metadata.clone(),
-    );
-
-    sqlx::query(
-        "INSERT INTO devices (endpoint_id, organization_id, tenant_ipv6, metadata) \
-         VALUES ($1, $2, $3, $4) \
-         ON CONFLICT (endpoint_id) DO UPDATE \
-         SET metadata = devices.metadata || EXCLUDED.metadata, \
-             last_seen = now()",
-    )
-    .bind(&req.endpoint_id)
-    .bind(&organization_id)
-    .bind(crate::pg_inet::pg_ipv6_host(tenant_ipv6))
-    .bind(initial_metadata)
-    .execute(&mut *tx)
-    .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db: {e}")))?;
-
-    sqlx::query(
-        "INSERT INTO network_memberships (endpoint_id, network_id, assigned_ip) \
-         VALUES ($1, $2, $3) \
-         ON CONFLICT (endpoint_id, network_id) DO UPDATE \
-         SET last_seen = now()",
-    )
-    .bind(&req.endpoint_id)
-    .bind(network_id)
-    .bind(crate::pg_inet::pg_host(alloc.ip))
-    .execute(&mut *tx)
-    .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db: {e}")))?;
-
-    sqlx::query("UPDATE organization SET snapshot_version = snapshot_version + 1 WHERE id = $1")
-        .bind(&organization_id)
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db: {e}")))?;
-
-    sqlx::query("SELECT pg_notify('tuntun:org_changed', $1)")
-        .bind(&organization_id)
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db: {e}")))?;
-
-    sqlx::query("UPDATE networks SET version = version + 1 WHERE id = $1")
-        .bind(network_id)
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db: {e}")))?;
-
-    sqlx::query("SELECT pg_notify('tuntun:network_changed', $1)")
-        .bind(network_id.to_string())
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db: {e}")))?;
-
-    let (network_name,): (String,) = sqlx::query_as("SELECT name FROM networks WHERE id = $1")
-        .bind(network_id)
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db: {e}")))?;
-
     tx.commit()
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db: {e}")))?;
 
-    if let Some(ip) = public_ip {
-        let _ = crate::presence::set_public_ip(&state.pool, &req.endpoint_id, ip).await;
-    }
+    let device_type = req
+        .metadata
+        .as_ref()
+        .and_then(|m| m.get("kind"))
+        .and_then(|k| k.as_str())
+        .unwrap_or("agent")
+        .to_string();
 
-    let metadata = req.metadata.clone().unwrap_or_else(|| {
-        serde_json::json!({
-            "hostname": req.hostname,
-            "os": req.os,
-            "agentVersion": req.agent_version,
-            "reportedAt": chrono::Utc::now().to_rfc3339(),
-        })
-    });
-    let pool = state.pool.clone();
-    let endpoint_id = req.endpoint_id.clone();
-    let hostname = req.hostname.clone();
-    let agent_version = req.agent_version.clone();
-    let os = req.os.clone();
-    tokio::spawn(async move {
-        if let Err(e) = crate::device_metadata::merge_device_metadata(
-            &pool,
-            &endpoint_id,
-            &hostname,
-            &agent_version,
-            &os,
-            metadata,
-        )
-        .await
-        {
-            tracing::warn!(endpoint_id = %endpoint_id, error = %e, "metadata update failed");
-        }
-    });
-
-    let snap =
-        crate::snapshot::build_endpoint_snapshot(&state.pool, &state.policy_key, &req.endpoint_id)
-            .await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("snapshot: {e}")))?;
-
-    crate::audit::log(
+    let resp = crate::register::register_device(
         &state.pool,
-        Some(&organization_id),
-        Some(&req.endpoint_id),
-        "device.enrolled",
-        Some(&req.endpoint_id),
-        json!({ "hostname": req.hostname, "ip": alloc.ip }),
-        None,
+        &state.policy_key,
+        crate::register::RegisterDeviceParams {
+            endpoint_id: req.endpoint_id.clone(),
+            organization_id,
+            network_id,
+            hostname: req.hostname.clone(),
+            os: req.os.clone(),
+            agent_version: req.agent_version.clone(),
+            device_type,
+            metadata: req.metadata.clone(),
+            public_ip,
+        },
     )
-    .await;
+    .await?;
 
     state
         .metrics
         .http_requests
         .with_label_values(&["enroll", "200"])
         .inc();
-    Ok(EnrollResponse {
-        organization_id,
-        network_id,
-        network_name,
-        snapshot: snap,
-    })
+    Ok(resp)
 }
-
-// ---------- register (signature-auth) ----------
 
 async fn register_handler(State(state): State<SharedState>, req: Request<Body>) -> Response {
     let path = req.uri().path().to_string();
@@ -276,9 +174,9 @@ async fn register_handler(State(state): State<SharedState>, req: Request<Body>) 
     }
 
     let _ = sqlx::query("UPDATE devices SET last_seen = now() WHERE endpoint_id = $1")
-    .bind(&auth.endpoint_id)
-    .execute(&state.pool)
-    .await;
+        .bind(&auth.endpoint_id)
+        .execute(&state.pool)
+        .await;
 
     let metadata = parsed.metadata.unwrap_or_else(|| {
         serde_json::json!({
@@ -325,8 +223,6 @@ async fn register_handler(State(state): State<SharedState>, req: Request<Body>) 
     (StatusCode::OK, Json(snap)).into_response()
 }
 
-// ---------- poll ----------
-
 async fn poll_handler(State(state): State<SharedState>, req: Request<Body>) -> Response {
     let path = req.uri().path().to_string();
     let method = req.method().as_str().to_string();
@@ -366,21 +262,14 @@ async fn poll_handler(State(state): State<SharedState>, req: Request<Body>) -> R
     (StatusCode::OK, Json(snap)).into_response()
 }
 
-// ---------- WebSocket ----------
-
 async fn ws_handler(
     State(state): State<SharedState>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     req: Request<Body>,
 ) -> Response {
-    // We authenticate with the same headers as HTTP: X-Endpoint-Id, X-Timestamp,
-    // X-Endpoint-Signature, over an *empty* body and the path "/v1/ws".
-    // We can't consume the body here because WS upgrade needs the raw request,
-    // so we authenticate manually against the headers and an empty body.
     let path = "/v1/ws".to_string();
     let method = "GET".to_string();
 
-    // Clone the parts we need for auth before handing the request to `WebSocketUpgrade`.
     let headers = req.headers().clone();
     let endpoint_id = match headers
         .get(tuntun_common::HDR_ENDPOINT_ID)
@@ -545,8 +434,6 @@ async fn run_ws(
     tracing::info!(%ep_for_cleanup, "ws disconnected");
 }
 
-// ---------- internal endpoints ----------
-
 async fn metrics_handler(State(state): State<SharedState>) -> impl IntoResponse {
     (
         StatusCode::OK,
@@ -565,10 +452,7 @@ async fn ready_handler(State(state): State<SharedState>) -> impl IntoResponse {
     }
 }
 
-// need this because `WebSocketUpgrade::from_request` wants the shared state to be `FromRef`-able.
-// Since our handler already receives `State<SharedState>`, we implement the trivial impl below:
 use axum::extract::FromRequest;
 
-// Also: unused import silencer for `AppState` when built in some feature combos.
 #[allow(dead_code)]
 fn _touch(_s: Arc<AppState>) {}

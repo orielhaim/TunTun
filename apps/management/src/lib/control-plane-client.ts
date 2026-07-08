@@ -3,9 +3,12 @@ import { createHmac, createHash, randomBytes } from "node:crypto";
 import {
   internalHealthResponse,
   internalReadyResponse,
+  registerDeviceResponse,
   validateNetworkResponse,
   type InternalHealthResponse,
   type InternalReadyResponse,
+  type RegisterDeviceBody,
+  type RegisterDeviceResponse,
   type ValidateNetworkResponse,
 } from "@tuntun/api/internal";
 import ky, { isHTTPError, type KyInstance } from "ky";
@@ -121,4 +124,43 @@ export async function validateNetwork(
     .post(`/internal/v1/networks/${networkId}/validate`, { body: "" })
     .json();
   return validateNetworkResponse.parse(data);
+}
+
+function toSnakeRegisterBody(
+  body: RegisterDeviceBody,
+): Record<string, unknown> {
+  return {
+    endpoint_id: body.endpointId,
+    organization_id: body.organizationId,
+    network_id: body.networkId,
+    hostname: body.hostname,
+    os: body.os ?? "",
+    agent_version: body.agentVersion ?? "",
+    device_type: body.deviceType,
+    metadata: body.metadata,
+  };
+}
+
+function parseRegisterDeviceResponse(data: unknown): RegisterDeviceResponse {
+  if (!data || typeof data !== "object") {
+    throw new Error("Invalid register device response");
+  }
+  const raw = data as Record<string, unknown>;
+  return registerDeviceResponse.parse({
+    organizationId: raw.organization_id ?? raw.organizationId,
+    networkId: raw.network_id ?? raw.networkId,
+    networkName: raw.network_name ?? raw.networkName,
+    snapshot: raw.snapshot,
+  });
+}
+
+export async function registerDevice(
+  body: RegisterDeviceBody,
+): Promise<RegisterDeviceResponse> {
+  const data = await getClient()
+    .post("/internal/v1/devices/register", {
+      json: toSnakeRegisterBody(body),
+    })
+    .json();
+  return parseRegisterDeviceResponse(data);
 }

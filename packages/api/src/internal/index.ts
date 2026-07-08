@@ -20,6 +20,26 @@ export const validateNetworkResponse = z.object({
   deviceCount: z.number().int().nonnegative(),
 });
 
+export const registerDeviceBody = z.object({
+  endpointId: z.string().length(64),
+  organizationId: z.string(),
+  networkId: z.string().uuid(),
+  hostname: z.string().min(1).max(253),
+  os: z.string().optional(),
+  agentVersion: z.string().optional(),
+  deviceType: z.enum(["agent", "sdk"]).default("sdk"),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const registerDeviceResponse = z.object({
+  organizationId: z.string(),
+  networkId: z.string().uuid(),
+  networkName: z.string(),
+  snapshot: z.record(z.string(), z.unknown()),
+});
+
 export type InternalHealthResponse = z.infer<typeof internalHealthResponse>;
 export type InternalReadyResponse = z.infer<typeof internalReadyResponse>;
 export type ValidateNetworkResponse = z.infer<typeof validateNetworkResponse>;
+export type RegisterDeviceBody = z.infer<typeof registerDeviceBody>;
+export type RegisterDeviceResponse = z.infer<typeof registerDeviceResponse>;

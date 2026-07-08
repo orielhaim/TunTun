@@ -256,5 +256,14 @@ export function useDeviceMutations(orgId: string | undefined) {
       },
       onSuccess: invalidate,
     }),
+    removeMany: useMutation({
+      mutationFn: async (
+        items: { networkId: string; endpointId: string }[],
+      ) => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).deleteDevices(items);
+      },
+      onSuccess: invalidate,
+    }),
   };
 }
