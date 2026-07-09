@@ -1,5 +1,8 @@
 # TunTun
 
+[![Status](https://img.shields.io/badge/status-in%20development-orange?style=flat-square)](https://github.com/orielhaim/TunTun)
+[![Discord](https://img.shields.io/badge/discord-join%20server-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/y5bNc3MYKz)
+
 TunTun connects your machines into a private network, the kind you would normally build inside an office or a data center. Install an agent on each device, and it gets an internal IP address. After that, ordinary tools just work - SSH, ping, curl, a browser pointed at an internal service. You do not need to teach every application about tunnels or VPNs. The network is the network.
 
 That is the whole idea: a mesh for people who want their stuff to talk to their other stuff, wherever it happens to be sitting.
