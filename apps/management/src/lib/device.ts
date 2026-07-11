@@ -1,12 +1,8 @@
+import { schema, type Database } from "@tuntun/db";
+import { formatIp } from "@tuntun/ip";
 import { and, eq } from "drizzle-orm";
 
-import {
-  formatIp,
-  normalizeDeviceMetadata,
-  schema,
-  type Database,
-} from "@tuntun/db";
-
+import { normalizeDeviceMetadata } from "./device-metadata";
 import { db } from "./db";
 import { toIso } from "./serialize";
 

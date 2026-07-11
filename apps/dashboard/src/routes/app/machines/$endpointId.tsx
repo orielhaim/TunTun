@@ -202,7 +202,9 @@ function MachineDetailPage() {
             ? error.message
             : "Machine not found."}
         </p>
-        <Button render={<Link to="/app/machines" />}>Back to machines</Button>
+        <Button nativeButton={false} render={<Link to="/app/machines" />}>
+          Back to machines
+        </Button>
       </div>
     );
   }

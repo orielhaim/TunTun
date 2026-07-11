@@ -36,7 +36,7 @@ pub struct RunArgs {
     pub ifname: String,
     #[arg(long, env = "TUNTUN_POLL_SECS", default_value_t = 30)]
     pub poll_secs: u64,
-    #[arg(long, env = "TUNTUN_METRICS_BIND", default_value = "127.0.0.1:9091")]
+    #[arg(long, env = "TUNTUN_METRICS_BIND", default_value = "127.0.0.1:9100")]
     pub metrics_bind: String,
     #[arg(long, env = "TUNTUN_DISABLE_GOSSIP")]
     pub disable_gossip: bool,

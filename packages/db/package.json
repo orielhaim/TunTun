@@ -13,9 +13,7 @@
     "studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@awasm/noble": "^0.1.4",
     "drizzle-orm": "^0.45.2",
-    "ip-address": "^10.2.0",
     "postgres": "^3.4.9"
   },
   "devDependencies": {

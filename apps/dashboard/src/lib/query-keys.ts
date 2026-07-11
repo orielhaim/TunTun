@@ -8,6 +8,14 @@ export const queryKeys = {
   machines: (orgId: string) => [...queryKeys.org(orgId), "machines"] as const,
   policies: (orgId: string, networkId: string) =>
     [...queryKeys.network(orgId, networkId), "policies"] as const,
+  subnetRoutes: (orgId: string, networkId: string) =>
+    [...queryKeys.network(orgId, networkId), "subnet-routes"] as const,
+  hostnameRoutes: (orgId: string, networkId: string) =>
+    [...queryKeys.network(orgId, networkId), "hostname-routes"] as const,
+  topology: (orgId: string, networkId: string) =>
+    [...queryKeys.network(orgId, networkId), "topology"] as const,
+  networkMetrics: (orgId: string, networkId: string) =>
+    [...queryKeys.network(orgId, networkId), "metrics"] as const,
   enrollmentTokens: (orgId: string, networkId: string) =>
     [...queryKeys.network(orgId, networkId), "enrollment-tokens"] as const,
   apiKeys: (orgId: string) => [...queryKeys.org(orgId), "api-keys"] as const,

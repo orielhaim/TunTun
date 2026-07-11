@@ -3,9 +3,14 @@ import { Elysia } from "elysia";
 
 import { apiV1 } from "./api/v1";
 import { auth } from "./auth";
+import { repairStrippedMeshCidrs } from "./lib/repair-mesh-cidrs";
 
 const port = Number(process.env.MANAGEMENT_PORT ?? 3000);
 const webOrigin = process.env.MANAGEMENT_WEB_ORIGIN ?? "http://localhost:5173";
+
+await repairStrippedMeshCidrs().catch((err) => {
+  console.error("mesh CIDR repair failed:", err);
+});
 
 const app = new Elysia()
   .use(

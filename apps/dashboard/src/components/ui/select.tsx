@@ -18,10 +18,68 @@ const SelectItemsRegistryContext = React.createContext<
   ((value: unknown, label: React.ReactNode) => () => void) | null
 >(null);
 
+function itemLabelFromNode(node: React.ReactNode): React.ReactNode {
+  if (typeof node === "string" || typeof node === "number") return node;
+  if (Array.isArray(node)) {
+    const parts = node
+      .map(itemLabelFromNode)
+      .filter((part) => part !== null && part !== undefined && part !== "");
+    if (
+      parts.every(
+        (part) => typeof part === "string" || typeof part === "number",
+      )
+    ) {
+      return parts.join("");
+    }
+  }
+  return node;
+}
+
+function isSelectItemElement(
+  type: unknown,
+): type is React.JSXElementConstructor<SelectPrimitive.Item.Props> {
+  return (
+    typeof type === "function" &&
+    (type as { displayName?: string }).displayName === "SelectItem"
+  );
+}
+
+function collectSelectItems(
+  children: React.ReactNode,
+): Array<{ label: React.ReactNode; value: unknown }> {
+  const items: Array<{ label: React.ReactNode; value: unknown }> = [];
+
+  React.Children.forEach(children, (child) => {
+    if (!React.isValidElement(child)) return;
+
+    const props = child.props as {
+      children?: React.ReactNode;
+      label?: React.ReactNode;
+      value?: unknown;
+    };
+
+    if (isSelectItemElement(child.type)) {
+      if (props.value !== undefined) {
+        items.push({
+          value: props.value,
+          label: props.label ?? itemLabelFromNode(props.children),
+        });
+      }
+      return;
+    }
+
+    if (props.children != null) {
+      items.push(...collectSelectItems(props.children));
+    }
+  });
+
+  return items;
+}
+
 export function Select<Value, Multiple extends boolean | undefined = false>(
   props: SelectPrimitive.Root.Props<Value, Multiple>,
 ): React.ReactElement {
-  const { items: itemsProp, ...rootProps } = props;
+  const { items: itemsProp, children, ...rootProps } = props;
   const registryRef = React.useRef<SelectItemsRegistry>(new Map());
   const [registryVersion, bumpRegistry] = React.useReducer(
     (version: number) => version + 1,
@@ -30,6 +88,13 @@ export function Select<Value, Multiple extends boolean | undefined = false>(
 
   const register = React.useCallback(
     (value: unknown, label: React.ReactNode) => {
+      const prev = registryRef.current.get(value);
+      if (Object.is(prev, label)) {
+        return () => {
+          registryRef.current.delete(value);
+          bumpRegistry();
+        };
+      }
       registryRef.current.set(value, label);
       bumpRegistry();
       return () => {
@@ -38,6 +103,11 @@ export function Select<Value, Multiple extends boolean | undefined = false>(
       };
     },
     [],
+  );
+
+  const collectedItems = React.useMemo(
+    () => collectSelectItems(children),
+    [children],
   );
 
   const registeredItems = React.useMemo(
@@ -50,11 +120,18 @@ export function Select<Value, Multiple extends boolean | undefined = false>(
   );
 
   const items =
-    itemsProp ?? (registeredItems.length > 0 ? registeredItems : undefined);
+    itemsProp ??
+    (collectedItems.length > 0
+      ? collectedItems
+      : registeredItems.length > 0
+        ? registeredItems
+        : undefined);
 
   return (
     <SelectItemsRegistryContext.Provider value={register}>
-      <SelectPrimitive.Root {...rootProps} items={items} />
+      <SelectPrimitive.Root {...rootProps} items={items}>
+        {children}
+      </SelectPrimitive.Root>
     </SelectItemsRegistryContext.Provider>
   );
 }
@@ -229,8 +306,8 @@ export function SelectItem({
       return undefined;
     }
 
-    return register(value, children);
-  }, [register, value, children]);
+    return register(value, label ?? itemLabelFromNode(children));
+  }, [register, value, children, label]);
 
   const itemLabel =
     label ?? (typeof children === "string" ? children : undefined);
@@ -268,6 +345,8 @@ export function SelectItem({
     </SelectPrimitive.Item>
   );
 }
+
+SelectItem.displayName = "SelectItem";
 
 export function SelectSeparator({
   className,

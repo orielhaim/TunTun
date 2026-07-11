@@ -51,6 +51,37 @@ pub async fn run(
         wintun_file,
     )?);
 
+    crate::forward::ensure_ip_forwarding(!node.routes.advertised_subnets().is_empty());
+    crate::stream_proxy::spawn(node.endpoint.clone(), node.routes.clone());
+
+    let dns_cfg = membership_snap.dns.clone();
+    let dns_bind = tuntun_core::dns_stub::bind_addr(membership_snap.assigned_ipv4);
+    let _dns_task = tuntun_core::dns_stub::spawn(dns_bind, node.routes.clone(), dns_cfg.clone());
+    let _dns_guard =
+        match crate::system_dns::configure(membership_snap.assigned_ipv4, &dns_cfg.suffix) {
+            Ok(g) => Some(g),
+            Err(e) => {
+                tracing::warn!(?e, "PeerDNS system configuration skipped");
+                None
+            }
+        };
+
+    let remote_subnets: Vec<ipnet::Ipv4Net> = membership_snap
+        .subnet_routes
+        .iter()
+        .filter(|r| r.via_endpoint_id != node.identity.endpoint_id_hex())
+        .map(|r| r.cidr)
+        .collect();
+    crate::system_routes::apply(
+        &args.ifname,
+        &membership_snap.device_profile,
+        &remote_subnets,
+        membership_snap
+            .device_profile
+            .exit_node_endpoint_id
+            .is_some(),
+    );
+
     crate::metrics::spawn_listeners(
         metrics.clone(),
         &args.metrics_bind,
@@ -75,10 +106,11 @@ pub async fn run(
     let inbound = {
         let ep = node.endpoint.clone();
         let tun = tun.clone();
+        let routes = node.routes.clone();
         let acl = node.acl.clone();
         let metrics = metrics.clone();
         tokio::spawn(async move {
-            if let Err(e) = run_inbound(ep, tun, acl, metrics).await {
+            if let Err(e) = run_inbound(ep, tun, routes, acl, metrics).await {
                 tracing::error!(?e, "inbound crashed");
             }
         })

@@ -1,6 +1,7 @@
 pub mod acl;
 pub mod control;
 pub mod coordinator;
+pub mod dns_stub;
 pub mod identity;
 pub mod iroh_pool;
 pub mod node;

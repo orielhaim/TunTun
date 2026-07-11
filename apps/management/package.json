@@ -11,6 +11,7 @@
     "@elysiajs/cors": "^1.4.2",
     "@tuntun/api": "workspace:*",
     "@tuntun/db": "workspace:*",
+    "@tuntun/ip": "workspace:*",
     "argon2": "^0.44.0",
     "better-auth": "^1.6.23",
     "drizzle-orm": "^0.45.2",

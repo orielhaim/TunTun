@@ -1,12 +1,3 @@
-//! iroh-gossip based peer-presence dissemination.
-//!
-//! This is *supplementary* to the control-plane snapshot; it never
-//! overrides the authoritative routing table. All we do here is:
-//!   1) Join `blake3(network_id)` as topic
-//!   2) Publish a small presence beacon every 30s
-//!   3) Log heard beacons (for now — a real impl would surface them as
-//!      liveness hints to the routing layer).
-
 use std::time::Duration;
 
 use anyhow::Context;
@@ -41,12 +32,16 @@ pub async fn spawn(
     let self_id = format!("{}", endpoint.id());
     let (sender, mut receiver) = gossip.subscribe(topic, bootstrap).await?.split();
 
-    tokio::spawn(async move {
+    let recv = tokio::spawn(async move {
         while let Some(ev) = receiver.next().await {
             match ev {
                 Ok(Event::Received(msg)) => {
                     if let Ok(beacon) = serde_json::from_slice::<Beacon>(&msg.content) {
-                        tracing::debug!(peer = %beacon.endpoint_id, host = %beacon.hostname, "gossip presence");
+                        tracing::debug!(
+                            peer = %beacon.endpoint_id,
+                            host = %beacon.hostname,
+                            "gossip presence"
+                        );
                     }
                 }
                 Ok(_) => {}
@@ -59,7 +54,9 @@ pub async fn spawn(
     });
 
     let publisher_id = self_id.clone();
-    tokio::spawn(async move {
+    let publish = tokio::spawn(async move {
+        // Hold Gossip for the publisher lifetime.
+        let _gossip = gossip;
         let mut ticker = tokio::time::interval(Duration::from_secs(30));
         loop {
             ticker.tick().await;
@@ -73,10 +70,15 @@ pub async fn spawn(
                 continue;
             };
             if let Err(e) = sender.broadcast(bytes.into()).await {
-                tracing::warn!(?e, "gossip broadcast failed");
+                tracing::debug!(?e, "gossip broadcast skipped");
+                break;
             }
         }
     });
 
+    tokio::select! {
+        _ = recv => tracing::debug!("gossip receiver exited"),
+        _ = publish => tracing::debug!("gossip publisher exited"),
+    }
     Ok(())
 }

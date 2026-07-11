@@ -64,6 +64,77 @@ pub struct PeerEntry {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubnetRoute {
+    pub cidr: ipnet::Ipv4Net,
+    pub via_endpoint_id: EndpointIdHex,
+    pub via_ip: Ipv4Addr,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HostnameRoute {
+    pub hostname: String,
+    pub via_endpoint_id: EndpointIdHex,
+    pub via_ip: Ipv4Addr,
+    #[serde(default)]
+    pub is_wildcard: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_ip: Option<Ipv4Addr>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DnsConfig {
+    pub suffix: String,
+    #[serde(default)]
+    pub upstream: Vec<std::net::IpAddr>,
+    pub synthetic_base: Ipv4Addr,
+}
+
+impl Default for DnsConfig {
+    fn default() -> Self {
+        Self {
+            suffix: "tuntun".into(),
+            upstream: vec![
+                std::net::IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)),
+                std::net::IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)),
+            ],
+            // CGNAT-style pool reserved for PeerDNS hostname routes.
+            synthetic_base: Ipv4Addr::new(100, 100, 0, 1),
+        }
+    }
+}
+
+/// Exit node advertisement in the snapshot.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExitNodeInfo {
+    pub endpoint_id: EndpointIdHex,
+    pub via_ip: Ipv4Addr,
+    pub allowed_cidrs: Vec<ipnet::Ipv4Net>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SplitTunnelMode {
+    Include,
+    Exclude,
+}
+
+impl Default for SplitTunnelMode {
+    fn default() -> Self {
+        Self::Exclude
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DeviceProfile {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit_node_endpoint_id: Option<EndpointIdHex>,
+    #[serde(default)]
+    pub split_tunnel_mode: SplitTunnelMode,
+    #[serde(default)]
+    pub split_tunnel_cidrs: Vec<ipnet::Ipv4Net>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Ipv6PeerEntry {
     pub ip: Ipv6Addr,
     pub endpoint_id: EndpointIdHex,
@@ -79,6 +150,20 @@ pub struct NetworkMembershipSnapshot {
     pub prefix: u8,
     pub mtu: u16,
     pub ipv4_peers: Vec<PeerEntry>,
+    /// Subnet routes visible to this peer (enabled routes in the network).
+    #[serde(default)]
+    pub subnet_routes: Vec<SubnetRoute>,
+    /// Hostname routes visible to this peer.
+    #[serde(default)]
+    pub hostname_routes: Vec<HostnameRoute>,
+    #[serde(default)]
+    pub dns: DnsConfig,
+    /// Exit nodes available in this network.
+    #[serde(default)]
+    pub exit_nodes: Vec<ExitNodeInfo>,
+    /// This device's profile (exit selection + split tunnel).
+    #[serde(default)]
+    pub device_profile: DeviceProfile,
     pub policy: policy::PolicyBundle,
     pub gossip_bootstrap: Vec<EndpointIdHex>,
     pub gossip_topic_hex: String,

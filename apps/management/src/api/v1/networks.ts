@@ -1,5 +1,6 @@
 import { createNetworkBody, patchNetworkBody } from "@tuntun/api/management";
-import { formatIpv4Cidr, schema } from "@tuntun/db";
+import { formatIpv4Cidr } from "@tuntun/ip";
+import { schema } from "@tuntun/db";
 import { and, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
 

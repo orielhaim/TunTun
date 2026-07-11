@@ -15,6 +15,22 @@ Commercial options exist. Tailscale is the obvious one, and they are very good a
 
 We should be honest about where we stand: they are ahead of us by roughly ten percent, and the gap is not closing as fast as our pride would prefer. We are building anyway, because we think the category needs an alternative that is fully open.
 
+## What you can do
+
+**Private mesh networking.** Machines join with an agent, get an address on the network, and reach each other directly. Access policies decide who can talk to whom.
+
+**Reach devices without agents.** Advertise a LAN subnet or a hostname through a gateway machine. Printers, NAS boxes, and internal services become reachable from the mesh without installing anything on them.
+
+**Names that just work.** PeerDNS resolves machine names and hostname routes on the network, so you can use familiar hostnames instead of memorizing IPs.
+
+**Exit nodes.** Send traffic for the wider internet through a chosen machine when you need a fixed egress path.
+
+**Split tunnels.** Choose what stays on the mesh and what goes out the local network, so you are not forcing every packet through the tunnel.
+
+**High availability.** Group gateways so that if one goes offline, another takes over and routes keep working.
+
+**See the network.** The dashboard shows a live map of machines and routes, with status, search, and the controls you need to manage it day to day.
+
 ## What makes TunTun different
 
 **Everything is open source.** Not just the agent on your laptop. The control plane, the coordination layer, the management tooling - all of it. You can read it, run it yourself, fork it, and know exactly what your network is doing. No hosted black box you have to trust because the marketing page said so.
@@ -76,7 +92,7 @@ bun run dev:management
 bun run dev:dash
 ```
 
-Open the dashboard, create an account and organization, and you will get a default network. From the Machines page you can generate an enrollment token.
+Open the dashboard, create an account and organization, and you will get a default network. From the Machines page you can generate an enrollment token. On each network you can manage machines, routes, access policies, enrollment, and the live mesh map.
 
 ## Adding a machine
 
@@ -84,7 +100,7 @@ Every device joins in two steps: enroll once, then run.
 
 ### Enroll
 
-Enrollment registers the machine with the control plane, assigns it an internal IP, and saves credentials locally. You need an enrollment token from the dashboard (or the script above) and the URL where `tuntun-control` is reachable.
+Enrollment registers the machine with the control plane, assigns it an internal IP, and saves credentials locally. You need an enrollment token from the dashboard and the URL where `tuntun-control` is reachable.
 
 ```bash
 sudo tuntun-agent enroll \
@@ -109,7 +125,7 @@ After enrollment, start the tunnel:
 sudo tuntun-agent run
 ```
 
-This creates the virtual interface (default name `tuntun0`), connects to peers, and keeps routing updated. Ordinary traffic to other machines on the network goes through the tunnel automatically.
+This creates the virtual interface (default name `tuntun0`), connects to peers, and keeps routing updated. Ordinary traffic to other machines on the network goes through the tunnel automatically. Subnet and hostname routes, PeerDNS, exit nodes, and split-tunnel preferences are applied from the control plane as you configure them in the dashboard.
 
 Useful options:
 
@@ -118,17 +134,9 @@ Useful options:
 
 Set `RUST_LOG=debug` if something is not connecting and you want more detail in the logs.
 
-### Reset
-
-To wipe local state and enroll again:
-
-```bash
-tuntun-agent reset --yes
-```
-
 ### Check that it works
 
-From another enrolled machine, try reaching the assigned IP:
+From another enrolled machine, try reaching the assigned IP - or the machine's PeerDNS name:
 
 ```bash
 ping 10.x.x.x

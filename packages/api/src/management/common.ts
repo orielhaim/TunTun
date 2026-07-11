@@ -27,6 +27,10 @@ export const apiKeyIdParam = orgIdParam.extend({
   keyId: z.string().uuid(),
 });
 
+export const subnetRouteIdParam = networkIdParam.extend({
+  routeId: z.string().uuid(),
+});
+
 export const deviceStatusSchema = z.enum(["active", "suspended", "pending"]);
 
 export const orgRoleSchema = z.enum(["owner", "admin", "member"]);

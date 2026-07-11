@@ -5,31 +5,45 @@ import {
   createApiKeyResponse,
   createEnrollmentTokenBody,
   createEnrollmentTokenResponse,
+  createHostnameRouteBody,
   createNetworkBody,
   createPolicyBody,
+  createSubnetRouteBody,
   deviceAddressesResponse,
   deviceDetailSchema,
   deviceListResponse,
   deleteDevicesBody,
   deleteDevicesResponse,
   enrollmentTokenListResponse,
+  hostnameRouteListResponse,
+  hostnameRouteSchema,
   networkListResponse,
   networkSchema,
   patchDeviceBody,
   patchDeviceMembershipBody,
+  patchHostnameRouteBody,
   patchNetworkBody,
   patchPolicyBody,
+  patchSubnetRouteBody,
   policyListResponse,
   policySchema,
+  subnetRouteListResponse,
+  subnetRouteSchema,
+  topologyResponse,
+  networkMetricsResponse,
   type CreateApiKeyBody,
   type CreateEnrollmentTokenBody,
+  type CreateHostnameRouteBody,
   type CreateNetworkBody,
   type CreatePolicyBody,
+  type CreateSubnetRouteBody,
   type DeleteDeviceItem,
   type PatchDeviceBody,
   type PatchDeviceMembershipBody,
+  type PatchHostnameRouteBody,
   type PatchNetworkBody,
   type PatchPolicyBody,
+  type PatchSubnetRouteBody,
 } from "@tuntun/api/management";
 import type { z } from "zod";
 
@@ -220,6 +234,88 @@ export function createManagementClient(orgId: string) {
         { method: "DELETE" },
       ),
 
+    listSubnetRoutes: (networkId: string) =>
+      request(
+        orgId,
+        org(`/networks/${networkId}/routes`),
+        {},
+        subnetRouteListResponse,
+      ),
+
+    createSubnetRoute: (networkId: string, body: CreateSubnetRouteBody) =>
+      request(
+        orgId,
+        org(`/networks/${networkId}/routes`),
+        {
+          method: "POST",
+          body: JSON.stringify(createSubnetRouteBody.parse(body)),
+        },
+        subnetRouteSchema,
+      ),
+
+    updateSubnetRoute: (
+      networkId: string,
+      routeId: string,
+      body: PatchSubnetRouteBody,
+    ) =>
+      request(
+        orgId,
+        org(`/networks/${networkId}/routes/${routeId}`),
+        {
+          method: "PATCH",
+          body: JSON.stringify(patchSubnetRouteBody.parse(body)),
+        },
+        subnetRouteSchema,
+      ),
+
+    deleteSubnetRoute: (networkId: string, routeId: string) =>
+      request<{ ok: boolean }>(
+        orgId,
+        org(`/networks/${networkId}/routes/${routeId}`),
+        { method: "DELETE" },
+      ),
+
+    listHostnameRoutes: (networkId: string) =>
+      request(
+        orgId,
+        org(`/networks/${networkId}/hostname-routes`),
+        {},
+        hostnameRouteListResponse,
+      ),
+
+    createHostnameRoute: (networkId: string, body: CreateHostnameRouteBody) =>
+      request(
+        orgId,
+        org(`/networks/${networkId}/hostname-routes`),
+        {
+          method: "POST",
+          body: JSON.stringify(createHostnameRouteBody.parse(body)),
+        },
+        hostnameRouteSchema,
+      ),
+
+    updateHostnameRoute: (
+      networkId: string,
+      routeId: string,
+      body: PatchHostnameRouteBody,
+    ) =>
+      request(
+        orgId,
+        org(`/networks/${networkId}/hostname-routes/${routeId}`),
+        {
+          method: "PATCH",
+          body: JSON.stringify(patchHostnameRouteBody.parse(body)),
+        },
+        hostnameRouteSchema,
+      ),
+
+    deleteHostnameRoute: (networkId: string, routeId: string) =>
+      request<{ ok: boolean }>(
+        orgId,
+        org(`/networks/${networkId}/hostname-routes/${routeId}`),
+        { method: "DELETE" },
+      ),
+
     listEnrollmentTokens: (networkId: string) =>
       request(
         orgId,
@@ -284,6 +380,22 @@ export function createManagementClient(orgId: string) {
         org(`/devices/${endpointId}/addresses`),
         {},
         deviceAddressesResponse,
+      ),
+
+    getTopology: (networkId: string) =>
+      request(
+        orgId,
+        org(`/networks/${networkId}/topology`),
+        {},
+        topologyResponse,
+      ),
+
+    getNetworkMetrics: (networkId: string) =>
+      request(
+        orgId,
+        org(`/networks/${networkId}/metrics`),
+        {},
+        networkMetricsResponse,
       ),
   };
 }

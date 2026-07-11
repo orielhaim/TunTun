@@ -1,5 +1,8 @@
 use sqlx::PgPool;
-use tuntun_common::{EndpointSnapshot, Ipv6PeerEntry, NetworkMembershipSnapshot, PeerEntry};
+use tuntun_common::{
+    DeviceProfile, DnsConfig, EndpointSnapshot, ExitNodeInfo, HostnameRoute, Ipv6PeerEntry,
+    NetworkMembershipSnapshot, PeerEntry, SplitTunnelMode, SubnetRoute,
+};
 use uuid::Uuid;
 
 use crate::pg_inet::{self, PgIp};
@@ -42,6 +45,10 @@ pub async fn build_endpoint_snapshot(
         let assigned_ipv4 = pg_inet::to_ipv4_addr(assigned_ip)?;
         let prefix = network_prefix(pool, network_id).await?;
         let ipv4_peers = load_ipv4_peers(pool, network_id, endpoint_id, &network_name).await?;
+        let subnet_routes = load_subnet_routes(pool, network_id).await?;
+        let hostname_routes = load_hostname_routes(pool, network_id).await?;
+        let exit_nodes = load_exit_nodes(pool, network_id).await?;
+        let device_profile = load_device_profile(pool, endpoint_id, network_id).await?;
         let policy = crate::policy_store::load_network_bundle(
             pool,
             policy_key,
@@ -62,6 +69,11 @@ pub async fn build_endpoint_snapshot(
             prefix,
             mtu: mtu as u16,
             ipv4_peers,
+            subnet_routes,
+            hostname_routes,
+            dns: DnsConfig::default(),
+            exit_nodes,
+            device_profile,
             policy,
             gossip_bootstrap: bootstrap,
             gossip_topic_hex,
@@ -102,6 +114,159 @@ async fn network_prefix(pool: &PgPool, network_id: Uuid) -> anyhow::Result<u8> {
         ipnet::IpNet::V4(n) => Ok(n.prefix_len()),
         _ => Ok(24),
     }
+}
+
+async fn load_exit_nodes(pool: &PgPool, network_id: Uuid) -> anyhow::Result<Vec<ExitNodeInfo>> {
+    let rows: Vec<(String, PgIp, Vec<PgIp>)> = sqlx::query_as(
+        "SELECT e.endpoint_id, nm.assigned_ip::inet, e.allowed_cidrs \
+         FROM exit_node_config e \
+         JOIN network_memberships nm \
+           ON nm.endpoint_id = e.endpoint_id AND nm.network_id = e.network_id \
+         WHERE e.network_id = $1 AND e.enabled = true AND nm.status = 'active'",
+    )
+    .bind(network_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut nodes = Vec::with_capacity(rows.len());
+    for (endpoint_id, assigned_ip, allowed) in rows {
+        let via_ip = match pg_inet::to_ipv4_addr(assigned_ip) {
+            Ok(ip) => ip,
+            Err(_) => continue,
+        };
+        let mut allowed_cidrs = Vec::new();
+        for c in allowed {
+            if let Ok(ipnet::IpNet::V4(n)) = pg_inet::to_ipnet(c) {
+                allowed_cidrs.push(n);
+            }
+        }
+        if allowed_cidrs.is_empty() {
+            allowed_cidrs.push("0.0.0.0/0".parse()?);
+        }
+        nodes.push(ExitNodeInfo {
+            endpoint_id,
+            via_ip,
+            allowed_cidrs,
+        });
+    }
+    Ok(nodes)
+}
+
+async fn load_device_profile(
+    pool: &PgPool,
+    endpoint_id: &str,
+    network_id: Uuid,
+) -> anyhow::Result<DeviceProfile> {
+    let row: Option<(Option<String>, String, Vec<PgIp>)> = sqlx::query_as(
+        "SELECT exit_node_endpoint_id, split_tunnel_mode, split_tunnel_cidrs \
+         FROM device_profiles \
+         WHERE endpoint_id = $1 AND network_id = $2",
+    )
+    .bind(endpoint_id)
+    .bind(network_id)
+    .fetch_optional(pool)
+    .await?;
+
+    let Some((exit_node, mode, cidrs)) = row else {
+        return Ok(DeviceProfile::default());
+    };
+
+    let split_tunnel_mode = match mode.as_str() {
+        "include" => SplitTunnelMode::Include,
+        _ => SplitTunnelMode::Exclude,
+    };
+    let mut split_tunnel_cidrs = Vec::new();
+    for c in cidrs {
+        if let Ok(ipnet::IpNet::V4(n)) = pg_inet::to_ipnet(c) {
+            split_tunnel_cidrs.push(n);
+        }
+    }
+
+    Ok(DeviceProfile {
+        exit_node_endpoint_id: exit_node,
+        split_tunnel_mode,
+        split_tunnel_cidrs,
+    })
+}
+
+async fn load_hostname_routes(
+    pool: &PgPool,
+    network_id: Uuid,
+) -> anyhow::Result<Vec<HostnameRoute>> {
+    let rows: Vec<(String, String, bool, Option<PgIp>, PgIp)> = sqlx::query_as(
+        "SELECT COALESCE(ng.active_endpoint_id, hr.endpoint_id) AS via_endpoint_id, \
+                hr.hostname, hr.is_wildcard, hr.target_ip, nm.assigned_ip::inet \
+         FROM hostname_routes hr \
+         LEFT JOIN node_group_members ngm ON ngm.endpoint_id = hr.endpoint_id \
+         LEFT JOIN node_groups ng \
+           ON ng.id = ngm.group_id AND ng.ha_enabled AND ng.network_id = hr.network_id \
+         JOIN network_memberships nm \
+           ON nm.endpoint_id = COALESCE(ng.active_endpoint_id, hr.endpoint_id) \
+          AND nm.network_id = hr.network_id \
+         WHERE hr.network_id = $1 AND hr.enabled = true AND nm.status = 'active'",
+    )
+    .bind(network_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut routes = Vec::with_capacity(rows.len());
+    for (via_endpoint_id, hostname, is_wildcard, target_ip, assigned_ip) in rows {
+        let via_ip = match pg_inet::to_ipv4_addr(assigned_ip) {
+            Ok(ip) => ip,
+            Err(_) => continue,
+        };
+        let target_ip = match target_ip {
+            Some(ip) => match pg_inet::to_ipv4_addr(ip) {
+                Ok(v) => Some(v),
+                Err(_) => continue,
+            },
+            None => None,
+        };
+        routes.push(HostnameRoute {
+            hostname,
+            via_endpoint_id,
+            via_ip,
+            is_wildcard,
+            target_ip,
+        });
+    }
+    Ok(routes)
+}
+
+async fn load_subnet_routes(pool: &PgPool, network_id: Uuid) -> anyhow::Result<Vec<SubnetRoute>> {
+    // When the advertising machine is in an HA group, peers see the active member as via.
+    let rows: Vec<(String, PgIp, PgIp)> = sqlx::query_as(
+        "SELECT COALESCE(ng.active_endpoint_id, sr.endpoint_id) AS via_endpoint_id, \
+                sr.cidr, nm.assigned_ip::inet \
+         FROM subnet_routes sr \
+         LEFT JOIN node_group_members ngm ON ngm.endpoint_id = sr.endpoint_id \
+         LEFT JOIN node_groups ng \
+           ON ng.id = ngm.group_id AND ng.ha_enabled AND ng.network_id = sr.network_id \
+         JOIN network_memberships nm \
+           ON nm.endpoint_id = COALESCE(ng.active_endpoint_id, sr.endpoint_id) \
+          AND nm.network_id = sr.network_id \
+         WHERE sr.network_id = $1 AND sr.enabled = true AND nm.status = 'active'",
+    )
+    .bind(network_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut routes = Vec::with_capacity(rows.len());
+    for (via_endpoint_id, cidr, assigned_ip) in rows {
+        let ipnet::IpNet::V4(cidr) = pg_inet::to_ipnet(cidr)? else {
+            continue;
+        };
+        let via_ip = match pg_inet::to_ipv4_addr(assigned_ip) {
+            Ok(ip) => ip,
+            Err(_) => continue,
+        };
+        routes.push(SubnetRoute {
+            cidr,
+            via_endpoint_id,
+            via_ip,
+        });
+    }
+    Ok(routes)
 }
 
 async fn load_ipv4_peers(

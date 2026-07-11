@@ -7,56 +7,56 @@
  */
 export declare class TunTunNode {
   /** Create (or connect to) a local overlay node. */
-  static create(cfg: NodeConfig): Promise<TunTunNode>
+  static create(cfg: NodeConfig): Promise<TunTunNode>;
   /** Our own endpoint id (hex). */
-  endpointId(): string
+  endpointId(): string;
   /** Are we currently acting as the coordinator for this machine? */
-  isCoordinator(): boolean
+  isCoordinator(): boolean;
   /** List peers currently known to the routing table. */
-  listPeers(): Promise<Array<PeerJs>>
+  listPeers(): Promise<Array<PeerJs>>;
   /**
    * Open a duplex stream to `host:port` where `host` is a peer overlay IP,
    * hostname, or endpoint id.
    */
-  openStream(host: string, port: number): Promise<TunTunStream>
+  openStream(host: string, port: number): Promise<TunTunStream>;
   /** Best-effort shutdown. Multiple calls are safe. */
-  close(): Promise<void>
+  close(): Promise<void>;
 }
 
 /** A duplex byte stream. Read via `read()`, write via `write()`, close via `close()`. */
 export declare class TunTunStream {
   /** Read up to `max_len` bytes. Returns an empty buffer at EOF. */
-  read(maxLen: number): Promise<Buffer>
+  read(maxLen: number): Promise<Buffer>;
   /** Write all `data` bytes. */
-  write(data: Buffer): Promise<void>
-  end(): Promise<void>
+  write(data: Buffer): Promise<void>;
+  end(): Promise<void>;
 }
 
 /**
  * One-shot enrolment. Persists identity+state to `state_dir` so subsequent
  * `TunTunNode.create()` calls can bootstrap without a token.
  */
-export declare function enroll(cfg: EnrollConfig): Promise<EnrollResult>
+export declare function enroll(cfg: EnrollConfig): Promise<EnrollResult>;
 
 export interface EnrollConfig {
-  controlUrl: string
+  controlUrl: string;
   /** One-time enrollment token (agent-style enrolment). */
-  token?: string
+  token?: string;
   /** Management API base URL for API-key SDK enrolment. */
-  managementUrl?: string
-  apiKey?: string
-  organizationId?: string
-  networkId?: string
-  hostname?: string
-  stateDir?: string
-  processName?: string
-  runtime?: string
+  managementUrl?: string;
+  apiKey?: string;
+  organizationId?: string;
+  networkId?: string;
+  hostname?: string;
+  stateDir?: string;
+  processName?: string;
+  runtime?: string;
 }
 
 export interface EnrollResult {
-  endpointId: string
-  ip: string
-  network: string
+  endpointId: string;
+  ip: string;
+  network: string;
 }
 
 export interface NodeConfig {
@@ -64,28 +64,28 @@ export interface NodeConfig {
    * Path to the state directory (identity + persisted state).
    * If not provided we use `TUNTUN_STATE_DIR`, `XDG_STATE_HOME`, etc.
    */
-  stateDir?: string
-  hostname?: string
-  pollSecs?: number
+  stateDir?: string;
+  hostname?: string;
+  pollSecs?: number;
   /**
    * When true, avoids the coordinator dance and always creates a private
    * endpoint for this process. Useful in tests or single-process scenarios.
    */
-  standalone?: boolean
+  standalone?: boolean;
   /** Control plane URL used after enrolment. */
-  controlUrl?: string
+  controlUrl?: string;
   /** Auto-enrol via API key when no persisted identity exists. */
-  managementUrl?: string
-  apiKey?: string
-  organizationId?: string
-  networkId?: string
-  processName?: string
-  runtime?: string
+  managementUrl?: string;
+  apiKey?: string;
+  organizationId?: string;
+  networkId?: string;
+  processName?: string;
+  runtime?: string;
 }
 
 export interface PeerJs {
-  ip: string
-  hostname: string
-  endpointId: string
-  tags: Array<string>
+  ip: string;
+  hostname: string;
+  endpointId: string;
+  tags: Array<string>;
 }

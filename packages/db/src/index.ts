@@ -31,23 +31,4 @@ export function createListenClient(connectionString?: string) {
   return postgres(url, { max: 1 });
 }
 
-export {
-  deviceAgentVersion,
-  deviceHostname,
-  deviceKind,
-  deviceOs,
-  normalizeDeviceMetadata,
-  parseDeviceMetadata,
-  type DeviceMetadataRecord,
-} from "./device-metadata";
 export { schema };
-export { deriveTenantIpv6 } from "./tenant-ipv6";
-export {
-  formatIp,
-  formatIpv4Cidr,
-  isIp,
-  isIpv4,
-  isIpv6,
-  isIpCidr,
-  isIpv4Cidr,
-} from "./ip";

@@ -113,7 +113,14 @@ impl CoreNode {
             routes.clone(),
             membership.policy.clone(),
         );
-        apply_membership(&membership, &routes, &acl, &version, snapshot.version);
+        apply_membership(
+            &membership,
+            &routes,
+            &acl,
+            &version,
+            snapshot.version,
+            &my_id_hex,
+        );
 
         // Sync loops.
         let ws = crate::ws_client::spawn(
@@ -128,6 +135,7 @@ impl CoreNode {
             version.clone(),
             paths.clone_paths(),
             persisted.network_id,
+            my_id_hex.clone(),
             cfg.agent_version,
         );
         spawn_poll_fallback(
@@ -137,6 +145,7 @@ impl CoreNode {
             routes.clone(),
             acl.clone(),
             persisted.network_id,
+            my_id_hex.clone(),
         );
 
         let pool = ConnPool::new(endpoint.clone(), TUNNEL_STREAM_ALPN);

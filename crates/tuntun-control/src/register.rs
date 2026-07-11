@@ -111,7 +111,7 @@ pub async fn register_device(
         "INSERT INTO network_memberships (endpoint_id, network_id, assigned_ip) \
          VALUES ($1, $2, $3) \
          ON CONFLICT (endpoint_id, network_id) DO UPDATE \
-         SET last_seen = now()",
+         SET assigned_ip = EXCLUDED.assigned_ip, last_seen = now()",
     )
     .bind(&params.endpoint_id)
     .bind(params.network_id)
@@ -251,19 +251,4 @@ pub async fn register_device(
         network_name,
         snapshot: snap,
     })
-}
-
-pub async fn build_snapshot(
-    pool: &PgPool,
-    policy_key: &SigningKey,
-    endpoint_id: &str,
-) -> Result<EndpointSnapshot, (axum::http::StatusCode, String)> {
-    crate::snapshot::build_endpoint_snapshot(pool, policy_key, endpoint_id)
-        .await
-        .map_err(|e| {
-            (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                format!("snapshot: {e}"),
-            )
-        })
 }

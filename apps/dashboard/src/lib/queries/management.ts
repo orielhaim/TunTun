@@ -75,6 +75,66 @@ export function usePolicies(orgId: string | undefined, networkId: string) {
   });
 }
 
+export function useSubnetRoutes(orgId: string | undefined, networkId: string) {
+  return useQuery({
+    queryKey: orgId
+      ? queryKeys.subnetRoutes(orgId, networkId)
+      : ["subnet-routes"],
+    enabled: Boolean(orgId && networkId),
+    queryFn: async () => {
+      const client = createManagementClient(orgId!);
+      const { routes } = await client.listSubnetRoutes(networkId);
+      return routes;
+    },
+  });
+}
+
+export function useHostnameRoutes(
+  orgId: string | undefined,
+  networkId: string,
+) {
+  return useQuery({
+    queryKey: orgId
+      ? queryKeys.hostnameRoutes(orgId, networkId)
+      : ["hostname-routes"],
+    enabled: Boolean(orgId && networkId),
+    queryFn: async () => {
+      const client = createManagementClient(orgId!);
+      const { routes } = await client.listHostnameRoutes(networkId);
+      return routes;
+    },
+  });
+}
+
+export function useTopology(orgId: string | undefined, networkId: string) {
+  return useQuery({
+    queryKey: orgId ? queryKeys.topology(orgId, networkId) : ["topology"],
+    enabled: Boolean(orgId && networkId),
+    queryFn: async () => {
+      const client = createManagementClient(orgId!);
+      return client.getTopology(networkId);
+    },
+    refetchInterval: 15_000,
+  });
+}
+
+export function useNetworkMetrics(
+  orgId: string | undefined,
+  networkId: string,
+) {
+  return useQuery({
+    queryKey: orgId
+      ? queryKeys.networkMetrics(orgId, networkId)
+      : ["network-metrics"],
+    enabled: Boolean(orgId && networkId),
+    queryFn: async () => {
+      const client = createManagementClient(orgId!);
+      return client.getNetworkMetrics(networkId);
+    },
+    refetchInterval: 15_000,
+  });
+}
+
 export function useEnrollmentTokens(
   orgId: string | undefined,
   networkId: string,

@@ -1,9 +1,8 @@
 import { registerSdkNodeBody, SDK_ENROLL_SCOPE } from "@tuntun/api/management";
-import { formatIpv4Cidr } from "@tuntun/db";
+import { schema } from "@tuntun/db";
+import { formatIpv4Cidr } from "@tuntun/ip";
 import { and, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
-
-import { schema } from "@tuntun/db";
 
 import { canAccessNetwork } from "../../lib/api-key-auth";
 

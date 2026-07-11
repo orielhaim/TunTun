@@ -35,12 +35,13 @@ export function normalizeDeviceMetadata(
   endpointId: string,
 ): DeviceMetadataRecord {
   const stored = parseDeviceMetadata(metadata);
+  const agentVersion = deviceAgentVersion(metadata);
   return {
     ...stored,
     hostname: deviceHostname(metadata, endpointId),
     os: deviceOs(metadata) ?? "unknown",
-    ...(deviceAgentVersion(metadata)
-      ? { agentVersion: deviceAgentVersion(metadata) }
+    ...(agentVersion
+      ? { agentVersion }
       : stored.agentVersion !== undefined
         ? { agentVersion: stored.agentVersion }
         : {}),

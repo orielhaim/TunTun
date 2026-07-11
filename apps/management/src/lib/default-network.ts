@@ -1,4 +1,5 @@
-import { formatIpv4Cidr, schema } from "@tuntun/db";
+import { schema } from "@tuntun/db";
+import { formatIpv4Cidr } from "@tuntun/ip";
 
 import { writeAudit } from "./audit";
 import { db } from "./db";

@@ -29,6 +29,8 @@ chrono.workspace = true
 uuid.workspace = true
 rand.workspace = true
 ed25519-dalek.workspace = true
+ipnet.workspace = true
+hickory-proto.workspace = true
 
 iroh.workspace = true
 iroh-gossip.workspace = true

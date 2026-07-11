@@ -225,5 +225,9 @@ pub async fn sweep_stale_connections(pool: &PgPool) -> anyhow::Result<()> {
         tracing::warn!(%endpoint_id, "agent marked disconnected (stale heartbeat)");
     }
 
+    if let Err(e) = crate::ha::reconcile_failover(pool).await {
+        tracing::warn!(?e, "HA failover reconcile failed");
+    }
+
     Ok(())
 }

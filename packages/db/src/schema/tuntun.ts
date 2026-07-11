@@ -271,6 +271,218 @@ export const enrollmentTokens = pgTable("enrollment_tokens", {
     .notNull(),
 });
 
+/** CIDR ranges advertised by a machine as subnet routes (LAN/IoT gateways). */
+export const subnetRoutes = pgTable(
+  "subnet_routes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    endpointId: text("endpoint_id")
+      .notNull()
+      .references(() => devices.endpointId, { onDelete: "cascade" }),
+    networkId: uuid("network_id")
+      .notNull()
+      .references(() => networks.id, { onDelete: "cascade" }),
+    cidr: cidr("cidr").notNull(),
+    description: text("description"),
+    enabled: boolean("enabled").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("subnet_routes_network_cidr_unique").on(table.networkId, table.cidr),
+    index("subnet_routes_by_network_idx").on(table.networkId),
+    index("subnet_routes_by_endpoint_idx").on(table.endpointId),
+    index("subnet_routes_by_network_enabled_idx").on(
+      table.networkId,
+      table.enabled,
+    ),
+  ],
+);
+
+/**
+ * Hostname → gateway mappings. Traffic for the hostname is sent to the
+ * advertising machine, which resolves locally (or via optional target_ip).
+ * Wildcards store the suffix without `*.` and set `isWildcard`.
+ */
+export const hostnameRoutes = pgTable(
+  "hostname_routes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    endpointId: text("endpoint_id")
+      .notNull()
+      .references(() => devices.endpointId, { onDelete: "cascade" }),
+    networkId: uuid("network_id")
+      .notNull()
+      .references(() => networks.id, { onDelete: "cascade" }),
+    hostname: text("hostname").notNull(),
+    isWildcard: boolean("is_wildcard").notNull().default(false),
+    /** Optional static IP; when null the gateway resolves locally. */
+    targetIp: inet("target_ip"),
+    description: text("description"),
+    enabled: boolean("enabled").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("hostname_routes_network_hostname_unique").on(
+      table.networkId,
+      table.hostname,
+      table.isWildcard,
+    ),
+    index("hostname_routes_by_network_idx").on(table.networkId),
+    index("hostname_routes_by_endpoint_idx").on(table.endpointId),
+    index("hostname_routes_by_network_enabled_idx").on(
+      table.networkId,
+      table.enabled,
+    ),
+  ],
+);
+
+/** Machines that may act as internet exit nodes. */
+export const exitNodeConfig = pgTable(
+  "exit_node_config",
+  {
+    endpointId: text("endpoint_id")
+      .primaryKey()
+      .references(() => devices.endpointId, { onDelete: "cascade" }),
+    networkId: uuid("network_id")
+      .notNull()
+      .references(() => networks.id, { onDelete: "cascade" }),
+    enabled: boolean("enabled").notNull().default(true),
+    /** CIDRs this exit is willing to carry; default 0.0.0.0/0. */
+    allowedCidrs: cidr("allowed_cidrs")
+      .array()
+      .notNull()
+      .default(["0.0.0.0/0"]),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("exit_node_config_by_network_idx").on(table.networkId),
+    index("exit_node_config_by_network_enabled_idx").on(
+      table.networkId,
+      table.enabled,
+    ),
+  ],
+);
+
+export const splitTunnelModeValues = ["include", "exclude"] as const;
+
+/** Per-device tunnel preferences (exit node + split tunnel). */
+export const deviceProfiles = pgTable(
+  "device_profiles",
+  {
+    endpointId: text("endpoint_id")
+      .primaryKey()
+      .references(() => devices.endpointId, { onDelete: "cascade" }),
+    networkId: uuid("network_id")
+      .notNull()
+      .references(() => networks.id, { onDelete: "cascade" }),
+    /** When set, route matching traffic through this exit node. */
+    exitNodeEndpointId: text("exit_node_endpoint_id").references(
+      () => devices.endpointId,
+      { onDelete: "set null" },
+    ),
+    splitTunnelMode: text("split_tunnel_mode").notNull().default("exclude"),
+    splitTunnelCidrs: cidr("split_tunnel_cidrs").array().notNull().default([]),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    check(
+      "device_profiles_split_tunnel_mode_check",
+      sql`${table.splitTunnelMode} IN ('include', 'exclude')`,
+    ),
+    index("device_profiles_by_network_idx").on(table.networkId),
+  ],
+);
+
+/** HA groups that share subnet/hostname routes with active/passive failover. */
+export const nodeGroups = pgTable(
+  "node_groups",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    networkId: uuid("network_id")
+      .notNull()
+      .references(() => networks.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    haEnabled: boolean("ha_enabled").notNull().default(true),
+    /** Currently active member (null = none elected yet). */
+    activeEndpointId: text("active_endpoint_id").references(
+      () => devices.endpointId,
+      { onDelete: "set null" },
+    ),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("node_groups_network_name_unique").on(table.networkId, table.name),
+    index("node_groups_by_network_idx").on(table.networkId),
+  ],
+);
+
+export const nodeGroupMembers = pgTable(
+  "node_group_members",
+  {
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => nodeGroups.id, { onDelete: "cascade" }),
+    endpointId: text("endpoint_id")
+      .notNull()
+      .references(() => devices.endpointId, { onDelete: "cascade" }),
+    /** Lower = preferred for promotion. */
+    priority: integer("priority").notNull().default(100),
+    joinedAt: timestamp("joined_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.groupId, table.endpointId] }),
+    index("node_group_members_by_endpoint_idx").on(table.endpointId),
+  ],
+);
+
+/** Per-peer-pair telemetry reported by agents (latency, throughput, path). */
+export const peerMetrics = pgTable(
+  "peer_metrics",
+  {
+    networkId: uuid("network_id")
+      .notNull()
+      .references(() => networks.id, { onDelete: "cascade" }),
+    fromEndpointId: text("from_endpoint_id")
+      .notNull()
+      .references(() => devices.endpointId, { onDelete: "cascade" }),
+    toEndpointId: text("to_endpoint_id")
+      .notNull()
+      .references(() => devices.endpointId, { onDelete: "cascade" }),
+    latencyMs: integer("latency_ms"),
+    bytesTx: bigint("bytes_tx", { mode: "number" }).notNull().default(0),
+    bytesRx: bigint("bytes_rx", { mode: "number" }).notNull().default(0),
+    packetLoss: integer("packet_loss_bps"),
+    direct: boolean("direct"),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.networkId, table.fromEndpointId, table.toEndpointId],
+    }),
+    index("peer_metrics_by_network_updated_idx").on(
+      table.networkId,
+      table.updatedAt,
+    ),
+  ],
+);
+
 export const auditLog = pgTable(
   "audit_log",
   {
@@ -301,6 +513,11 @@ export const networksRelations = relations(networks, ({ one, many }) => ({
   memberships: many(networkMemberships),
   policies: many(policies),
   enrollmentTokens: many(enrollmentTokens),
+  subnetRoutes: many(subnetRoutes),
+  hostnameRoutes: many(hostnameRoutes),
+  exitNodeConfigs: many(exitNodeConfig),
+  deviceProfiles: many(deviceProfiles),
+  nodeGroups: many(nodeGroups),
 }));
 
 export const devicesRelations = relations(devices, ({ one, many }) => ({
@@ -311,7 +528,93 @@ export const devicesRelations = relations(devices, ({ one, many }) => ({
   memberships: many(networkMemberships),
   tags: many(deviceTags),
   presenceEvents: many(devicePresenceEvents),
+  subnetRoutes: many(subnetRoutes),
+  hostnameRoutes: many(hostnameRoutes),
+  exitNodeConfig: one(exitNodeConfig, {
+    fields: [devices.endpointId],
+    references: [exitNodeConfig.endpointId],
+  }),
+  deviceProfile: one(deviceProfiles, {
+    fields: [devices.endpointId],
+    references: [deviceProfiles.endpointId],
+  }),
 }));
+
+export const subnetRoutesRelations = relations(subnetRoutes, ({ one }) => ({
+  device: one(devices, {
+    fields: [subnetRoutes.endpointId],
+    references: [devices.endpointId],
+  }),
+  network: one(networks, {
+    fields: [subnetRoutes.networkId],
+    references: [networks.id],
+  }),
+}));
+
+export const hostnameRoutesRelations = relations(hostnameRoutes, ({ one }) => ({
+  device: one(devices, {
+    fields: [hostnameRoutes.endpointId],
+    references: [devices.endpointId],
+  }),
+  network: one(networks, {
+    fields: [hostnameRoutes.networkId],
+    references: [networks.id],
+  }),
+}));
+
+export const exitNodeConfigRelations = relations(exitNodeConfig, ({ one }) => ({
+  device: one(devices, {
+    fields: [exitNodeConfig.endpointId],
+    references: [devices.endpointId],
+  }),
+  network: one(networks, {
+    fields: [exitNodeConfig.networkId],
+    references: [networks.id],
+  }),
+}));
+
+export const deviceProfilesRelations = relations(deviceProfiles, ({ one }) => ({
+  device: one(devices, {
+    fields: [deviceProfiles.endpointId],
+    references: [devices.endpointId],
+    relationName: "profile_owner",
+  }),
+  network: one(networks, {
+    fields: [deviceProfiles.networkId],
+    references: [networks.id],
+  }),
+  exitNode: one(devices, {
+    fields: [deviceProfiles.exitNodeEndpointId],
+    references: [devices.endpointId],
+    relationName: "profile_exit_node",
+  }),
+}));
+
+export const nodeGroupsRelations = relations(nodeGroups, ({ one, many }) => ({
+  network: one(networks, {
+    fields: [nodeGroups.networkId],
+    references: [networks.id],
+  }),
+  activeDevice: one(devices, {
+    fields: [nodeGroups.activeEndpointId],
+    references: [devices.endpointId],
+  }),
+  members: many(nodeGroupMembers),
+}));
+
+export const nodeGroupMembersRelations = relations(
+  nodeGroupMembers,
+  ({ one }) => ({
+    group: one(nodeGroups, {
+      fields: [nodeGroupMembers.groupId],
+      references: [nodeGroups.id],
+    }),
+    device: one(devices, {
+      fields: [nodeGroupMembers.endpointId],
+      references: [devices.endpointId],
+    }),
+  }),
+);
 
 export const networkMembershipsRelations = relations(
   networkMemberships,

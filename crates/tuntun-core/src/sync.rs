@@ -29,8 +29,19 @@ pub fn apply_membership(
     acl: &AclEngine,
     version: &Arc<ArcSwap<u64>>,
     org_version: u64,
+    self_endpoint_id: &str,
 ) {
-    routes.replace(&membership.ipv4_peers, membership.version);
+    routes.replace(
+        &membership.ipv4_peers,
+        &membership.subnet_routes,
+        &membership.hostname_routes,
+        &membership.exit_nodes,
+        &membership.device_profile,
+        &membership.dns,
+        &membership.network_name,
+        self_endpoint_id,
+        membership.version,
+    );
     acl.replace_bundle(membership.policy.clone());
     version.store(Arc::new(org_version));
 }
@@ -46,6 +57,7 @@ pub fn spawn_ws_processor(
     version: Arc<ArcSwap<u64>>,
     paths: StatePaths,
     network_id: Uuid,
+    self_endpoint_id: String,
     agent_version: &'static str,
 ) {
     tokio::spawn(async move {
@@ -65,10 +77,22 @@ pub fn spawn_ws_processor(
                     match msg {
                         ServerMsg::Snapshot(snap) => {
                             if let Ok(m) = membership_for_network(&snap, network_id) {
-                                apply_membership(m, &routes, &acl, &version, snap.version);
+                                apply_membership(
+                                    m,
+                                    &routes,
+                                    &acl,
+                                    &version,
+                                    snap.version,
+                                    &self_endpoint_id,
+                                );
                                 save_snapshot_cache(&paths, &snap).ok();
-                                tracing::info!(v = m.version, peers = m.ipv4_peers.len(),
-                                    "snapshot from ws");
+                                tracing::info!(
+                                    v = m.version,
+                                    peers = m.ipv4_peers.len(),
+                                    subnet_routes = m.subnet_routes.len(),
+                                    hostname_routes = m.hostname_routes.len(),
+                                    "snapshot from ws"
+                                );
                             }
                         }
                         ServerMsg::Delta(delta) => {
@@ -103,6 +127,7 @@ pub fn spawn_poll_fallback(
     routes: RoutingTable,
     acl: AclEngine,
     network_id: Uuid,
+    self_endpoint_id: String,
 ) {
     tokio::spawn(async move {
         let mut ticker = tokio::time::interval(Duration::from_secs(poll_secs));
@@ -113,10 +138,19 @@ pub fn spawn_poll_fallback(
                 Ok(snap) => {
                     if snap.version != **version.load() {
                         if let Ok(m) = membership_for_network(&snap, network_id) {
-                            apply_membership(m, &routes, &acl, &version, snap.version);
+                            apply_membership(
+                                m,
+                                &routes,
+                                &acl,
+                                &version,
+                                snap.version,
+                                &self_endpoint_id,
+                            );
                             tracing::info!(
                                 v = m.version,
                                 peers = m.ipv4_peers.len(),
+                                subnet_routes = m.subnet_routes.len(),
+                                hostname_routes = m.hostname_routes.len(),
                                 "snapshot via poll"
                             );
                         }

@@ -117,6 +117,10 @@ fn run_outbound_thread(
             metrics.dropped.with_label_values(&["non_ipv4"]).inc();
             continue;
         };
+        if routes.is_advertised_destination(&parsed.dst) {
+            metrics.dropped.with_label_values(&["local_subnet"]).inc();
+            continue;
+        }
         let Some(peer) = routes.lookup_ip(&parsed.dst) else {
             metrics.dropped.with_label_values(&["no_route"]).inc();
             continue;

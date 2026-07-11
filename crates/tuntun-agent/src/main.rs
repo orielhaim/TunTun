@@ -1,11 +1,15 @@
 mod cli;
+mod forward;
 mod gossip_presence;
 mod ip;
 mod metrics;
 #[cfg(target_os = "linux")]
 mod offload;
 mod runtime;
+mod stream_proxy;
+mod system_dns;
 mod system_info;
+mod system_routes;
 mod tun_io;
 #[cfg(windows)]
 mod wintun_path;

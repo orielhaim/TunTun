@@ -27,6 +27,8 @@ import { Route as AppSettingsAccountRouteImport } from './routes/app/settings/ac
 import { Route as AppMachinesEndpointIdRouteImport } from './routes/app/machines/$endpointId'
 import { Route as AppNetworksNetworkIdRouteRouteImport } from './routes/app/networks/$networkId/route'
 import { Route as AppNetworksNetworkIdIndexRouteImport } from './routes/app/networks/$networkId/index'
+import { Route as AppNetworksNetworkIdRoutesRouteImport } from './routes/app/networks/$networkId/routes'
+import { Route as AppNetworksNetworkIdMapRouteImport } from './routes/app/networks/$networkId/map'
 import { Route as AppNetworksNetworkIdMachinesRouteImport } from './routes/app/networks/$networkId/machines'
 import { Route as AppNetworksNetworkIdEnrollmentRouteImport } from './routes/app/networks/$networkId/enrollment'
 import { Route as AppNetworksNetworkIdAccessRouteImport } from './routes/app/networks/$networkId/access'
@@ -124,6 +126,17 @@ const AppNetworksNetworkIdIndexRoute =
     path: '/',
     getParentRoute: () => AppNetworksNetworkIdRouteRoute,
   } as any)
+const AppNetworksNetworkIdRoutesRoute =
+  AppNetworksNetworkIdRoutesRouteImport.update({
+    id: '/routes',
+    path: '/routes',
+    getParentRoute: () => AppNetworksNetworkIdRouteRoute,
+  } as any)
+const AppNetworksNetworkIdMapRoute = AppNetworksNetworkIdMapRouteImport.update({
+  id: '/map',
+  path: '/map',
+  getParentRoute: () => AppNetworksNetworkIdRouteRoute,
+} as any)
 const AppNetworksNetworkIdMachinesRoute =
   AppNetworksNetworkIdMachinesRouteImport.update({
     id: '/machines',
@@ -164,6 +177,8 @@ export interface FileRoutesByFullPath {
   '/app/networks/$networkId/access': typeof AppNetworksNetworkIdAccessRoute
   '/app/networks/$networkId/enrollment': typeof AppNetworksNetworkIdEnrollmentRoute
   '/app/networks/$networkId/machines': typeof AppNetworksNetworkIdMachinesRoute
+  '/app/networks/$networkId/map': typeof AppNetworksNetworkIdMapRoute
+  '/app/networks/$networkId/routes': typeof AppNetworksNetworkIdRoutesRoute
   '/app/networks/$networkId/': typeof AppNetworksNetworkIdIndexRoute
 }
 export interface FileRoutesByTo {
@@ -184,6 +199,8 @@ export interface FileRoutesByTo {
   '/app/networks/$networkId/access': typeof AppNetworksNetworkIdAccessRoute
   '/app/networks/$networkId/enrollment': typeof AppNetworksNetworkIdEnrollmentRoute
   '/app/networks/$networkId/machines': typeof AppNetworksNetworkIdMachinesRoute
+  '/app/networks/$networkId/map': typeof AppNetworksNetworkIdMapRoute
+  '/app/networks/$networkId/routes': typeof AppNetworksNetworkIdRoutesRoute
   '/app/networks/$networkId': typeof AppNetworksNetworkIdIndexRoute
 }
 export interface FileRoutesById {
@@ -208,6 +225,8 @@ export interface FileRoutesById {
   '/app/networks/$networkId/access': typeof AppNetworksNetworkIdAccessRoute
   '/app/networks/$networkId/enrollment': typeof AppNetworksNetworkIdEnrollmentRoute
   '/app/networks/$networkId/machines': typeof AppNetworksNetworkIdMachinesRoute
+  '/app/networks/$networkId/map': typeof AppNetworksNetworkIdMapRoute
+  '/app/networks/$networkId/routes': typeof AppNetworksNetworkIdRoutesRoute
   '/app/networks/$networkId/': typeof AppNetworksNetworkIdIndexRoute
 }
 export interface FileRouteTypes {
@@ -233,6 +252,8 @@ export interface FileRouteTypes {
     | '/app/networks/$networkId/access'
     | '/app/networks/$networkId/enrollment'
     | '/app/networks/$networkId/machines'
+    | '/app/networks/$networkId/map'
+    | '/app/networks/$networkId/routes'
     | '/app/networks/$networkId/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -253,6 +274,8 @@ export interface FileRouteTypes {
     | '/app/networks/$networkId/access'
     | '/app/networks/$networkId/enrollment'
     | '/app/networks/$networkId/machines'
+    | '/app/networks/$networkId/map'
+    | '/app/networks/$networkId/routes'
     | '/app/networks/$networkId'
   id:
     | '__root__'
@@ -276,6 +299,8 @@ export interface FileRouteTypes {
     | '/app/networks/$networkId/access'
     | '/app/networks/$networkId/enrollment'
     | '/app/networks/$networkId/machines'
+    | '/app/networks/$networkId/map'
+    | '/app/networks/$networkId/routes'
     | '/app/networks/$networkId/'
   fileRoutesById: FileRoutesById
 }
@@ -414,6 +439,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppNetworksNetworkIdIndexRouteImport
       parentRoute: typeof AppNetworksNetworkIdRouteRoute
     }
+    '/app/networks/$networkId/routes': {
+      id: '/app/networks/$networkId/routes'
+      path: '/routes'
+      fullPath: '/app/networks/$networkId/routes'
+      preLoaderRoute: typeof AppNetworksNetworkIdRoutesRouteImport
+      parentRoute: typeof AppNetworksNetworkIdRouteRoute
+    }
+    '/app/networks/$networkId/map': {
+      id: '/app/networks/$networkId/map'
+      path: '/map'
+      fullPath: '/app/networks/$networkId/map'
+      preLoaderRoute: typeof AppNetworksNetworkIdMapRouteImport
+      parentRoute: typeof AppNetworksNetworkIdRouteRoute
+    }
     '/app/networks/$networkId/machines': {
       id: '/app/networks/$networkId/machines'
       path: '/machines'
@@ -457,6 +496,8 @@ interface AppNetworksNetworkIdRouteRouteChildren {
   AppNetworksNetworkIdAccessRoute: typeof AppNetworksNetworkIdAccessRoute
   AppNetworksNetworkIdEnrollmentRoute: typeof AppNetworksNetworkIdEnrollmentRoute
   AppNetworksNetworkIdMachinesRoute: typeof AppNetworksNetworkIdMachinesRoute
+  AppNetworksNetworkIdMapRoute: typeof AppNetworksNetworkIdMapRoute
+  AppNetworksNetworkIdRoutesRoute: typeof AppNetworksNetworkIdRoutesRoute
   AppNetworksNetworkIdIndexRoute: typeof AppNetworksNetworkIdIndexRoute
 }
 
@@ -465,6 +506,8 @@ const AppNetworksNetworkIdRouteRouteChildren: AppNetworksNetworkIdRouteRouteChil
     AppNetworksNetworkIdAccessRoute: AppNetworksNetworkIdAccessRoute,
     AppNetworksNetworkIdEnrollmentRoute: AppNetworksNetworkIdEnrollmentRoute,
     AppNetworksNetworkIdMachinesRoute: AppNetworksNetworkIdMachinesRoute,
+    AppNetworksNetworkIdMapRoute: AppNetworksNetworkIdMapRoute,
+    AppNetworksNetworkIdRoutesRoute: AppNetworksNetworkIdRoutesRoute,
     AppNetworksNetworkIdIndexRoute: AppNetworksNetworkIdIndexRoute,
   }
 

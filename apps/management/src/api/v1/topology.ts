@@ -1,0 +1,277 @@
+import { schema } from "@tuntun/db";
+import { and, eq } from "drizzle-orm";
+import { Elysia } from "elysia";
+
+import { getAuth } from "./middleware/authz";
+import { requireAuth } from "./middleware/authz";
+import { notFound, sessionPlugin } from "./middleware/session";
+import { db } from "../../lib/db";
+import { deviceHostname } from "../../lib/device-metadata";
+import { toIso } from "../../lib/serialize";
+
+async function getNetworkInOrg(networkId: string, organizationId: string) {
+  return db.query.networks.findFirst({
+    where: and(
+      eq(schema.networks.id, networkId),
+      eq(schema.networks.organizationId, organizationId),
+    ),
+  });
+}
+
+function isOnline(
+  agentConnected: boolean,
+  lastHeartbeatAt: Date | null,
+): boolean {
+  if (!agentConnected || !lastHeartbeatAt) return false;
+  return Date.now() - lastHeartbeatAt.getTime() < 45_000;
+}
+
+export const topologyRoutes = new Elysia()
+  .use(sessionPlugin)
+  .use(requireAuth)
+  .get(
+    "/organizations/:orgId/networks/:networkId/topology",
+    async ({ authContext, params }) => {
+      const auth = getAuth({ authContext });
+      const network = await getNetworkInOrg(
+        params.networkId,
+        auth.organizationId,
+      );
+      if (!network) return notFound("Network not found");
+
+      const memberships = await db
+        .select({
+          endpointId: schema.devices.endpointId,
+          type: schema.devices.type,
+          metadata: schema.devices.metadata,
+          assignedIp: schema.networkMemberships.assignedIp,
+          agentConnected: schema.devices.agentConnected,
+          lastHeartbeatAt: schema.devices.lastHeartbeatAt,
+          status: schema.networkMemberships.status,
+        })
+        .from(schema.networkMemberships)
+        .innerJoin(
+          schema.devices,
+          eq(schema.networkMemberships.endpointId, schema.devices.endpointId),
+        )
+        .where(eq(schema.networkMemberships.networkId, params.networkId));
+
+      const subnetRoutes = await db.query.subnetRoutes.findMany({
+        where: and(
+          eq(schema.subnetRoutes.networkId, params.networkId),
+          eq(schema.subnetRoutes.enabled, true),
+        ),
+      });
+
+      const hostnameRoutes = await db.query.hostnameRoutes.findMany({
+        where: and(
+          eq(schema.hostnameRoutes.networkId, params.networkId),
+          eq(schema.hostnameRoutes.enabled, true),
+        ),
+      });
+
+      const exitNodes = await db.query.exitNodeConfig.findMany({
+        where: and(
+          eq(schema.exitNodeConfig.networkId, params.networkId),
+          eq(schema.exitNodeConfig.enabled, true),
+        ),
+      });
+
+      const metrics = await db.query.peerMetrics.findMany({
+        where: eq(schema.peerMetrics.networkId, params.networkId),
+      });
+
+      const metricMap = new Map<
+        string,
+        {
+          latencyMs: number | null;
+          bytesTx: number;
+          bytesRx: number;
+          direct: boolean | null;
+        }
+      >();
+      for (const m of metrics) {
+        metricMap.set(`${m.fromEndpointId}:${m.toEndpointId}`, {
+          latencyMs: m.latencyMs,
+          bytesTx: m.bytesTx,
+          bytesRx: m.bytesRx,
+          direct: m.direct,
+        });
+      }
+
+      const nodes: Array<{
+        id: string;
+        kind: "machine" | "subnet" | "hostname" | "exit";
+        label: string;
+        secondary?: string | null;
+        endpointId?: string | null;
+        online?: boolean;
+        agentConnected?: boolean;
+        lastHeartbeatAt?: string | null;
+        assignedIp?: string | null;
+        cidr?: string | null;
+        viaEndpointId?: string | null;
+      }> = [];
+
+      const edges: Array<{
+        id: string;
+        source: string;
+        target: string;
+        kind: "peer" | "subnet" | "hostname" | "exit";
+        intensity: number;
+        latencyMs?: number | null;
+        direct?: boolean;
+      }> = [];
+
+      const activeMachines = memberships.filter((m) => m.status === "active");
+
+      for (const m of activeMachines) {
+        const hostname = deviceHostname(m.metadata, m.endpointId);
+        nodes.push({
+          id: `machine:${m.endpointId}`,
+          kind: "machine",
+          label: hostname,
+          secondary: m.assignedIp,
+          endpointId: m.endpointId,
+          online: isOnline(m.agentConnected, m.lastHeartbeatAt),
+          agentConnected: m.agentConnected,
+          lastHeartbeatAt: toIso(m.lastHeartbeatAt),
+          assignedIp: m.assignedIp,
+        });
+      }
+
+      // Mesh edges among online agents (P2P topology).
+      const onlineAgents = activeMachines.filter(
+        (m) =>
+          m.type === "agent" && isOnline(m.agentConnected, m.lastHeartbeatAt),
+      );
+      for (let i = 0; i < onlineAgents.length; i++) {
+        for (let j = i + 1; j < onlineAgents.length; j++) {
+          const a = onlineAgents[i]!;
+          const b = onlineAgents[j]!;
+          const ab = metricMap.get(`${a.endpointId}:${b.endpointId}`);
+          const ba = metricMap.get(`${b.endpointId}:${a.endpointId}`);
+          const bytes =
+            (ab?.bytesTx ?? 0) +
+            (ab?.bytesRx ?? 0) +
+            (ba?.bytesTx ?? 0) +
+            (ba?.bytesRx ?? 0);
+          const intensity = Math.min(1, 0.25 + Math.log10(bytes + 10) / 8);
+          edges.push({
+            id: `peer:${a.endpointId}:${b.endpointId}`,
+            source: `machine:${a.endpointId}`,
+            target: `machine:${b.endpointId}`,
+            kind: "peer",
+            intensity,
+            latencyMs: ab?.latencyMs ?? ba?.latencyMs ?? null,
+            direct: ab?.direct ?? ba?.direct ?? true,
+          });
+        }
+      }
+
+      const machineIds = new Set(
+        activeMachines.map((m) => `machine:${m.endpointId}`),
+      );
+
+      for (const route of subnetRoutes) {
+        const via = `machine:${route.endpointId}`;
+        if (!machineIds.has(via)) continue;
+        const id = `subnet:${route.id}`;
+        nodes.push({
+          id,
+          kind: "subnet",
+          label: route.cidr,
+          secondary: route.description,
+          cidr: route.cidr,
+          viaEndpointId: route.endpointId,
+        });
+        edges.push({
+          id: `edge-subnet:${route.id}`,
+          source: via,
+          target: id,
+          kind: "subnet",
+          intensity: 0.45,
+        });
+      }
+
+      for (const route of hostnameRoutes) {
+        const via = `machine:${route.endpointId}`;
+        if (!machineIds.has(via)) continue;
+        const label = route.isWildcard ? `*.${route.hostname}` : route.hostname;
+        const id = `hostname:${route.id}`;
+        nodes.push({
+          id,
+          kind: "hostname",
+          label,
+          secondary: route.targetIp ?? "resolve locally",
+          viaEndpointId: route.endpointId,
+        });
+        edges.push({
+          id: `edge-hostname:${route.id}`,
+          source: via,
+          target: id,
+          kind: "hostname",
+          intensity: 0.4,
+        });
+      }
+
+      for (const exit of exitNodes) {
+        const via = `machine:${exit.endpointId}`;
+        if (!machineIds.has(via)) continue;
+        const id = `exit:${exit.endpointId}`;
+        nodes.push({
+          id,
+          kind: "exit",
+          label: "Internet",
+          secondary: exit.allowedCidrs.join(", "),
+          endpointId: exit.endpointId,
+          viaEndpointId: exit.endpointId,
+        });
+        edges.push({
+          id: `edge-exit:${exit.endpointId}`,
+          source: via,
+          target: id,
+          kind: "exit",
+          intensity: 0.55,
+        });
+      }
+
+      return {
+        networkId: params.networkId,
+        nodes,
+        edges,
+      };
+    },
+  )
+  .get(
+    "/organizations/:orgId/networks/:networkId/metrics",
+    async ({ authContext, params }) => {
+      const auth = getAuth({ authContext });
+      const network = await getNetworkInOrg(
+        params.networkId,
+        auth.organizationId,
+      );
+      if (!network) return notFound("Network not found");
+
+      const rows = await db.query.peerMetrics.findMany({
+        where: eq(schema.peerMetrics.networkId, params.networkId),
+      });
+
+      return {
+        networkId: params.networkId,
+        peers: rows.map((r) => ({
+          fromEndpointId: r.fromEndpointId,
+          toEndpointId: r.toEndpointId,
+          latencyMs: r.latencyMs,
+          bytesTx: r.bytesTx,
+          bytesRx: r.bytesRx,
+          packetLoss:
+            r.packetLoss === null || r.packetLoss === undefined
+              ? null
+              : r.packetLoss / 10_000,
+          direct: r.direct,
+          updatedAt: toIso(r.updatedAt)!,
+        })),
+      };
+    },
+  );

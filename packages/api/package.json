@@ -10,7 +10,7 @@
     "./agent": "./src/agent/index.ts"
   },
   "dependencies": {
-    "ip-address": "^10.2.0",
+    "@tuntun/ip": "workspace:*",
     "zod": "^4.4.3"
   }
 }

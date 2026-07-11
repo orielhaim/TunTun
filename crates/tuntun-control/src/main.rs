@@ -5,6 +5,7 @@ mod config;
 mod db;
 mod device_metadata;
 mod enrollment;
+mod ha;
 mod http;
 mod ip_alloc;
 mod metrics;

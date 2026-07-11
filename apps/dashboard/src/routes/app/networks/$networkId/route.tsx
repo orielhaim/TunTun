@@ -1,7 +1,6 @@
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { ChevronRightIcon } from "lucide-react";
 
-import { PageHeader } from "@/components/app/page-header";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -26,13 +25,12 @@ function NetworkLayout() {
   const { data: activeOrg } = useActiveOrganization();
   const { data: network, isPending } = useNetwork(activeOrg?.id, networkId);
 
-  const base = `/app/networks/${networkId}`;
   const tab = pathname.endsWith("/access")
     ? "access"
     : pathname.endsWith("/enrollment")
       ? "enrollment"
-      : pathname.endsWith("/machines")
-        ? "machines"
+      : pathname.endsWith("/routes")
+        ? "routes"
         : "overview";
 
   if (isPending) {
@@ -44,7 +42,7 @@ function NetworkLayout() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <Breadcrumb>
         <BreadcrumbList>
           <BreadcrumbItem>
@@ -61,28 +59,53 @@ function NetworkLayout() {
         </BreadcrumbList>
       </Breadcrumb>
 
-      <PageHeader
-        title={network.name}
-        description={`${network.cidr} · MTU ${network.mtu}`}
-      />
-
       <Tabs value={tab}>
-        <TabsList>
-          <TabsTrigger value="overview" render={<Link to={base} />}>
-            Overview
+        <TabsList
+          variant="line"
+          className="w-full justify-start gap-0 border-b border-border/50 pb-0"
+        >
+          <TabsTrigger
+            value="overview"
+            className="px-3"
+            render={
+              <Link to="/app/networks/$networkId" params={{ networkId }} />
+            }
+          >
+            Mesh
           </TabsTrigger>
           <TabsTrigger
-            value="machines"
-            render={<Link to={`${base}/machines`} />}
+            value="access"
+            className="px-3"
+            render={
+              <Link
+                to="/app/networks/$networkId/access"
+                params={{ networkId }}
+              />
+            }
           >
-            Machines
-          </TabsTrigger>
-          <TabsTrigger value="access" render={<Link to={`${base}/access`} />}>
             Access
           </TabsTrigger>
           <TabsTrigger
+            value="routes"
+            className="px-3"
+            render={
+              <Link
+                to="/app/networks/$networkId/routes"
+                params={{ networkId }}
+              />
+            }
+          >
+            Routes
+          </TabsTrigger>
+          <TabsTrigger
             value="enrollment"
-            render={<Link to={`${base}/enrollment`} />}
+            className="px-3"
+            render={
+              <Link
+                to="/app/networks/$networkId/enrollment"
+                params={{ networkId }}
+              />
+            }
           >
             Enrollment
           </TabsTrigger>

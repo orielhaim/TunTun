@@ -7,6 +7,7 @@ type PageHeaderProps = {
   description?: string;
   actions?: ReactNode;
   className?: string;
+  dense?: boolean;
 };
 
 export function PageHeader({
@@ -14,18 +15,33 @@ export function PageHeader({
   description,
   actions,
   className,
+  dense,
 }: PageHeaderProps) {
   return (
     <div
       className={cn(
-        "flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between",
+        "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between",
         className,
       )}
     >
-      <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+      <div className={cn("min-w-0", dense ? "space-y-1" : "space-y-1.5")}>
+        <h1
+          className={cn(
+            "font-semibold tracking-tight text-balance",
+            dense ? "text-xl" : "text-2xl",
+          )}
+        >
+          {title}
+        </h1>
         {description ? (
-          <p className="text-muted-foreground text-sm">{description}</p>
+          <p
+            className={cn(
+              "text-muted-foreground max-w-2xl text-pretty",
+              dense ? "text-[13px] leading-relaxed" : "text-sm",
+            )}
+          >
+            {description}
+          </p>
         ) : null}
       </div>
       {actions ? (

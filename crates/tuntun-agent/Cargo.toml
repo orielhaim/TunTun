@@ -30,6 +30,7 @@ crossbeam-channel.workspace = true
 rand.workspace = true
 ed25519-dalek.workspace = true
 prometheus.workspace = true
+ipnet.workspace = true
 
 iroh.workspace = true
 iroh-gossip.workspace = true

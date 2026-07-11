@@ -47,7 +47,7 @@ impl AgentMetrics {
 }
 
 pub fn metrics_port(bind: &str) -> &str {
-    bind.rsplit(':').next().unwrap_or("9091")
+    bind.rsplit(':').next().unwrap_or("9100")
 }
 
 /// Listen on localhost and the assigned overlay IP so peers can scrape via VPN.

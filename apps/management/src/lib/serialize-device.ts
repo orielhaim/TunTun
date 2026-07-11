@@ -1,11 +1,11 @@
-import { formatIp } from "@tuntun/db";
+import { formatIp } from "@tuntun/ip";
+
 import {
   deviceAgentVersion,
   deviceHostname,
   deviceKind,
   deviceOs,
-} from "@tuntun/db";
-
+} from "./device-metadata";
 import { toIso } from "./serialize";
 
 function formatNullableIp(value: string | null): string | null {

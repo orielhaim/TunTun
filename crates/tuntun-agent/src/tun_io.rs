@@ -53,6 +53,12 @@ pub async fn run_outbound(
             metrics.dropped.with_label_values(&["non_ipv4"]).inc();
             continue;
         };
+
+        if routes.is_advertised_destination(&parsed.dst) {
+            metrics.dropped.with_label_values(&["local_subnet"]).inc();
+            continue;
+        }
+
         let Some(peer) = routes.lookup_ip(&parsed.dst) else {
             metrics.dropped.with_label_values(&["no_route"]).inc();
             continue;
@@ -96,12 +102,14 @@ pub async fn run_outbound(
 pub async fn run_inbound(
     endpoint: iroh::Endpoint,
     tun: Arc<AsyncDevice>,
+    routes: RoutingTable,
     acl: AclEngine,
     metrics: AgentMetrics,
 ) -> anyhow::Result<()> {
     tracing::info!("inbound iroh→TUN accept loop started");
     while let Some(incoming) = endpoint.accept().await {
         let tun = tun.clone();
+        let routes = routes.clone();
         let acl = acl.clone();
         let metrics = metrics.clone();
         tokio::spawn(async move {
@@ -128,9 +136,14 @@ pub async fn run_inbound(
                 match conn.read_datagram().await {
                     Ok(dg) => {
                         if let Some(parsed) = ip::parse_ipv4(&dg) {
+                            let dst_for_acl = if routes.is_advertised_destination(&parsed.dst) {
+                                Some(parsed.dst)
+                            } else {
+                                Some(parsed.src)
+                            };
                             if !acl.allow_packet(
                                 &remote_hex,
-                                Some(parsed.src),
+                                dst_for_acl,
                                 parsed.dst_port,
                                 parsed.protocol,
                                 Direction::Inbound,

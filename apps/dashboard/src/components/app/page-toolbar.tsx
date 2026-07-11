@@ -27,10 +27,15 @@ export function PageToolbar({
   className,
 }: PageToolbarProps) {
   return (
-    <div className={cn("space-y-3", className)}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+    <div
+      className={cn(
+        "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between",
+        className,
+      )}
+    >
+      <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center">
         {onSearchChange !== undefined ? (
-          <div className="relative max-w-md flex-1">
+          <div className="relative w-full max-w-md">
             <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
             <Input
               className="pl-9"
@@ -40,16 +45,16 @@ export function PageToolbar({
             />
           </div>
         ) : null}
-        <div className="flex flex-1 items-center justify-end gap-2">
-          {filters}
-          {actions}
-        </div>
+        {count !== undefined ? (
+          <Badge variant="secondary" className="w-fit shrink-0 font-normal">
+            {count} {countLabel}
+          </Badge>
+        ) : null}
       </div>
-      {count !== undefined ? (
-        <Badge variant="secondary" className="font-normal">
-          {count} {countLabel}
-        </Badge>
-      ) : null}
+      <div className="flex shrink-0 items-center gap-2">
+        {filters}
+        {actions}
+      </div>
     </div>
   );
 }
