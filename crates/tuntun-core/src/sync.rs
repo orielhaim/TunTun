@@ -59,6 +59,8 @@ pub fn spawn_ws_processor(
     network_id: Uuid,
     self_endpoint_id: String,
     agent_version: &'static str,
+    serves: Option<crate::serve::ServeManager>,
+    tunnels: Option<crate::tunnel::TunnelManager>,
 ) {
     tokio::spawn(async move {
         let _ = ws
@@ -107,6 +109,112 @@ pub fn spawn_ws_processor(
                         }
                         ServerMsg::Ping { nonce } => {
                             let _ = ws.tx.send(ClientMsg::Pong { nonce }).await;
+                        }
+                        ServerMsg::StartServe {
+                            serve_id,
+                            port,
+                            protocol,
+                            internal_hostname,
+                            certificate_pem,
+                            private_key_pem,
+                            access_mode,
+                            allowed_tags,
+                            allowed_endpoint_ids,
+                        } => {
+                            let result = if let Some(mgr) = &serves {
+                                mgr.start(
+                                    serve_id.clone(),
+                                    port,
+                                    &protocol,
+                                    &internal_hostname,
+                                    certificate_pem.as_deref(),
+                                    private_key_pem.as_deref(),
+                                    crate::serve::ServeAcl {
+                                        access_mode,
+                                        allowed_tags,
+                                        allowed_endpoint_ids,
+                                    },
+                                )
+                                .await
+                            } else {
+                                Err(anyhow::anyhow!("serve manager not available"))
+                            };
+                            match result {
+                                Ok(_) => {
+                                    let _ = ws.tx.send(ClientMsg::ServeReady { serve_id }).await;
+                                }
+                                Err(e) => {
+                                    tracing::warn!(?e, %serve_id, "StartServe failed");
+                                    let _ = ws
+                                        .tx
+                                        .send(ClientMsg::ServeFailed {
+                                            serve_id,
+                                            error: e.to_string(),
+                                        })
+                                        .await;
+                                }
+                            }
+                        }
+                        ServerMsg::StopServe { serve_id } => {
+                            if let Some(mgr) = &serves {
+                                let port = mgr
+                                    .list()
+                                    .into_iter()
+                                    .find(|s| s.id == serve_id)
+                                    .map(|s| s.port);
+                                if let Some(port) = port {
+                                    let _ = mgr.stop(port);
+                                }
+                            }
+                            let _ = ws.tx.send(ClientMsg::ServeStopped { serve_id }).await;
+                        }
+                        ServerMsg::OpenTunnel {
+                            tunnel_id,
+                            relay_addr,
+                            subdomain,
+                            public_hostname,
+                            local_port,
+                            protocol,
+                            auth_token,
+                            redirect_rules,
+                        } => {
+                            let result = if let Some(mgr) = &tunnels {
+                                mgr.start(
+                                    tunnel_id.clone(),
+                                    &relay_addr,
+                                    &subdomain,
+                                    &public_hostname,
+                                    local_port,
+                                    &protocol,
+                                    &auth_token,
+                                    redirect_rules,
+                                )
+                                .await
+                            } else {
+                                Err(anyhow::anyhow!("tunnel manager not available"))
+                            };
+                            match result {
+                                Ok(info) => {
+                                    tracing::info!(url = %info.public_url, "OpenTunnel active");
+                                    let _ = ws.tx.send(ClientMsg::TunnelReady { tunnel_id }).await;
+                                }
+                                Err(e) => {
+                                    tracing::warn!(?e, %tunnel_id, "OpenTunnel failed");
+                                    let _ = ws
+                                        .tx
+                                        .send(ClientMsg::TunnelFailed {
+                                            tunnel_id,
+                                            error: e.to_string(),
+                                        })
+                                        .await;
+                                }
+                            }
+                        }
+                        ServerMsg::StopTunnel { tunnel_id } => {
+                            if let Some(mgr) = &tunnels {
+                                let _ = mgr.stop(&tunnel_id);
+                            }
+                            let _ = ws.tx.send(ClientMsg::TunnelStopped { tunnel_id }).await;
                         }
                     }
                 }

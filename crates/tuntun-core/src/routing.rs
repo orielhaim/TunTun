@@ -191,6 +191,16 @@ impl RoutingTable {
         self.inner.load().network_name.clone()
     }
 
+    /// Approximate PeerDNS / route cache size for `tuntun dns status`.
+    pub fn cached_entry_count(&self) -> usize {
+        let tables = self.inner.load();
+        tables.by_hostname.len()
+            + tables.hostname_exact.len()
+            + tables.hostname_wildcards.len()
+            + tables.synthetic_hosts.len()
+            + self.dynamic_synth.len()
+    }
+
     /// Resolve a PeerDNS name to an IPv4 address (peer mesh IP or synthetic).
     pub fn resolve_dns_a(&self, name: &str) -> Option<Ipv4Addr> {
         let tables = self.inner.load();

@@ -3,11 +3,11 @@ use clap::{Args, Parser, Subcommand};
 use tuntun_core::{AgentIdentity, PersistedState, StatePaths};
 
 #[derive(Parser, Debug)]
-#[command(name = "tuntun-agent", about = "TunTun agent")]
+#[command(name = "tuntun", about = "TunTun — mesh networking, serve, and tunnel")]
 pub struct Cli {
-    #[arg(long, env = "TUNTUN_STATE_DIR")]
+    #[arg(long, env = "TUNTUN_STATE_DIR", global = true)]
     pub state_dir: Option<String>,
-    #[arg(long, env = "TUNTUN_JSON_LOGS")]
+    #[arg(long, env = "TUNTUN_JSON_LOGS", global = true)]
     pub json_logs: bool,
     #[command(subcommand)]
     pub command: Command,
@@ -15,9 +15,49 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
+    /// Enroll this machine into a TunTun network
     Enroll(EnrollArgs),
+    /// Run the TunTun agent (requires root / admin for TUN)
     Run(RunArgs),
+    /// Wipe local agent state
     Reset(ResetArgs),
+
+    /// Show agent / network status
+    Status(crate::cmds::StatusArgs),
+    /// Measure mesh RTT to a peer (QUIC, not ICMP)
+    Ping(crate::cmds::PingArgs),
+    /// PeerDNS status
+    #[command(subcommand)]
+    Dns(DnsCommand),
+    /// Subnet / hostname / exit routes
+    #[command(subcommand)]
+    Route(RouteCommand),
+    /// Full connectivity diagnostics
+    Diag(crate::cmds::DiagArgs),
+    /// Quick pass/fail connectivity check
+    Netcheck(crate::cmds::NetcheckArgs),
+    /// Expose a local port to the mesh (HTTPS/TCP)
+    ///
+    /// Examples: `tuntun serve 3000`, `tuntun serve status`, `tuntun serve off 3000`
+    Serve(crate::cmds::ServeArgs),
+    /// Expose a local port to the public internet via a relay
+    ///
+    /// Examples: `tuntun tunnel 3000`, `tuntun tunnel status`, `tuntun tunnel off 3000`
+    Tunnel(crate::cmds::TunnelArgs),
+}
+
+#[derive(Subcommand, Debug)]
+pub enum DnsCommand {
+    /// Show PeerDNS configuration and cache
+    Status(crate::cmds::DnsStatusArgs),
+}
+
+#[derive(Subcommand, Debug)]
+pub enum RouteCommand {
+    /// List active routes
+    List(crate::cmds::RouteListArgs),
+    /// Advertise a subnet route from this machine
+    Add(crate::cmds::RouteAddArgs),
 }
 
 #[derive(Args, Debug)]
@@ -67,14 +107,14 @@ fn paths(cli_state_dir: Option<&str>) -> StatePaths {
     StatePaths::resolve(cli_state_dir)
 }
 
-pub async fn run_enroll(args: EnrollArgs) -> anyhow::Result<()> {
-    let cli = Cli::parse();
-    let paths = paths(cli.state_dir.as_deref());
+pub async fn run_enroll(args: EnrollArgs, state_dir: Option<&str>) -> anyhow::Result<()> {
+    let paths = paths(state_dir);
     paths.ensure()?;
 
     let hostname = args
         .hostname
         .or_else(|| std::env::var("HOSTNAME").ok())
+        .or_else(|| std::env::var("COMPUTERNAME").ok())
         .unwrap_or_else(|| "tuntun-node".into());
 
     let identity = AgentIdentity::generate();
@@ -130,9 +170,8 @@ pub async fn run_enroll(args: EnrollArgs) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub async fn run_reset(args: ResetArgs) -> anyhow::Result<()> {
-    let cli = Cli::parse();
-    let paths = paths(cli.state_dir.as_deref());
+pub async fn run_reset(args: ResetArgs, state_dir: Option<&str>) -> anyhow::Result<()> {
+    let paths = paths(state_dir);
     if !args.yes {
         eprintln!("Re-run with --yes to actually wipe {}", paths.dir.display());
         return Ok(());
@@ -146,12 +185,11 @@ pub async fn run_reset(args: ResetArgs) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub async fn run_agent(args: RunArgs) -> anyhow::Result<()> {
-    let cli = Cli::parse();
-    let paths = paths(cli.state_dir.as_deref());
+pub async fn run_agent(args: RunArgs, state_dir: Option<&str>) -> anyhow::Result<()> {
+    let paths = paths(state_dir);
     let identity = AgentIdentity::load_from(&paths.key_file()).with_context(|| {
         format!(
-            "no persisted identity in {}; run `enroll` first",
+            "no persisted identity in {}; run `tuntun enroll` first",
             paths.dir.display()
         )
     })?;

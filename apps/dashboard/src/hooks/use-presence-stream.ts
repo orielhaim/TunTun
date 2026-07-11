@@ -47,6 +47,41 @@ function applyPresencePatch(
   );
 }
 
+function invalidateEntityQueries(
+  queryClient: ReturnType<typeof useQueryClient>,
+  orgId: string,
+  kind: string,
+  networkId: string | null,
+) {
+  if (kind === "tunnel") {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.tunnels(orgId) });
+    if (networkId) {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.tunnelsByNetwork(orgId, networkId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.topology(orgId, networkId),
+      });
+    }
+  } else if (kind === "serve") {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.serves(orgId) });
+    if (networkId) {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.servesByNetwork(orgId, networkId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.topology(orgId, networkId),
+      });
+    }
+    void queryClient.invalidateQueries({
+      queryKey: [...queryKeys.serves(orgId), "peers"],
+      exact: false,
+    });
+  } else if (kind === "relay") {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.relays(orgId) });
+  }
+}
+
 export function usePresenceStream(orgId: string | undefined) {
   const queryClient = useQueryClient();
 
@@ -88,9 +123,19 @@ export function usePresenceStream(orgId: string | undefined) {
               const payload = JSON.parse(event.data) as {
                 type?: string;
                 patch?: PresencePatch;
+                kind?: string;
+                entityId?: string;
+                networkId?: string | null;
               };
               if (payload.type === "presence" && payload.patch) {
                 applyPresencePatch(queryClient, activeOrgId, payload.patch);
+              } else if (payload.type === "entity" && payload.kind) {
+                invalidateEntityQueries(
+                  queryClient,
+                  activeOrgId,
+                  payload.kind,
+                  payload.networkId ?? null,
+                );
               }
             } catch {
               // ignore malformed events

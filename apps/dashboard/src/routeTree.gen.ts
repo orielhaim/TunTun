@@ -19,11 +19,17 @@ import { Route as AppLogsRouteImport } from './routes/app/logs'
 import { Route as AppAccessRouteImport } from './routes/app/access'
 import { Route as AcceptInvitationInvitationIdRouteImport } from './routes/accept-invitation.$invitationId'
 import { Route as AppSettingsRouteRouteImport } from './routes/app/settings/route'
+import { Route as AppTunnelsIndexRouteImport } from './routes/app/tunnels/index'
 import { Route as AppSettingsIndexRouteImport } from './routes/app/settings/index'
+import { Route as AppServesIndexRouteImport } from './routes/app/serves/index'
+import { Route as AppRelaysIndexRouteImport } from './routes/app/relays/index'
 import { Route as AppNetworksIndexRouteImport } from './routes/app/networks/index'
 import { Route as AppMachinesIndexRouteImport } from './routes/app/machines/index'
+import { Route as AppTunnelsTunnelIdRouteImport } from './routes/app/tunnels/$tunnelId'
 import { Route as AppSettingsApiKeysRouteImport } from './routes/app/settings/api-keys'
 import { Route as AppSettingsAccountRouteImport } from './routes/app/settings/account'
+import { Route as AppServesServeIdRouteImport } from './routes/app/serves/$serveId'
+import { Route as AppRelaysRelayIdRouteImport } from './routes/app/relays/$relayId'
 import { Route as AppMachinesEndpointIdRouteImport } from './routes/app/machines/$endpointId'
 import { Route as AppNetworksNetworkIdRouteRouteImport } from './routes/app/networks/$networkId/route'
 import { Route as AppNetworksNetworkIdIndexRouteImport } from './routes/app/networks/$networkId/index'
@@ -84,10 +90,25 @@ const AppSettingsRouteRoute = AppSettingsRouteRouteImport.update({
   path: '/settings',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppTunnelsIndexRoute = AppTunnelsIndexRouteImport.update({
+  id: '/tunnels/',
+  path: '/tunnels/',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppSettingsIndexRoute = AppSettingsIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AppSettingsRouteRoute,
+} as any)
+const AppServesIndexRoute = AppServesIndexRouteImport.update({
+  id: '/serves/',
+  path: '/serves/',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppRelaysIndexRoute = AppRelaysIndexRouteImport.update({
+  id: '/relays/',
+  path: '/relays/',
+  getParentRoute: () => AppRouteRoute,
 } as any)
 const AppNetworksIndexRoute = AppNetworksIndexRouteImport.update({
   id: '/networks/',
@@ -99,6 +120,11 @@ const AppMachinesIndexRoute = AppMachinesIndexRouteImport.update({
   path: '/machines/',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppTunnelsTunnelIdRoute = AppTunnelsTunnelIdRouteImport.update({
+  id: '/tunnels/$tunnelId',
+  path: '/tunnels/$tunnelId',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppSettingsApiKeysRoute = AppSettingsApiKeysRouteImport.update({
   id: '/api-keys',
   path: '/api-keys',
@@ -108,6 +134,16 @@ const AppSettingsAccountRoute = AppSettingsAccountRouteImport.update({
   id: '/account',
   path: '/account',
   getParentRoute: () => AppSettingsRouteRoute,
+} as any)
+const AppServesServeIdRoute = AppServesServeIdRouteImport.update({
+  id: '/serves/$serveId',
+  path: '/serves/$serveId',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppRelaysRelayIdRoute = AppRelaysRelayIdRouteImport.update({
+  id: '/relays/$relayId',
+  path: '/relays/$relayId',
+  getParentRoute: () => AppRouteRoute,
 } as any)
 const AppMachinesEndpointIdRoute = AppMachinesEndpointIdRouteImport.update({
   id: '/machines/$endpointId',
@@ -169,11 +205,17 @@ export interface FileRoutesByFullPath {
   '/app/': typeof AppIndexRoute
   '/app/networks/$networkId': typeof AppNetworksNetworkIdRouteRouteWithChildren
   '/app/machines/$endpointId': typeof AppMachinesEndpointIdRoute
+  '/app/relays/$relayId': typeof AppRelaysRelayIdRoute
+  '/app/serves/$serveId': typeof AppServesServeIdRoute
   '/app/settings/account': typeof AppSettingsAccountRoute
   '/app/settings/api-keys': typeof AppSettingsApiKeysRoute
+  '/app/tunnels/$tunnelId': typeof AppTunnelsTunnelIdRoute
   '/app/machines/': typeof AppMachinesIndexRoute
   '/app/networks/': typeof AppNetworksIndexRoute
+  '/app/relays/': typeof AppRelaysIndexRoute
+  '/app/serves/': typeof AppServesIndexRoute
   '/app/settings/': typeof AppSettingsIndexRoute
+  '/app/tunnels/': typeof AppTunnelsIndexRoute
   '/app/networks/$networkId/access': typeof AppNetworksNetworkIdAccessRoute
   '/app/networks/$networkId/enrollment': typeof AppNetworksNetworkIdEnrollmentRoute
   '/app/networks/$networkId/machines': typeof AppNetworksNetworkIdMachinesRoute
@@ -191,11 +233,17 @@ export interface FileRoutesByTo {
   '/app/users': typeof AppUsersRoute
   '/app': typeof AppIndexRoute
   '/app/machines/$endpointId': typeof AppMachinesEndpointIdRoute
+  '/app/relays/$relayId': typeof AppRelaysRelayIdRoute
+  '/app/serves/$serveId': typeof AppServesServeIdRoute
   '/app/settings/account': typeof AppSettingsAccountRoute
   '/app/settings/api-keys': typeof AppSettingsApiKeysRoute
+  '/app/tunnels/$tunnelId': typeof AppTunnelsTunnelIdRoute
   '/app/machines': typeof AppMachinesIndexRoute
   '/app/networks': typeof AppNetworksIndexRoute
+  '/app/relays': typeof AppRelaysIndexRoute
+  '/app/serves': typeof AppServesIndexRoute
   '/app/settings': typeof AppSettingsIndexRoute
+  '/app/tunnels': typeof AppTunnelsIndexRoute
   '/app/networks/$networkId/access': typeof AppNetworksNetworkIdAccessRoute
   '/app/networks/$networkId/enrollment': typeof AppNetworksNetworkIdEnrollmentRoute
   '/app/networks/$networkId/machines': typeof AppNetworksNetworkIdMachinesRoute
@@ -217,11 +265,17 @@ export interface FileRoutesById {
   '/app/': typeof AppIndexRoute
   '/app/networks/$networkId': typeof AppNetworksNetworkIdRouteRouteWithChildren
   '/app/machines/$endpointId': typeof AppMachinesEndpointIdRoute
+  '/app/relays/$relayId': typeof AppRelaysRelayIdRoute
+  '/app/serves/$serveId': typeof AppServesServeIdRoute
   '/app/settings/account': typeof AppSettingsAccountRoute
   '/app/settings/api-keys': typeof AppSettingsApiKeysRoute
+  '/app/tunnels/$tunnelId': typeof AppTunnelsTunnelIdRoute
   '/app/machines/': typeof AppMachinesIndexRoute
   '/app/networks/': typeof AppNetworksIndexRoute
+  '/app/relays/': typeof AppRelaysIndexRoute
+  '/app/serves/': typeof AppServesIndexRoute
   '/app/settings/': typeof AppSettingsIndexRoute
+  '/app/tunnels/': typeof AppTunnelsIndexRoute
   '/app/networks/$networkId/access': typeof AppNetworksNetworkIdAccessRoute
   '/app/networks/$networkId/enrollment': typeof AppNetworksNetworkIdEnrollmentRoute
   '/app/networks/$networkId/machines': typeof AppNetworksNetworkIdMachinesRoute
@@ -244,11 +298,17 @@ export interface FileRouteTypes {
     | '/app/'
     | '/app/networks/$networkId'
     | '/app/machines/$endpointId'
+    | '/app/relays/$relayId'
+    | '/app/serves/$serveId'
     | '/app/settings/account'
     | '/app/settings/api-keys'
+    | '/app/tunnels/$tunnelId'
     | '/app/machines/'
     | '/app/networks/'
+    | '/app/relays/'
+    | '/app/serves/'
     | '/app/settings/'
+    | '/app/tunnels/'
     | '/app/networks/$networkId/access'
     | '/app/networks/$networkId/enrollment'
     | '/app/networks/$networkId/machines'
@@ -266,11 +326,17 @@ export interface FileRouteTypes {
     | '/app/users'
     | '/app'
     | '/app/machines/$endpointId'
+    | '/app/relays/$relayId'
+    | '/app/serves/$serveId'
     | '/app/settings/account'
     | '/app/settings/api-keys'
+    | '/app/tunnels/$tunnelId'
     | '/app/machines'
     | '/app/networks'
+    | '/app/relays'
+    | '/app/serves'
     | '/app/settings'
+    | '/app/tunnels'
     | '/app/networks/$networkId/access'
     | '/app/networks/$networkId/enrollment'
     | '/app/networks/$networkId/machines'
@@ -291,11 +357,17 @@ export interface FileRouteTypes {
     | '/app/'
     | '/app/networks/$networkId'
     | '/app/machines/$endpointId'
+    | '/app/relays/$relayId'
+    | '/app/serves/$serveId'
     | '/app/settings/account'
     | '/app/settings/api-keys'
+    | '/app/tunnels/$tunnelId'
     | '/app/machines/'
     | '/app/networks/'
+    | '/app/relays/'
+    | '/app/serves/'
     | '/app/settings/'
+    | '/app/tunnels/'
     | '/app/networks/$networkId/access'
     | '/app/networks/$networkId/enrollment'
     | '/app/networks/$networkId/machines'
@@ -383,12 +455,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsRouteRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/app/tunnels/': {
+      id: '/app/tunnels/'
+      path: '/tunnels'
+      fullPath: '/app/tunnels/'
+      preLoaderRoute: typeof AppTunnelsIndexRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/app/settings/': {
       id: '/app/settings/'
       path: '/'
       fullPath: '/app/settings/'
       preLoaderRoute: typeof AppSettingsIndexRouteImport
       parentRoute: typeof AppSettingsRouteRoute
+    }
+    '/app/serves/': {
+      id: '/app/serves/'
+      path: '/serves'
+      fullPath: '/app/serves/'
+      preLoaderRoute: typeof AppServesIndexRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/app/relays/': {
+      id: '/app/relays/'
+      path: '/relays'
+      fullPath: '/app/relays/'
+      preLoaderRoute: typeof AppRelaysIndexRouteImport
+      parentRoute: typeof AppRouteRoute
     }
     '/app/networks/': {
       id: '/app/networks/'
@@ -404,6 +497,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppMachinesIndexRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/app/tunnels/$tunnelId': {
+      id: '/app/tunnels/$tunnelId'
+      path: '/tunnels/$tunnelId'
+      fullPath: '/app/tunnels/$tunnelId'
+      preLoaderRoute: typeof AppTunnelsTunnelIdRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/app/settings/api-keys': {
       id: '/app/settings/api-keys'
       path: '/api-keys'
@@ -417,6 +517,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/app/settings/account'
       preLoaderRoute: typeof AppSettingsAccountRouteImport
       parentRoute: typeof AppSettingsRouteRoute
+    }
+    '/app/serves/$serveId': {
+      id: '/app/serves/$serveId'
+      path: '/serves/$serveId'
+      fullPath: '/app/serves/$serveId'
+      preLoaderRoute: typeof AppServesServeIdRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/app/relays/$relayId': {
+      id: '/app/relays/$relayId'
+      path: '/relays/$relayId'
+      fullPath: '/app/relays/$relayId'
+      preLoaderRoute: typeof AppRelaysRelayIdRouteImport
+      parentRoute: typeof AppRouteRoute
     }
     '/app/machines/$endpointId': {
       id: '/app/machines/$endpointId'
@@ -525,8 +639,14 @@ interface AppRouteRouteChildren {
   AppIndexRoute: typeof AppIndexRoute
   AppNetworksNetworkIdRouteRoute: typeof AppNetworksNetworkIdRouteRouteWithChildren
   AppMachinesEndpointIdRoute: typeof AppMachinesEndpointIdRoute
+  AppRelaysRelayIdRoute: typeof AppRelaysRelayIdRoute
+  AppServesServeIdRoute: typeof AppServesServeIdRoute
+  AppTunnelsTunnelIdRoute: typeof AppTunnelsTunnelIdRoute
   AppMachinesIndexRoute: typeof AppMachinesIndexRoute
   AppNetworksIndexRoute: typeof AppNetworksIndexRoute
+  AppRelaysIndexRoute: typeof AppRelaysIndexRoute
+  AppServesIndexRoute: typeof AppServesIndexRoute
+  AppTunnelsIndexRoute: typeof AppTunnelsIndexRoute
 }
 
 const AppRouteRouteChildren: AppRouteRouteChildren = {
@@ -538,8 +658,14 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppIndexRoute: AppIndexRoute,
   AppNetworksNetworkIdRouteRoute: AppNetworksNetworkIdRouteRouteWithChildren,
   AppMachinesEndpointIdRoute: AppMachinesEndpointIdRoute,
+  AppRelaysRelayIdRoute: AppRelaysRelayIdRoute,
+  AppServesServeIdRoute: AppServesServeIdRoute,
+  AppTunnelsTunnelIdRoute: AppTunnelsTunnelIdRoute,
   AppMachinesIndexRoute: AppMachinesIndexRoute,
   AppNetworksIndexRoute: AppNetworksIndexRoute,
+  AppRelaysIndexRoute: AppRelaysIndexRoute,
+  AppServesIndexRoute: AppServesIndexRoute,
+  AppTunnelsIndexRoute: AppTunnelsIndexRoute,
 }
 
 const AppRouteRouteWithChildren = AppRouteRoute._addFileChildren(

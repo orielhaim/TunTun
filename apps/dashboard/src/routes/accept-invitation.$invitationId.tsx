@@ -50,7 +50,7 @@ function AcceptInvitationPage() {
       }
 
       toast.success("Invitation accepted");
-      void navigate({ to: "/app/machines" });
+      void navigate({ to: "/app" });
     })();
   }, [invitationId, navigate]);
 

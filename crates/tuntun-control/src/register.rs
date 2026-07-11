@@ -1,6 +1,6 @@
 use ed25519_dalek::SigningKey;
 use sqlx::PgPool;
-use tuntun_common::{EndpointSnapshot, EnrollResponse};
+use tuntun_common::EnrollResponse;
 use uuid::Uuid;
 
 pub struct RegisterDeviceParams {

@@ -2,12 +2,16 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { DeviceMetadata } from "@tuntun/api/management";
 import { formatDistanceToNow } from "date-fns";
-import { ChevronRightIcon } from "lucide-react";
+import { ChevronRightIcon, PlusIcon } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { CopyField } from "@/components/app/copy-field";
+import { CreateServeDialog } from "@/components/app/create-serve-dialog";
+import { CreateTunnelDialog } from "@/components/app/create-tunnel-dialog";
+import { EmptyState } from "@/components/app/empty-state";
+import { EntityStatus } from "@/components/app/entity-status";
 import { LastSeenCell } from "@/components/app/last-seen-cell";
 import { PageHeader } from "@/components/app/page-header";
 import { StatusBadge } from "@/components/app/status-badge";
@@ -32,7 +36,12 @@ import {
 } from "@/hooks/use-presence-stream";
 import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
 import { useActiveOrganization } from "@/lib/auth-client";
-import { useDevice, useDeviceMutations } from "@/lib/queries/management";
+import {
+  useDevice,
+  useDeviceMutations,
+  useServes,
+  useTunnels,
+} from "@/lib/queries/management";
 import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/app/machines/$endpointId")({
@@ -148,9 +157,22 @@ function MachineDetailPage() {
     error,
   } = useDevice(orgId, endpointId);
   const deviceMutations = useDeviceMutations(orgId);
+  const { data: tunnels } = useTunnels(orgId);
+  const { data: serves } = useServes(orgId);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [createTunnelOpen, setCreateTunnelOpen] = useState(false);
+  const [createServeOpen, setCreateServeOpen] = useState(false);
   const queryClient = useQueryClient();
   usePresenceStream(orgId);
+
+  const machineTunnels = useMemo(
+    () => (tunnels ?? []).filter((t) => t.endpointId === endpointId),
+    [tunnels, endpointId],
+  );
+  const machineServes = useMemo(
+    () => (serves ?? []).filter((s) => s.endpointId === endpointId),
+    [serves, endpointId],
+  );
 
   const networkId =
     device?.memberships.find((m) => m.status === "active")?.networkId ??
@@ -240,6 +262,8 @@ function MachineDetailPage() {
         <TabsList variant="line">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="networking">Networking</TabsTrigger>
+          <TabsTrigger value="tunnels">Tunnels</TabsTrigger>
+          <TabsTrigger value="serves">Serves</TabsTrigger>
           <TabsTrigger value="system">System</TabsTrigger>
           {isAdmin ? (
             <TabsTrigger value="settings">Settings</TabsTrigger>
@@ -374,6 +398,106 @@ function MachineDetailPage() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="tunnels">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <p className="text-muted-foreground text-sm">
+              Public tunnels originating from this machine.
+            </p>
+            {isAdmin ? (
+              <Button size="sm" onClick={() => setCreateTunnelOpen(true)}>
+                <PlusIcon className="mr-2 size-4" />
+                Create tunnel
+              </Button>
+            ) : null}
+          </div>
+          {machineTunnels.length === 0 ? (
+            <EmptyState
+              title="No tunnels"
+              description="Create a tunnel to expose a local port publicly."
+              action={
+                isAdmin ? (
+                  <Button onClick={() => setCreateTunnelOpen(true)}>
+                    Create tunnel
+                  </Button>
+                ) : undefined
+              }
+            />
+          ) : (
+            <div className="space-y-2">
+              {machineTunnels.map((tunnel) => (
+                <div
+                  key={tunnel.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-border/60 px-3 py-2.5"
+                >
+                  <div className="min-w-0">
+                    <Link
+                      to="/app/tunnels/$tunnelId"
+                      params={{ tunnelId: tunnel.id }}
+                      className="font-mono text-sm hover:underline"
+                    >
+                      https://{tunnel.publicHostname}
+                    </Link>
+                    <p className="text-muted-foreground text-xs">
+                      {tunnel.protocol.toUpperCase()} · port {tunnel.localPort}
+                    </p>
+                  </div>
+                  <EntityStatus status={tunnel.status} />
+                </div>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="serves">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <p className="text-muted-foreground text-sm">
+              Mesh serves published from this machine.
+            </p>
+            {isAdmin ? (
+              <Button size="sm" onClick={() => setCreateServeOpen(true)}>
+                <PlusIcon className="mr-2 size-4" />
+                Create serve
+              </Button>
+            ) : null}
+          </div>
+          {machineServes.length === 0 ? (
+            <EmptyState
+              title="No serves"
+              description="Publish a local port for other machines on the mesh."
+              action={
+                isAdmin ? (
+                  <Button onClick={() => setCreateServeOpen(true)}>
+                    Create serve
+                  </Button>
+                ) : undefined
+              }
+            />
+          ) : (
+            <div className="space-y-2">
+              {machineServes.map((serve) => (
+                <div
+                  key={serve.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-border/60 px-3 py-2.5"
+                >
+                  <div className="min-w-0">
+                    <Link
+                      to="/app/serves/$serveId"
+                      params={{ serveId: serve.id }}
+                      className="font-mono text-sm hover:underline"
+                    >
+                      {serve.internalHostname}
+                    </Link>
+                    <p className="text-muted-foreground text-xs">
+                      {serve.protocol.toUpperCase()} · port {serve.localPort}
+                    </p>
+                  </div>
+                  <EntityStatus status={serve.status} />
+                </div>
+              ))}
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="system">
@@ -512,6 +636,27 @@ function MachineDetailPage() {
             }
           }}
         />
+      ) : null}
+
+      {orgId ? (
+        <>
+          <CreateTunnelDialog
+            orgId={orgId}
+            open={createTunnelOpen}
+            onOpenChange={setCreateTunnelOpen}
+            defaultEndpointId={endpointId}
+            defaultNetworkId={networkId}
+            defaultHostname={device?.metadata.hostname}
+          />
+          <CreateServeDialog
+            orgId={orgId}
+            open={createServeOpen}
+            onOpenChange={setCreateServeOpen}
+            defaultEndpointId={endpointId}
+            defaultNetworkId={networkId}
+            defaultHostname={device?.metadata.hostname}
+          />
+        </>
       ) : null}
     </>
   );

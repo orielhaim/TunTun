@@ -100,3 +100,10 @@ export function badRequest(message: string) {
     headers: { "Content-Type": "application/json" },
   });
 }
+
+export function conflict(message: string) {
+  return new Response(JSON.stringify({ error: message }), {
+    status: 409,
+    headers: { "Content-Type": "application/json" },
+  });
+}

@@ -164,3 +164,97 @@ export async function registerDevice(
     .json();
   return parseRegisterDeviceResponse(data);
 }
+
+export async function pushOpenTunnel(body: {
+  endpointId: string;
+  tunnelId: string;
+  relayAddr: string;
+  subdomain: string;
+  publicHostname: string;
+  localPort: number;
+  protocol: string;
+  authToken: string;
+  redirectRules?: Array<{
+    pathPattern: string;
+    targetPort: number;
+    targetIp?: string;
+  }>;
+}): Promise<void> {
+  await getClient()
+    .post("/internal/v1/tunnels/open", {
+      json: {
+        endpoint_id: body.endpointId,
+        tunnel_id: body.tunnelId,
+        relay_addr: body.relayAddr,
+        subdomain: body.subdomain,
+        public_hostname: body.publicHostname,
+        local_port: body.localPort,
+        protocol: body.protocol,
+        auth_token: body.authToken,
+        redirect_rules: (body.redirectRules ?? []).map((r) => ({
+          pathPattern: r.pathPattern,
+          targetPort: r.targetPort,
+          ...(r.targetIp ? { targetIpv4: r.targetIp } : {}),
+        })),
+      },
+    })
+    .json();
+}
+
+export async function pushStopTunnel(body: {
+  endpointId: string;
+  tunnelId: string;
+}): Promise<void> {
+  await getClient()
+    .post("/internal/v1/tunnels/stop", {
+      json: {
+        endpoint_id: body.endpointId,
+        tunnel_id: body.tunnelId,
+      },
+    })
+    .json();
+}
+
+export async function pushStartServe(body: {
+  endpointId: string;
+  serveId: string;
+  port: number;
+  protocol: string;
+  internalHostname: string;
+  certificatePem?: string;
+  privateKeyPem?: string;
+  accessMode?: string;
+  allowedTags?: string[];
+  allowedEndpointIds?: string[];
+}): Promise<void> {
+  await getClient()
+    .post("/internal/v1/serves/start", {
+      json: {
+        endpoint_id: body.endpointId,
+        serve_id: body.serveId,
+        port: body.port,
+        protocol: body.protocol,
+        internal_hostname: body.internalHostname,
+        certificate_pem: body.certificatePem,
+        private_key_pem: body.privateKeyPem,
+        access_mode: body.accessMode ?? "all_peers",
+        allowed_tags: body.allowedTags ?? [],
+        allowed_endpoint_ids: body.allowedEndpointIds ?? [],
+      },
+    })
+    .json();
+}
+
+export async function pushStopServe(body: {
+  endpointId: string;
+  serveId: string;
+}): Promise<void> {
+  await getClient()
+    .post("/internal/v1/serves/stop", {
+      json: {
+        endpoint_id: body.endpointId,
+        serve_id: body.serveId,
+      },
+    })
+    .json();
+}

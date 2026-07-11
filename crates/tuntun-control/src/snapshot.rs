@@ -1,7 +1,8 @@
 use sqlx::PgPool;
 use tuntun_common::{
-    DeviceProfile, DnsConfig, EndpointSnapshot, ExitNodeInfo, HostnameRoute, Ipv6PeerEntry,
-    NetworkMembershipSnapshot, PeerEntry, SplitTunnelMode, SubnetRoute,
+    ActiveServe, DeviceProfile, DnsConfig, EndpointSnapshot, ExitNodeInfo, HostnameRoute,
+    Ipv6PeerEntry, NetworkMembershipSnapshot, PeerEntry, SplitTunnelMode, SubnetRoute,
+    TunnelConfig,
 };
 use uuid::Uuid;
 
@@ -49,6 +50,12 @@ pub async fn build_endpoint_snapshot(
         let hostname_routes = load_hostname_routes(pool, network_id).await?;
         let exit_nodes = load_exit_nodes(pool, network_id).await?;
         let device_profile = load_device_profile(pool, endpoint_id, network_id).await?;
+        let active_serves = load_active_serves(pool, network_id)
+            .await
+            .unwrap_or_default();
+        let tunnel_config = load_tunnel_config(pool, endpoint_id, network_id)
+            .await
+            .unwrap_or_default();
         let policy = crate::policy_store::load_network_bundle(
             pool,
             policy_key,
@@ -74,6 +81,8 @@ pub async fn build_endpoint_snapshot(
             dns: DnsConfig::default(),
             exit_nodes,
             device_profile,
+            active_serves,
+            tunnel_config,
             policy,
             gossip_bootstrap: bootstrap,
             gossip_topic_hex,
@@ -95,14 +104,112 @@ pub async fn build_endpoint_snapshot(
     )
     .await?;
 
+    let org_ca_pem = load_org_ca_pem(pool, &organization_id).await.ok().flatten();
+
     Ok(EndpointSnapshot {
         ipv6_enabled,
         tenant_ipv6,
         memberships,
         ipv6_peers,
         org_policy,
+        org_ca_pem,
         version: org_version as u64,
     })
+}
+
+async fn load_org_ca_pem(pool: &PgPool, organization_id: &str) -> anyhow::Result<Option<String>> {
+    let row: Option<(String,)> =
+        sqlx::query_as("SELECT certificate_pem FROM organization_cas WHERE organization_id = $1")
+            .bind(organization_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(row.map(|(pem,)| pem))
+}
+
+async fn load_active_serves(pool: &PgPool, network_id: Uuid) -> anyhow::Result<Vec<ActiveServe>> {
+    let rows: Vec<(Uuid, String, i32, String, String)> = sqlx::query_as(
+        "SELECT id, endpoint_id, local_port, protocol, internal_hostname \
+         FROM serves \
+         WHERE network_id = $1 AND status = 'active'",
+    )
+    .bind(network_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(
+            |(id, endpoint_id, port, protocol, internal_hostname)| ActiveServe {
+                id: id.to_string(),
+                endpoint_id,
+                hostname: internal_hostname
+                    .split('.')
+                    .next()
+                    .unwrap_or("")
+                    .to_string(),
+                port: port as u16,
+                protocol,
+                internal_hostname,
+            },
+        )
+        .collect())
+}
+
+async fn load_tunnel_config(
+    pool: &PgPool,
+    endpoint_id: &str,
+    network_id: Uuid,
+) -> anyhow::Result<Vec<TunnelConfig>> {
+    let rows: Vec<(
+        Uuid,
+        i32,
+        String,
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+        String,
+    )> = sqlx::query_as(
+        "SELECT t.id, t.local_port, t.protocol, t.subdomain, t.public_hostname, \
+                r.public_key, r.domain, t.status \
+         FROM tunnels t \
+         LEFT JOIN relays r ON r.id = t.relay_id \
+         WHERE t.endpoint_id = $1 AND t.network_id = $2 \
+           AND t.status IN ('connecting', 'active')",
+    )
+    .bind(endpoint_id)
+    .bind(network_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(
+            |(
+                id,
+                local_port,
+                protocol,
+                subdomain,
+                public_hostname,
+                relay_endpoint,
+                _relay_domain,
+                status,
+            )| TunnelConfig {
+                id: id.to_string(),
+                local_port: local_port as u16,
+                protocol,
+                subdomain,
+                public_hostname,
+                // iroh endpoint id of the relay (dial target). Domain is in public_hostname.
+                relay_addr: relay_endpoint.unwrap_or_default(),
+                // Deliberately blank: TunnelManager starts only on OpenTunnel.
+                // On agent WS reconnect, control plane re-pushes OpenTunnel with
+                // the real token from tunnels.relay_auth_token (see reconnect.rs).
+                relay_auth_token: String::new(),
+                status,
+            },
+        )
+        .collect())
 }
 
 async fn network_prefix(pool: &PgPool, network_id: Uuid) -> anyhow::Result<u8> {

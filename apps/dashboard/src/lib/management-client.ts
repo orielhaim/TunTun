@@ -8,7 +8,14 @@ import {
   createHostnameRouteBody,
   createNetworkBody,
   createPolicyBody,
+  createRelayBody,
+  createServeBody,
+  createServeResponse,
   createSubnetRouteBody,
+  createTunnelBody,
+  createTunnelPortMappingBody,
+  createTunnelRedirectRuleBody,
+  createTunnelResponse,
   deviceAddressesResponse,
   deviceDetailSchema,
   deviceListResponse,
@@ -17,37 +24,85 @@ import {
   enrollmentTokenListResponse,
   hostnameRouteListResponse,
   hostnameRouteSchema,
+  internalCaSchema,
   networkListResponse,
   networkSchema,
+  organizationTunnelSettingsSchema,
   patchDeviceBody,
   patchDeviceMembershipBody,
   patchHostnameRouteBody,
   patchNetworkBody,
+  patchOrganizationTunnelSettingsBody,
   patchPolicyBody,
+  patchRelayBody,
+  patchServeBody,
   patchSubnetRouteBody,
+  patchTunnelBody,
+  patchTunnelPortMappingBody,
+  patchTunnelRedirectRuleBody,
   policyListResponse,
   policySchema,
+  relayHealthResponse,
+  relayListResponse,
+  relaySchema,
+  createRelayResponse,
+  rotateInternalCaResponse,
+  serveListResponse,
+  servePeersResponse,
+  serveSchema,
   subnetRouteListResponse,
   subnetRouteSchema,
   topologyResponse,
   networkMetricsResponse,
+  tunnelListResponse,
+  tunnelPortMappingListResponse,
+  tunnelPortMappingSchema,
+  tunnelRedirectRuleListResponse,
+  tunnelRedirectRuleSchema,
+  tunnelSchema,
+  tunnelTrafficListResponse,
   type CreateApiKeyBody,
   type CreateEnrollmentTokenBody,
   type CreateHostnameRouteBody,
   type CreateNetworkBody,
   type CreatePolicyBody,
+  type CreateRelayBody,
+  type CreateServeBody,
   type CreateSubnetRouteBody,
+  type CreateTunnelBody,
+  type CreateTunnelPortMappingBody,
+  type CreateTunnelRedirectRuleBody,
   type DeleteDeviceItem,
   type PatchDeviceBody,
   type PatchDeviceMembershipBody,
   type PatchHostnameRouteBody,
   type PatchNetworkBody,
+  type PatchOrganizationTunnelSettingsBody,
   type PatchPolicyBody,
+  type PatchRelayBody,
+  type PatchServeBody,
   type PatchSubnetRouteBody,
+  type PatchTunnelBody,
+  type PatchTunnelPortMappingBody,
+  type PatchTunnelRedirectRuleBody,
 } from "@tuntun/api/management";
 import type { z } from "zod";
+import { z as zod } from "zod";
 
 import { getManagementApiUrl } from "@/lib/env";
+
+const relayDetailResponse = zod.object({ relay: relaySchema });
+const tunnelDetailResponse = zod.object({ tunnel: tunnelSchema });
+const serveDetailResponse = zod.object({ serve: serveSchema });
+const tunnelSettingsResponse = zod.object({
+  settings: organizationTunnelSettingsSchema,
+});
+const redirectRuleDetailResponse = zod.object({
+  redirectRule: tunnelRedirectRuleSchema,
+});
+const portMappingDetailResponse = zod.object({
+  portMapping: tunnelPortMappingSchema,
+});
 
 class ManagementApiError extends Error {
   constructor(
@@ -326,7 +381,7 @@ export function createManagementClient(orgId: string) {
 
     createEnrollmentToken: (
       networkId: string,
-      body: CreateEnrollmentTokenBody = {},
+      body: CreateEnrollmentTokenBody = { ttlMinutes: 15 },
     ) =>
       request(
         orgId,
@@ -396,6 +451,288 @@ export function createManagementClient(orgId: string) {
         org(`/networks/${networkId}/metrics`),
         {},
         networkMetricsResponse,
+      ),
+
+    listRelays: () => request(orgId, org("/relays"), {}, relayListResponse),
+
+    getRelay: (relayId: string) =>
+      request(orgId, org(`/relays/${relayId}`), {}, relayDetailResponse),
+
+    createRelay: (body: CreateRelayBody) =>
+      request(
+        orgId,
+        org("/relays"),
+        { method: "POST", body: JSON.stringify(createRelayBody.parse(body)) },
+        createRelayResponse,
+      ),
+
+    updateRelay: (relayId: string, body: PatchRelayBody) =>
+      request(
+        orgId,
+        org(`/relays/${relayId}`),
+        {
+          method: "PATCH",
+          body: JSON.stringify(patchRelayBody.parse(body)),
+        },
+        relayDetailResponse,
+      ),
+
+    deleteRelay: (relayId: string) =>
+      request<{ ok: boolean }>(orgId, org(`/relays/${relayId}`), {
+        method: "DELETE",
+      }),
+
+    listTunnels: (networkId: string) =>
+      request(
+        orgId,
+        org(`/networks/${networkId}/tunnels`),
+        {},
+        tunnelListResponse,
+      ),
+
+    getTunnel: (networkId: string, tunnelId: string) =>
+      request(
+        orgId,
+        org(`/networks/${networkId}/tunnels/${tunnelId}`),
+        {},
+        tunnelDetailResponse,
+      ),
+
+    createTunnel: (networkId: string, body: CreateTunnelBody) =>
+      request(
+        orgId,
+        org(`/networks/${networkId}/tunnels`),
+        {
+          method: "POST",
+          body: JSON.stringify(createTunnelBody.parse(body)),
+        },
+        createTunnelResponse,
+      ),
+
+    updateTunnel: (
+      networkId: string,
+      tunnelId: string,
+      body: PatchTunnelBody,
+    ) =>
+      request(
+        orgId,
+        org(`/networks/${networkId}/tunnels/${tunnelId}`),
+        {
+          method: "PATCH",
+          body: JSON.stringify(patchTunnelBody.parse(body)),
+        },
+        tunnelDetailResponse,
+      ),
+
+    deleteTunnel: (networkId: string, tunnelId: string) =>
+      request<{ ok: boolean }>(
+        orgId,
+        org(`/networks/${networkId}/tunnels/${tunnelId}`),
+        { method: "DELETE" },
+      ),
+
+    listTunnelRedirectRules: (networkId: string, tunnelId: string) =>
+      request(
+        orgId,
+        org(`/networks/${networkId}/tunnels/${tunnelId}/redirect-rules`),
+        {},
+        tunnelRedirectRuleListResponse,
+      ),
+
+    createTunnelRedirectRule: (
+      networkId: string,
+      tunnelId: string,
+      body: CreateTunnelRedirectRuleBody,
+    ) =>
+      request(
+        orgId,
+        org(`/networks/${networkId}/tunnels/${tunnelId}/redirect-rules`),
+        {
+          method: "POST",
+          body: JSON.stringify(createTunnelRedirectRuleBody.parse(body)),
+        },
+        redirectRuleDetailResponse,
+      ),
+
+    updateTunnelRedirectRule: (
+      networkId: string,
+      tunnelId: string,
+      ruleId: string,
+      body: PatchTunnelRedirectRuleBody,
+    ) =>
+      request(
+        orgId,
+        org(
+          `/networks/${networkId}/tunnels/${tunnelId}/redirect-rules/${ruleId}`,
+        ),
+        {
+          method: "PATCH",
+          body: JSON.stringify(patchTunnelRedirectRuleBody.parse(body)),
+        },
+        redirectRuleDetailResponse,
+      ),
+
+    deleteTunnelRedirectRule: (
+      networkId: string,
+      tunnelId: string,
+      ruleId: string,
+    ) =>
+      request<{ ok: boolean }>(
+        orgId,
+        org(
+          `/networks/${networkId}/tunnels/${tunnelId}/redirect-rules/${ruleId}`,
+        ),
+        { method: "DELETE" },
+      ),
+
+    listTunnelPortMappings: (networkId: string, tunnelId: string) =>
+      request(
+        orgId,
+        org(`/networks/${networkId}/tunnels/${tunnelId}/port-mappings`),
+        {},
+        tunnelPortMappingListResponse,
+      ),
+
+    createTunnelPortMapping: (
+      networkId: string,
+      tunnelId: string,
+      body: CreateTunnelPortMappingBody,
+    ) =>
+      request(
+        orgId,
+        org(`/networks/${networkId}/tunnels/${tunnelId}/port-mappings`),
+        {
+          method: "POST",
+          body: JSON.stringify(createTunnelPortMappingBody.parse(body)),
+        },
+        portMappingDetailResponse,
+      ),
+
+    updateTunnelPortMapping: (
+      networkId: string,
+      tunnelId: string,
+      mappingId: string,
+      body: PatchTunnelPortMappingBody,
+    ) =>
+      request(
+        orgId,
+        org(
+          `/networks/${networkId}/tunnels/${tunnelId}/port-mappings/${mappingId}`,
+        ),
+        {
+          method: "PATCH",
+          body: JSON.stringify(patchTunnelPortMappingBody.parse(body)),
+        },
+        portMappingDetailResponse,
+      ),
+
+    deleteTunnelPortMapping: (
+      networkId: string,
+      tunnelId: string,
+      mappingId: string,
+    ) =>
+      request<{ ok: boolean }>(
+        orgId,
+        org(
+          `/networks/${networkId}/tunnels/${tunnelId}/port-mappings/${mappingId}`,
+        ),
+        { method: "DELETE" },
+      ),
+
+    listTunnelTraffic: (networkId: string, tunnelId: string, limit = 100) =>
+      request(
+        orgId,
+        org(
+          `/networks/${networkId}/tunnels/${tunnelId}/traffic?limit=${limit}`,
+        ),
+        {},
+        tunnelTrafficListResponse,
+      ),
+
+    listServes: (networkId: string) =>
+      request(
+        orgId,
+        org(`/networks/${networkId}/serves`),
+        {},
+        serveListResponse,
+      ),
+
+    getServe: (networkId: string, serveId: string) =>
+      request(
+        orgId,
+        org(`/networks/${networkId}/serves/${serveId}`),
+        {},
+        serveDetailResponse,
+      ),
+
+    listServePeers: (networkId: string, serveId: string) =>
+      request(
+        orgId,
+        org(`/networks/${networkId}/serves/${serveId}/peers`),
+        {},
+        servePeersResponse,
+      ),
+
+    createServe: (networkId: string, body: CreateServeBody) =>
+      request(
+        orgId,
+        org(`/networks/${networkId}/serves`),
+        {
+          method: "POST",
+          body: JSON.stringify(createServeBody.parse(body)),
+        },
+        createServeResponse,
+      ),
+
+    updateServe: (networkId: string, serveId: string, body: PatchServeBody) =>
+      request(
+        orgId,
+        org(`/networks/${networkId}/serves/${serveId}`),
+        {
+          method: "PATCH",
+          body: JSON.stringify(patchServeBody.parse(body)),
+        },
+        serveDetailResponse,
+      ),
+
+    deleteServe: (networkId: string, serveId: string) =>
+      request<{ ok: boolean }>(
+        orgId,
+        org(`/networks/${networkId}/serves/${serveId}`),
+        { method: "DELETE" },
+      ),
+
+    getRelayHealth: (relayId: string, limit = 100) =>
+      request(
+        orgId,
+        org(`/relays/${relayId}/health?limit=${limit}`),
+        {},
+        relayHealthResponse,
+      ),
+
+    getInternalCa: () =>
+      request(orgId, org("/internal-ca"), {}, internalCaSchema),
+
+    rotateInternalCa: () =>
+      request(
+        orgId,
+        org("/internal-ca/rotate"),
+        { method: "POST" },
+        rotateInternalCaResponse,
+      ),
+
+    getTunnelSettings: () =>
+      request(orgId, org("/tunnel-settings"), {}, tunnelSettingsResponse),
+
+    updateTunnelSettings: (body: PatchOrganizationTunnelSettingsBody) =>
+      request(
+        orgId,
+        org("/tunnel-settings"),
+        {
+          method: "PATCH",
+          body: JSON.stringify(patchOrganizationTunnelSettingsBody.parse(body)),
+        },
+        tunnelSettingsResponse,
       ),
   };
 }

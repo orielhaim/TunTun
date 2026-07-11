@@ -57,6 +57,27 @@
       "when": 1783797326011,
       "tag": "0007_previous_changeling",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1783806097835,
+      "tag": "0008_naive_sasquatch",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1783808599236,
+      "tag": "0009_greedy_power_pack",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1783810523526,
+      "tag": "0010_cold_stick",
+      "breakpoints": true
     }
   ]
 }

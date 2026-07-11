@@ -31,4 +31,39 @@ export const queryKeys = {
     [...queryKeys.org(orgId), "device-addresses", endpointId] as const,
   devicePresence: (orgId: string, endpointId: string) =>
     [...queryKeys.org(orgId), "device-presence", endpointId] as const,
+  relays: (orgId: string) => [...queryKeys.org(orgId), "relays"] as const,
+  relay: (orgId: string, relayId: string) =>
+    [...queryKeys.relays(orgId), relayId] as const,
+  relayHealth: (orgId: string, relayId: string) =>
+    [...queryKeys.relay(orgId, relayId), "health"] as const,
+  tunnels: (orgId: string) => [...queryKeys.org(orgId), "tunnels"] as const,
+  tunnelsByNetwork: (orgId: string, networkId: string) =>
+    [...queryKeys.tunnels(orgId), networkId] as const,
+  tunnelRedirectRules: (orgId: string, networkId: string, tunnelId: string) =>
+    [
+      ...queryKeys.tunnelsByNetwork(orgId, networkId),
+      tunnelId,
+      "redirect-rules",
+    ] as const,
+  tunnelPortMappings: (orgId: string, networkId: string, tunnelId: string) =>
+    [
+      ...queryKeys.tunnelsByNetwork(orgId, networkId),
+      tunnelId,
+      "port-mappings",
+    ] as const,
+  tunnelTraffic: (orgId: string, networkId: string, tunnelId: string) =>
+    [
+      ...queryKeys.tunnelsByNetwork(orgId, networkId),
+      tunnelId,
+      "traffic",
+    ] as const,
+  serves: (orgId: string) => [...queryKeys.org(orgId), "serves"] as const,
+  servesByNetwork: (orgId: string, networkId: string) =>
+    [...queryKeys.serves(orgId), networkId] as const,
+  servePeers: (orgId: string, networkId: string, serveId: string) =>
+    [...queryKeys.serves(orgId), networkId, serveId, "peers"] as const,
+  internalCa: (orgId: string) =>
+    [...queryKeys.org(orgId), "internal-ca"] as const,
+  tunnelSettings: (orgId: string) =>
+    [...queryKeys.org(orgId), "tunnel-settings"] as const,
 };

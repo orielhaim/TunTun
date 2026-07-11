@@ -28,6 +28,35 @@ pub async fn serve(state: SharedState) -> anyhow::Result<()> {
         .route("/v1/register", post(register_handler))
         .route("/v1/poll", post(poll_handler))
         .route("/v1/ws", get(ws_handler))
+        .route(
+            "/v1/relay/register",
+            post(crate::tunnels::relay_register_handler),
+        )
+        .route(
+            "/v1/relay/heartbeat",
+            post(crate::tunnels::relay_heartbeat_handler),
+        )
+        .route(
+            "/v1/relay/traffic",
+            post(crate::tunnels::relay_traffic_handler),
+        )
+        .route("/v1/tunnels", post(crate::tunnels::create_tunnel_handler))
+        .route(
+            "/v1/tunnels/ready",
+            post(crate::tunnels::tunnel_ready_handler),
+        )
+        .route(
+            "/v1/tunnels/stopped",
+            post(crate::tunnels::tunnel_stopped_handler),
+        )
+        .route(
+            "/v1/tunnels/failed",
+            post(crate::tunnels::tunnel_failed_handler),
+        )
+        .route(
+            "/v1/subnet-routes",
+            post(crate::tunnels::create_subnet_route_handler),
+        )
         .with_state(state.clone())
         .layer(TraceLayer::new_for_http());
 
@@ -383,6 +412,10 @@ async fn run_ws(
         }
     }
 
+    // Snapshot omits relay_auth_token; re-push OpenTunnel / StartServe so the
+    // agent TunnelManager / ServeManager actually (re)start workloads.
+    crate::reconnect::replay_endpoint_workloads(&state, &endpoint_id).await;
+
     let hub = state.ws_hub.clone();
     let ep_for_cleanup = endpoint_id.clone();
 
@@ -410,6 +443,194 @@ async fn run_ws(
                                 if let Err(e) = crate::presence::record_heartbeat(&pool, &ep).await
                                 {
                                     tracing::warn!(?e, %ep, "heartbeat update failed");
+                                }
+                            }
+                            ClientMsg::ServeReady { serve_id } => {
+                                if let Err(e) = sqlx::query(
+                                    "UPDATE serves SET status = 'active', updated_at = now() \
+                                     WHERE id = $1::uuid AND endpoint_id = $2",
+                                )
+                                .bind(&serve_id)
+                                .bind(&ep)
+                                .execute(&pool)
+                                .await
+                                {
+                                    tracing::warn!(?e, %serve_id, "ServeReady update failed");
+                                } else if let Err(e) =
+                                    crate::entity_notify::notify_serve_status(&pool, &serve_id)
+                                        .await
+                                {
+                                    tracing::warn!(?e, %serve_id, "serve entity notify failed");
+                                }
+                            }
+                            ClientMsg::ServeStopped { serve_id } => {
+                                if let Err(e) = sqlx::query(
+                                    "UPDATE serves SET status = 'stopped', updated_at = now() \
+                                     WHERE id = $1::uuid AND endpoint_id = $2",
+                                )
+                                .bind(&serve_id)
+                                .bind(&ep)
+                                .execute(&pool)
+                                .await
+                                {
+                                    tracing::warn!(?e, %serve_id, "ServeStopped update failed");
+                                } else {
+                                    let _ = sqlx::query(
+                                        "DELETE FROM serve_sessions WHERE serve_id = $1::uuid",
+                                    )
+                                    .bind(&serve_id)
+                                    .execute(&pool)
+                                    .await;
+                                    if let Err(e) =
+                                        crate::entity_notify::notify_serve_status(&pool, &serve_id)
+                                            .await
+                                    {
+                                        tracing::warn!(?e, %serve_id, "serve entity notify failed");
+                                    }
+                                }
+                            }
+                            ClientMsg::ServeFailed { serve_id, error } => {
+                                if let Err(e) = sqlx::query(
+                                    "UPDATE serves SET status = 'error', error_message = $3, \
+                                     updated_at = now() \
+                                     WHERE id = $1::uuid AND endpoint_id = $2",
+                                )
+                                .bind(&serve_id)
+                                .bind(&ep)
+                                .bind(&error)
+                                .execute(&pool)
+                                .await
+                                {
+                                    tracing::warn!(?e, %serve_id, "ServeFailed update failed");
+                                } else if let Err(e) =
+                                    crate::entity_notify::notify_serve_status(&pool, &serve_id)
+                                        .await
+                                {
+                                    tracing::warn!(?e, %serve_id, "serve entity notify failed");
+                                }
+                            }
+                            ClientMsg::ServePeerJoined {
+                                serve_id,
+                                peer_endpoint_id,
+                                peer_hostname,
+                            } => {
+                                if let Err(e) = sqlx::query(
+                                    "INSERT INTO serve_sessions \
+                                       (id, serve_id, peer_endpoint_id, peer_hostname, \
+                                        connected_at, bytes_in, bytes_out, last_seen_at) \
+                                     SELECT gen_random_uuid(), s.id, $2, $3, now(), 0, 0, now() \
+                                     FROM serves s \
+                                     WHERE s.id = $1::uuid AND s.endpoint_id = $4 \
+                                     ON CONFLICT (serve_id, peer_endpoint_id) DO UPDATE SET \
+                                       peer_hostname = COALESCE(EXCLUDED.peer_hostname, serve_sessions.peer_hostname), \
+                                       connected_at = now(), \
+                                       bytes_in = 0, \
+                                       bytes_out = 0, \
+                                       last_seen_at = now()",
+                                )
+                                .bind(&serve_id)
+                                .bind(&peer_endpoint_id)
+                                .bind(&peer_hostname)
+                                .bind(&ep)
+                                .execute(&pool)
+                                .await
+                                {
+                                    tracing::warn!(?e, %serve_id, "ServePeerJoined upsert failed");
+                                } else if let Err(e) =
+                                    crate::entity_notify::notify_serve_status(&pool, &serve_id)
+                                        .await
+                                {
+                                    tracing::warn!(?e, %serve_id, "serve entity notify failed");
+                                }
+                            }
+                            ClientMsg::ServePeerLeft {
+                                serve_id,
+                                peer_endpoint_id,
+                                bytes_in,
+                                bytes_out,
+                            } => {
+                                if let Err(e) = sqlx::query(
+                                    "DELETE FROM serve_sessions ss \
+                                     USING serves s \
+                                     WHERE ss.serve_id = s.id \
+                                       AND s.id = $1::uuid \
+                                       AND s.endpoint_id = $2 \
+                                       AND ss.peer_endpoint_id = $3",
+                                )
+                                .bind(&serve_id)
+                                .bind(&ep)
+                                .bind(&peer_endpoint_id)
+                                .execute(&pool)
+                                .await
+                                {
+                                    tracing::warn!(
+                                        ?e,
+                                        %serve_id,
+                                        bytes_in,
+                                        bytes_out,
+                                        "ServePeerLeft delete failed"
+                                    );
+                                } else if let Err(e) =
+                                    crate::entity_notify::notify_serve_status(&pool, &serve_id)
+                                        .await
+                                {
+                                    tracing::warn!(?e, %serve_id, "serve entity notify failed");
+                                }
+                            }
+                            ClientMsg::TunnelReady { tunnel_id } => {
+                                if let Err(e) = sqlx::query(
+                                    "UPDATE tunnels SET status = 'active', updated_at = now() \
+                                     WHERE id = $1::uuid AND endpoint_id = $2",
+                                )
+                                .bind(&tunnel_id)
+                                .bind(&ep)
+                                .execute(&pool)
+                                .await
+                                {
+                                    tracing::warn!(?e, %tunnel_id, "TunnelReady update failed");
+                                } else if let Err(e) =
+                                    crate::entity_notify::notify_tunnel_status(&pool, &tunnel_id)
+                                        .await
+                                {
+                                    tracing::warn!(?e, %tunnel_id, "tunnel entity notify failed");
+                                }
+                            }
+                            ClientMsg::TunnelStopped { tunnel_id } => {
+                                if let Err(e) = sqlx::query(
+                                    "UPDATE tunnels SET status = 'stopped', updated_at = now() \
+                                     WHERE id = $1::uuid AND endpoint_id = $2",
+                                )
+                                .bind(&tunnel_id)
+                                .bind(&ep)
+                                .execute(&pool)
+                                .await
+                                {
+                                    tracing::warn!(?e, %tunnel_id, "TunnelStopped update failed");
+                                } else if let Err(e) =
+                                    crate::entity_notify::notify_tunnel_status(&pool, &tunnel_id)
+                                        .await
+                                {
+                                    tracing::warn!(?e, %tunnel_id, "tunnel entity notify failed");
+                                }
+                            }
+                            ClientMsg::TunnelFailed { tunnel_id, error } => {
+                                if let Err(e) = sqlx::query(
+                                    "UPDATE tunnels SET status = 'error', error_message = $3, \
+                                     updated_at = now() \
+                                     WHERE id = $1::uuid AND endpoint_id = $2",
+                                )
+                                .bind(&tunnel_id)
+                                .bind(&ep)
+                                .bind(&error)
+                                .execute(&pool)
+                                .await
+                                {
+                                    tracing::warn!(?e, %tunnel_id, "TunnelFailed update failed");
+                                } else if let Err(e) =
+                                    crate::entity_notify::notify_tunnel_status(&pool, &tunnel_id)
+                                        .await
+                                {
+                                    tracing::warn!(?e, %tunnel_id, "tunnel entity notify failed");
                                 }
                             }
                             ClientMsg::Hello { .. } | ClientMsg::Pong { .. } => {}

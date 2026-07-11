@@ -1,7 +1,9 @@
 use std::sync::Arc;
+use std::time::Instant;
 
 use anyhow::Context;
 use tuntun_common::TUNNEL_ALPN;
+use tuntun_core::ipc::{AgentIpcState, spawn_ipc_server};
 use tuntun_core::{CoreNode, CoreNodeConfig};
 
 use crate::cli::RunArgs;
@@ -15,8 +17,11 @@ pub async fn run(
     args: RunArgs,
 ) -> anyhow::Result<()> {
     let metrics = AgentMetrics::new().context("metrics")?;
+    let started_at = Instant::now();
 
-    let hostname = std::env::var("HOSTNAME").unwrap_or_else(|_| "tuntun-agent".into());
+    let hostname = std::env::var("HOSTNAME")
+        .or_else(|_| std::env::var("COMPUTERNAME"))
+        .unwrap_or_else(|_| "tuntun-agent".into());
     let node = CoreNode::bootstrap(
         identity,
         persisted,
@@ -57,7 +62,7 @@ pub async fn run(
     let dns_cfg = membership_snap.dns.clone();
     let dns_bind = tuntun_core::dns_stub::bind_addr(membership_snap.assigned_ipv4);
     let _dns_task = tuntun_core::dns_stub::spawn(dns_bind, node.routes.clone(), dns_cfg.clone());
-    let _dns_guard =
+    let dns_guard =
         match crate::system_dns::configure(membership_snap.assigned_ipv4, &dns_cfg.suffix) {
             Ok(g) => Some(g),
             Err(e) => {
@@ -65,6 +70,19 @@ pub async fn run(
                 None
             }
         };
+
+    let ipc_state = Arc::new(AgentIpcState {
+        node: node.clone(),
+        hostname: hostname.clone(),
+        agent_version: env!("CARGO_PKG_VERSION").to_string(),
+        started_at,
+        dns_upstream: dns_cfg.upstream.iter().map(|ip| ip.to_string()).collect(),
+        synthetic_base: dns_cfg.synthetic_base.to_string(),
+        peer_dns_active: dns_guard.is_some(),
+        serves: node.serves.clone(),
+        tunnels: node.tunnels.clone(),
+    });
+    let _ipc_task = spawn_ipc_server(node.persisted.network_id, ipc_state);
 
     let remote_subnets: Vec<ipnet::Ipv4Net> = membership_snap
         .subnet_routes
@@ -142,6 +160,7 @@ pub async fn run(
         _ = tokio::signal::ctrl_c() => tracing::info!("ctrl-c, shutting down"),
     }
 
+    drop(dns_guard);
     node.shutdown().await;
     Ok(())
 }

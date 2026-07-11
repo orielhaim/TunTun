@@ -185,6 +185,73 @@ impl SignedClient {
         };
         self.do_post("/v1/poll", &req).await
     }
+
+    pub async fn create_tunnel(
+        &self,
+        local_port: u16,
+        protocol: &str,
+        subdomain: Option<&str>,
+        relay: Option<&str>,
+    ) -> anyhow::Result<CreateTunnelResponse> {
+        let body = serde_json::json!({
+            "localPort": local_port,
+            "protocol": protocol,
+            "subdomain": subdomain,
+            "relay": relay,
+        });
+        self.do_post("/v1/tunnels", &body).await
+    }
+
+    pub async fn tunnel_ready(&self, tunnel_id: &str) -> anyhow::Result<()> {
+        let body = serde_json::json!({ "tunnelId": tunnel_id });
+        let _: serde_json::Value = self.do_post("/v1/tunnels/ready", &body).await?;
+        Ok(())
+    }
+
+    pub async fn tunnel_stopped(&self, tunnel_id: &str) -> anyhow::Result<()> {
+        let body = serde_json::json!({ "tunnelId": tunnel_id });
+        let _: serde_json::Value = self.do_post("/v1/tunnels/stopped", &body).await?;
+        Ok(())
+    }
+
+    pub async fn tunnel_failed(&self, tunnel_id: &str, error: &str) -> anyhow::Result<()> {
+        let body = serde_json::json!({ "tunnelId": tunnel_id, "error": error });
+        let _: serde_json::Value = self.do_post("/v1/tunnels/failed", &body).await?;
+        Ok(())
+    }
+
+    pub async fn create_subnet_route(
+        &self,
+        cidr: &str,
+        description: Option<&str>,
+    ) -> anyhow::Result<String> {
+        let body = serde_json::json!({
+            "cidr": cidr,
+            "description": description,
+        });
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Resp {
+            cidr: String,
+        }
+        let resp: Resp = self.do_post("/v1/subnet-routes", &body).await?;
+        Ok(resp.cidr)
+    }
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateTunnelResponse {
+    pub tunnel_id: String,
+    pub subdomain: String,
+    pub public_hostname: String,
+    pub protocol: String,
+    pub local_port: u16,
+    pub relay_endpoint_id: String,
+    pub relay_domain: String,
+    pub auth_token: String,
+    #[serde(default)]
+    pub redirect_rules: Vec<tuntun_common::RedirectRule>,
 }
 
 pub fn basic_metadata(hostname: &str, agent_version: &str, kind: &str) -> serde_json::Value {

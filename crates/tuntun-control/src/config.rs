@@ -19,6 +19,11 @@ pub struct Args {
     #[arg(long, env = "TUNTUN_SERVICE_SECRET")]
     pub service_secret: Option<SecretString>,
 
+    /// AES-256 key for decrypting internal-CA leaf private keys (same as management).
+    /// 64-char hex or 32-byte base64. Falls back to insecure local-dev key when unset.
+    #[arg(long, env = "TUNTUN_CA_ENCRYPTION_KEY")]
+    pub ca_encryption_key: Option<String>,
+
     /// Base64-encoded 32-byte Ed25519 policy signing key (shared across replicas).
     #[arg(long, env = "TUNTUN_POLICY_KEY")]
     pub policy_key_env: Option<String>,

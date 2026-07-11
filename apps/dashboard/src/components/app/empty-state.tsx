@@ -6,16 +6,20 @@ type EmptyStateProps = {
   icon?: ReactNode;
   title: string;
   description?: string;
+  steps?: string[];
   action?: ReactNode;
   className?: string;
+  children?: ReactNode;
 };
 
 export function EmptyState({
   icon,
   title,
   description,
+  steps,
   action,
   className,
+  children,
 }: EmptyStateProps) {
   return (
     <div
@@ -31,6 +35,19 @@ export function EmptyState({
           {description}
         </p>
       ) : null}
+      {steps && steps.length > 0 ? (
+        <ol className="text-muted-foreground mt-4 max-w-md space-y-1.5 text-left text-sm">
+          {steps.map((step, i) => (
+            <li key={step} className="flex gap-2">
+              <span className="text-foreground/70 font-mono text-xs">
+                {i + 1}.
+              </span>
+              <span>{step}</span>
+            </li>
+          ))}
+        </ol>
+      ) : null}
+      {children}
       {action ? <div className="mt-6">{action}</div> : null}
     </div>
   );

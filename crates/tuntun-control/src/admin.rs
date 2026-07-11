@@ -79,6 +79,10 @@ pub async fn serve(bind: &str, state: AdminState) -> anyhow::Result<()> {
             "/internal/v1/devices/register",
             post(register_device_handler),
         )
+        .route("/internal/v1/tunnels/open", post(open_tunnel_handler))
+        .route("/internal/v1/tunnels/stop", post(stop_tunnel_handler))
+        .route("/internal/v1/serves/start", post(start_serve_handler))
+        .route("/internal/v1/serves/stop", post(stop_serve_handler))
         .with_state(Arc::new(state));
 
     let listener = tokio::net::TcpListener::bind(bind).await?;
@@ -221,6 +225,208 @@ async fn register_device_handler(
         Ok(resp) => (StatusCode::OK, Json(resp)).into_response(),
         Err((code, msg)) => (code, msg).into_response(),
     }
+}
+
+#[derive(serde::Deserialize)]
+struct OpenTunnelPush {
+    endpoint_id: String,
+    tunnel_id: String,
+    relay_addr: String,
+    subdomain: String,
+    public_hostname: String,
+    local_port: u16,
+    protocol: String,
+    auth_token: String,
+    #[serde(default)]
+    redirect_rules: Vec<tuntun_common::RedirectRule>,
+}
+
+#[derive(serde::Deserialize)]
+struct StopTunnelPush {
+    endpoint_id: String,
+    tunnel_id: String,
+}
+
+async fn open_tunnel_handler(
+    State(state): State<Arc<AdminState>>,
+    req: Request<axum::body::Body>,
+) -> Response {
+    let method = req.method().to_string();
+    let path = req.uri().path().to_string();
+    let headers = req.headers().clone();
+    let body = match axum::body::to_bytes(req.into_body(), 1024 * 1024).await {
+        Ok(b) => b,
+        Err(_) => return StatusCode::BAD_REQUEST.into_response(),
+    };
+    if let Err(resp) = state
+        .service_auth
+        .verify(&method, &path, &headers, &body)
+        .await
+        .map_err(|e: ServiceAuthError| e.into_response())
+    {
+        return resp;
+    }
+    let parsed: OpenTunnelPush = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(_) => return (StatusCode::BAD_REQUEST, "invalid json").into_response(),
+    };
+    state
+        .ws_hub
+        .push_to(
+            &parsed.endpoint_id,
+            tuntun_common::ws::ServerMsg::OpenTunnel {
+                tunnel_id: parsed.tunnel_id,
+                relay_addr: parsed.relay_addr,
+                subdomain: parsed.subdomain,
+                public_hostname: parsed.public_hostname,
+                local_port: parsed.local_port,
+                protocol: parsed.protocol,
+                auth_token: parsed.auth_token,
+                redirect_rules: parsed.redirect_rules,
+            },
+        )
+        .await;
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response()
+}
+
+async fn stop_tunnel_handler(
+    State(state): State<Arc<AdminState>>,
+    req: Request<axum::body::Body>,
+) -> Response {
+    let method = req.method().to_string();
+    let path = req.uri().path().to_string();
+    let headers = req.headers().clone();
+    let body = match axum::body::to_bytes(req.into_body(), 1024 * 1024).await {
+        Ok(b) => b,
+        Err(_) => return StatusCode::BAD_REQUEST.into_response(),
+    };
+    if let Err(resp) = state
+        .service_auth
+        .verify(&method, &path, &headers, &body)
+        .await
+        .map_err(|e: ServiceAuthError| e.into_response())
+    {
+        return resp;
+    }
+    let parsed: StopTunnelPush = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(_) => return (StatusCode::BAD_REQUEST, "invalid json").into_response(),
+    };
+    state
+        .ws_hub
+        .push_to(
+            &parsed.endpoint_id,
+            tuntun_common::ws::ServerMsg::StopTunnel {
+                tunnel_id: parsed.tunnel_id,
+            },
+        )
+        .await;
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response()
+}
+
+#[derive(serde::Deserialize)]
+struct StartServePush {
+    endpoint_id: String,
+    serve_id: String,
+    port: u16,
+    protocol: String,
+    internal_hostname: String,
+    certificate_pem: Option<String>,
+    private_key_pem: Option<String>,
+    #[serde(default = "default_all_peers")]
+    access_mode: String,
+    #[serde(default)]
+    allowed_tags: Vec<String>,
+    #[serde(default)]
+    allowed_endpoint_ids: Vec<String>,
+}
+
+fn default_all_peers() -> String {
+    "all_peers".into()
+}
+
+#[derive(serde::Deserialize)]
+struct StopServePush {
+    endpoint_id: String,
+    serve_id: String,
+}
+
+async fn start_serve_handler(
+    State(state): State<Arc<AdminState>>,
+    req: Request<axum::body::Body>,
+) -> Response {
+    let method = req.method().to_string();
+    let path = req.uri().path().to_string();
+    let headers = req.headers().clone();
+    let body = match axum::body::to_bytes(req.into_body(), 1024 * 1024).await {
+        Ok(b) => b,
+        Err(_) => return StatusCode::BAD_REQUEST.into_response(),
+    };
+    if let Err(resp) = state
+        .service_auth
+        .verify(&method, &path, &headers, &body)
+        .await
+        .map_err(|e: ServiceAuthError| e.into_response())
+    {
+        return resp;
+    }
+    let parsed: StartServePush = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(_) => return (StatusCode::BAD_REQUEST, "invalid json").into_response(),
+    };
+    state
+        .ws_hub
+        .push_to(
+            &parsed.endpoint_id,
+            tuntun_common::ws::ServerMsg::StartServe {
+                serve_id: parsed.serve_id,
+                port: parsed.port,
+                protocol: parsed.protocol,
+                internal_hostname: parsed.internal_hostname,
+                certificate_pem: parsed.certificate_pem,
+                private_key_pem: parsed.private_key_pem,
+                access_mode: parsed.access_mode,
+                allowed_tags: parsed.allowed_tags,
+                allowed_endpoint_ids: parsed.allowed_endpoint_ids,
+            },
+        )
+        .await;
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response()
+}
+
+async fn stop_serve_handler(
+    State(state): State<Arc<AdminState>>,
+    req: Request<axum::body::Body>,
+) -> Response {
+    let method = req.method().to_string();
+    let path = req.uri().path().to_string();
+    let headers = req.headers().clone();
+    let body = match axum::body::to_bytes(req.into_body(), 1024 * 1024).await {
+        Ok(b) => b,
+        Err(_) => return StatusCode::BAD_REQUEST.into_response(),
+    };
+    if let Err(resp) = state
+        .service_auth
+        .verify(&method, &path, &headers, &body)
+        .await
+        .map_err(|e: ServiceAuthError| e.into_response())
+    {
+        return resp;
+    }
+    let parsed: StopServePush = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(_) => return (StatusCode::BAD_REQUEST, "invalid json").into_response(),
+    };
+    state
+        .ws_hub
+        .push_to(
+            &parsed.endpoint_id,
+            tuntun_common::ws::ServerMsg::StopServe {
+                serve_id: parsed.serve_id,
+            },
+        )
+        .await;
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response()
 }
 
 async fn verify_service(

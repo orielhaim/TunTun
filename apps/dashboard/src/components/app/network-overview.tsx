@@ -78,6 +78,7 @@ export function NetworkOverviewPage() {
   const [kindFilter, setKindFilter] = useState<"all" | TopologyNode["kind"]>(
     "all",
   );
+  const [heatmap, setHeatmap] = useState(false);
   const [search, setSearch] = useState("");
   const [tableStatus, setTableStatus] = useState<"all" | "online" | "offline">(
     "all",
@@ -222,6 +223,15 @@ export function NetworkOverviewPage() {
                     <SelectItem value="exit">Exits</SelectItem>
                   </SelectContent>
                 </Select>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={heatmap ? "secondary" : "outline"}
+                  className="h-8 text-xs"
+                  onClick={() => setHeatmap((v) => !v)}
+                >
+                  Heatmap
+                </Button>
               </div>
             </div>
             {topoPending ? (
@@ -232,6 +242,7 @@ export function NetworkOverviewPage() {
                 edges={topology?.edges ?? []}
                 statusFilter={statusFilter}
                 kindFilter={kindFilter}
+                heatmap={heatmap}
                 onSelect={setSelected}
                 className="rounded-none border-0"
               />

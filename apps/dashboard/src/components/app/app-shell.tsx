@@ -4,19 +4,24 @@ import { Link } from "@tanstack/react-router";
 import { NavTabs } from "@/components/app/nav-tabs";
 import { OrgSwitcher } from "@/components/app/org-switcher";
 import { UserMenu } from "@/components/app/user-menu";
+import { usePresenceStream } from "@/hooks/use-presence-stream";
+import { useActiveOrganization } from "@/lib/auth-client";
 
 type AppShellProps = {
   children: ReactNode;
 };
 
 export function AppShell({ children }: AppShellProps) {
+  const { data: activeOrg } = useActiveOrganization();
+  usePresenceStream(activeOrg?.id);
+
   return (
     <div className="bg-background min-h-screen">
       <header className="border-border/60 border-b">
         <div className="mx-auto flex h-12 max-w-[1400px] items-center justify-between gap-4 px-4 sm:px-6">
           <div className="flex min-w-0 items-center gap-4">
             <Link
-              to="/app/machines"
+              to="/app"
               className="text-foreground flex shrink-0 items-center gap-2 font-medium tracking-tight"
             >
               <span className="bg-hub flex size-6 items-center justify-center rounded-md text-[11px] font-bold text-black">

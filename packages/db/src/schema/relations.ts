@@ -8,7 +8,18 @@ import {
   session,
   user,
 } from "./auth";
-import { apiKeys, devices, networks, organizationPolicies } from "./tuntun";
+import {
+  apiKeys,
+  devices,
+  networks,
+  organizationPolicies,
+  organizationTunnelSettings,
+  relays,
+  tunnels,
+  serves,
+  organizationCas,
+  internalCertificates,
+} from "./tuntun";
 
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
@@ -17,14 +28,29 @@ export const userRelations = relations(user, ({ many }) => ({
   invitations: many(invitation),
 }));
 
-export const organizationRelations = relations(organization, ({ many }) => ({
-  members: many(member),
-  invitations: many(invitation),
-  networks: many(networks),
-  devices: many(devices),
-  organizationPolicies: many(organizationPolicies),
-  apiKeys: many(apiKeys),
-}));
+export const organizationRelations = relations(
+  organization,
+  ({ one, many }) => ({
+    members: many(member),
+    invitations: many(invitation),
+    networks: many(networks),
+    devices: many(devices),
+    organizationPolicies: many(organizationPolicies),
+    apiKeys: many(apiKeys),
+    relays: many(relays),
+    tunnels: many(tunnels),
+    serves: many(serves),
+    organizationCas: one(organizationCas, {
+      fields: [organization.id],
+      references: [organizationCas.organizationId],
+    }),
+    internalCertificates: many(internalCertificates),
+    tunnelSettings: one(organizationTunnelSettings, {
+      fields: [organization.id],
+      references: [organizationTunnelSettings.organizationId],
+    }),
+  }),
+);
 
 export const sessionRelations = relations(session, ({ one }) => ({
   user: one(user, {

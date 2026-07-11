@@ -6,6 +6,7 @@ import { schema } from "@tuntun/db";
 export const NOTIFY_CHANNEL = "tuntun:network_changed";
 export const ORG_NOTIFY_CHANNEL = "tuntun:org_changed";
 export const PRESENCE_NOTIFY_CHANNEL = "tuntun:device_presence";
+export const ENTITY_NOTIFY_CHANNEL = "tuntun:entity_changed";
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -48,6 +49,24 @@ export async function notifyOrgChanged(
   await tx.execute(
     sql`SELECT pg_notify(${ORG_NOTIFY_CHANNEL}, ${organizationId})`,
   );
+}
+
+export async function notifyEntityChanged(
+  tx: Db,
+  input: {
+    organizationId: string;
+    kind: "tunnel" | "serve" | "relay";
+    entityId: string;
+    networkId?: string | null;
+  },
+): Promise<void> {
+  const payload = JSON.stringify({
+    organizationId: input.organizationId,
+    kind: input.kind,
+    entityId: input.entityId,
+    networkId: input.networkId ?? null,
+  });
+  await tx.execute(sql`SELECT pg_notify(${ENTITY_NOTIFY_CHANNEL}, ${payload})`);
 }
 
 export async function bumpNetworkAndNotify(

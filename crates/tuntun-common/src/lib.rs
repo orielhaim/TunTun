@@ -1,5 +1,6 @@
 pub mod ipv6;
 pub mod policy;
+pub mod relay;
 pub mod signing;
 pub mod ws;
 
@@ -9,8 +10,11 @@ use uuid::Uuid;
 
 pub type EndpointIdHex = String;
 
-/// ALPN identifier for our tunnel protocol.
+/// ALPN identifier for our tunnel protocol (mesh datagrams).
 pub const TUNNEL_ALPN: &[u8] = b"tuntun/tunnel/1";
+
+/// ALPN for agent ↔ public relay reverse tunnels.
+pub const RELAY_ALPN: &[u8] = b"tuntun/relay/1";
 
 /// Header the agent sends with every authenticated request.
 pub const HDR_ENDPOINT_ID: &str = "x-endpoint-id";
@@ -143,6 +147,69 @@ pub struct Ipv6PeerEntry {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActiveServe {
+    pub id: String,
+    pub endpoint_id: EndpointIdHex,
+    pub hostname: String,
+    pub port: u16,
+    pub protocol: String,
+    pub internal_hostname: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TunnelConfig {
+    pub id: String,
+    pub local_port: u16,
+    pub protocol: String,
+    pub subdomain: String,
+    pub public_hostname: String,
+    pub relay_addr: String,
+    pub relay_auth_token: String,
+    pub status: String,
+}
+
+/// Path-based redirect on the agent (multi-port / mesh HTTPS).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RedirectRule {
+    pub path_pattern: String,
+    pub target_port: u16,
+    /// When set, agent dials this mesh IP instead of localhost.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_ipv4: Option<Ipv4Addr>,
+}
+
+/// Public TCP port mapping on the relay edge.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PortMapping {
+    pub external_port: u16,
+    pub target_port: u16,
+    /// When set, agent dials this mesh IP instead of localhost.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_ipv4: Option<Ipv4Addr>,
+}
+
+/// Match an HTTP path against a redirect pattern (`/api/*` or exact).
+pub fn path_matches(pattern: &str, path: &str) -> bool {
+    if let Some(prefix) = pattern.strip_suffix('*') {
+        path.starts_with(prefix)
+    } else {
+        path == pattern
+    }
+}
+
+/// Pick the first matching redirect rule (caller should sort by priority desc).
+pub fn match_redirect_port(rules: &[RedirectRule], path: &str) -> Option<u16> {
+    match_redirect(rules, path).map(|r| r.target_port)
+}
+
+/// Pick the first matching redirect rule with optional mesh target IP.
+pub fn match_redirect<'a>(rules: &'a [RedirectRule], path: &str) -> Option<&'a RedirectRule> {
+    rules.iter().find(|r| path_matches(&r.path_pattern, path))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetworkMembershipSnapshot {
     pub network_id: Uuid,
     pub network_name: String,
@@ -164,6 +231,12 @@ pub struct NetworkMembershipSnapshot {
     /// This device's profile (exit selection + split tunnel).
     #[serde(default)]
     pub device_profile: DeviceProfile,
+    /// Serves active in this network (discoverability for peers).
+    #[serde(default)]
+    pub active_serves: Vec<ActiveServe>,
+    /// Tunnel configs for *this* endpoint (agent opens reverse tunnels).
+    #[serde(default)]
+    pub tunnel_config: Vec<TunnelConfig>,
     pub policy: policy::PolicyBundle,
     pub gossip_bootstrap: Vec<EndpointIdHex>,
     pub gossip_topic_hex: String,
@@ -177,6 +250,9 @@ pub struct EndpointSnapshot {
     pub memberships: Vec<NetworkMembershipSnapshot>,
     pub ipv6_peers: Vec<Ipv6PeerEntry>,
     pub org_policy: policy::PolicyBundle,
+    /// Org internal CA root cert (PEM) so agents can verify peer Serve TLS.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub org_ca_pem: Option<String>,
     pub version: u64,
 }
 

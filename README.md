@@ -23,13 +23,23 @@ We should be honest about where we stand: they are ahead of us by roughly ten pe
 
 **Names that just work.** PeerDNS resolves machine names and hostname routes on the network, so you can use familiar hostnames instead of memorizing IPs.
 
+**Serve - share a port with the mesh.** Expose a local service to other machines on your network with an internal hostname and TLS from your org’s CA. Peers reach it like a LAN service; ACL can limit access to tags or specific machines.
+
+**Tunnel - share a port with the internet.** Give a local port a public HTTPS URL through a relay. Useful for demos, webhooks, and anything that needs to be reachable from outside without opening inbound firewall holes on the machine itself.
+
+**Self-hosted relays.** Register your own edge relay, point DNS at it, and terminate public tunnels on infrastructure you control. Optional Let’s Encrypt for non-wildcard domains, or bring your own certificates.
+
+**Redirects and port mapping.** Split one public hostname by path to different local (or mesh) ports, or map external TCP ports through the same tunnel.
+
+**Rich CLI.** Talk to the running agent for status, ping, DNS, routes, diagnostics, serve, and tunnel - fast commands without re-bootstrapping the node.
+
 **Exit nodes.** Send traffic for the wider internet through a chosen machine when you need a fixed egress path.
 
 **Split tunnels.** Choose what stays on the mesh and what goes out the local network, so you are not forcing every packet through the tunnel.
 
 **High availability.** Group gateways so that if one goes offline, another takes over and routes keep working.
 
-**See the network.** The dashboard shows a live map of machines and routes, with status, search, and the controls you need to manage it day to day.
+**See the network.** The dashboard covers machines, relays, tunnels, serves, access, settings (including internal CA and tunnel defaults), and a live map with peer links and public tunnel edges.
 
 ## What makes TunTun different
 
@@ -57,7 +67,7 @@ Build the Rust binaries from the repository root:
 cargo build --release
 ```
 
-The two binaries you care about are `tuntun-control` (coordination server) and `tuntun-agent` (runs on each machine).
+The binaries you care about are `tuntun-control` (coordination server), `tuntun` / `tuntun-agent` (runs on each machine; CLI talks to the agent), and `tuntun-relay` (optional public edge for tunnels).
 
 ### Running the control stack
 
@@ -92,7 +102,7 @@ bun run dev:management
 bun run dev:dash
 ```
 
-Open the dashboard, create an account and organization, and you will get a default network. From the Machines page you can generate an enrollment token. On each network you can manage machines, routes, access policies, enrollment, and the live mesh map.
+Open the dashboard, create an account and organization, and you will get a default network. From the Machines page you can generate an enrollment token. From there you can manage machines, relays, tunnels, serves, routes, access policies, enrollment, settings, and the live mesh map.
 
 ## Adding a machine
 
@@ -125,7 +135,7 @@ After enrollment, start the tunnel:
 sudo tuntun-agent run
 ```
 
-This creates the virtual interface (default name `tuntun0`), connects to peers, and keeps routing updated. Ordinary traffic to other machines on the network goes through the tunnel automatically. Subnet and hostname routes, PeerDNS, exit nodes, and split-tunnel preferences are applied from the control plane as you configure them in the dashboard.
+This creates the virtual interface (default name `tuntun0`), connects to peers, and keeps routing updated. Ordinary traffic to other machines on the network goes through the tunnel automatically. Subnet and hostname routes, PeerDNS, exit nodes, split-tunnel preferences, serves, and tunnels are applied from the control plane as you configure them in the dashboard or CLI.
 
 Useful options:
 
@@ -133,6 +143,17 @@ Useful options:
 - `--poll-secs 30` - how often to check for routing changes
 
 Set `RUST_LOG=debug` if something is not connecting and you want more detail in the logs.
+
+### Serve and tunnel (CLI)
+
+With the agent running, you can expose a port on the mesh or to the public internet:
+
+```bash
+tuntun serve 3000
+tuntun tunnel 3000
+```
+
+Serve stays inside the private network. Tunnel goes through a registered relay and returns a public URL. Both can also be created from the dashboard on a machine’s detail page.
 
 ### Check that it works
 

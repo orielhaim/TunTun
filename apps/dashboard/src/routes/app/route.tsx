@@ -21,7 +21,7 @@ export const Route = createFileRoute("/app")({
     }
 
     if (!result.needsOnboarding && location.pathname === "/app/onboarding") {
-      throw redirect({ to: "/app/machines" });
+      throw redirect({ to: "/app" });
     }
   },
   component: AppLayout,

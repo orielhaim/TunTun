@@ -64,6 +64,23 @@ impl ConnPool {
     pub async fn drop_peer(&self, peer: EndpointId) {
         self.entries.retain(|(p, _), _| *p != peer);
     }
+
+    /// True if we currently hold a live cached connection to this peer.
+    pub fn has_live(&self, peer: EndpointId) -> bool {
+        self.entries.iter().any(|e| {
+            let (p, _) = e.key();
+            if *p != peer {
+                return false;
+            }
+            // Best-effort: slot exists. Exact liveness needs async lock; treat
+            // presence of a cache slot as "recently contacted".
+            true
+        })
+    }
+
+    pub fn has_any_live(&self) -> bool {
+        !self.entries.is_empty()
+    }
 }
 
 pub fn send_datagram(conn: &Connection, packet: Bytes) -> anyhow::Result<()> {

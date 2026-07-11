@@ -11,11 +11,13 @@ use crate::control::{SignedClient, basic_metadata};
 use crate::identity::AgentIdentity;
 use crate::iroh_pool::ConnPool;
 use crate::routing::RoutingTable;
+use crate::serve::ServeManager;
 use crate::state::{PersistedState, StatePaths, load_snapshot_cache, save_snapshot_cache};
 use crate::stream::TUNNEL_STREAM_ALPN;
 use crate::sync::{
     apply_membership, membership_for_network, spawn_poll_fallback, spawn_ws_processor,
 };
+use crate::tunnel::TunnelManager;
 
 #[derive(Clone)]
 pub struct CoreNodeConfig {
@@ -49,6 +51,8 @@ pub struct CoreNode {
     pub version: Arc<ArcSwap<u64>>,
     pub self_ipv4: std::net::Ipv4Addr,
     pub paths: StatePaths,
+    pub serves: ServeManager,
+    pub tunnels: TunnelManager,
 }
 
 impl CoreNode {
@@ -122,12 +126,17 @@ impl CoreNode {
             &my_id_hex,
         );
 
+        let serves = ServeManager::new(membership.assigned_ipv4, routes.clone());
+        let pool = ConnPool::new(endpoint.clone(), TUNNEL_STREAM_ALPN);
+        let tunnels = TunnelManager::new(pool.clone());
+
         // Sync loops.
         let ws = crate::ws_client::spawn(
             persisted.control_url.clone(),
             my_id_hex.clone(),
             identity.signing_key.clone(),
         );
+        serves.set_client_tx(ws.tx.clone());
         spawn_ws_processor(
             ws,
             routes.clone(),
@@ -137,6 +146,8 @@ impl CoreNode {
             persisted.network_id,
             my_id_hex.clone(),
             cfg.agent_version,
+            Some(serves.clone()),
+            Some(tunnels.clone()),
         );
         spawn_poll_fallback(
             signed,
@@ -148,8 +159,6 @@ impl CoreNode {
             my_id_hex.clone(),
         );
 
-        let pool = ConnPool::new(endpoint.clone(), TUNNEL_STREAM_ALPN);
-
         Ok(Self {
             identity,
             persisted,
@@ -160,6 +169,8 @@ impl CoreNode {
             version,
             self_ipv4: membership.assigned_ipv4,
             paths,
+            serves,
+            tunnels,
         })
     }
 

@@ -24,9 +24,16 @@ pub fn spawn(endpoint: iroh::Endpoint, routes: RoutingTable) {
 }
 
 async fn handle_accepted(accepted: AcceptedStream, routes: &RoutingTable) {
-    let host = accepted.header.host;
+    let host = accepted.header.host.clone();
     let port = accepted.header.dst_port;
     let peer_hex = accepted.peer_hex;
+
+    if host == tuntun_core::ping::PING_HOST {
+        let _ =
+            tuntun_core::ping::handle_inbound_ping(&accepted.header, accepted.send, accepted.recv)
+                .await;
+        return;
+    }
 
     let connect_host = if let Ok(ip) = host.parse::<std::net::Ipv4Addr>() {
         if !routes.is_advertised_destination(&ip) {

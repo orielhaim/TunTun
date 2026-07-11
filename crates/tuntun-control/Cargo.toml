@@ -49,3 +49,4 @@ ipnet.workspace = true
 ipnetwork.workspace = true
 
 prometheus.workspace = true
+aes-gcm = "0.10"

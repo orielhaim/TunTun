@@ -7,7 +7,10 @@ import { getAuth } from "./middleware/authz";
 import { requireAuth } from "./middleware/authz";
 import { notFound, sessionPlugin } from "./middleware/session";
 import { db } from "../../lib/db";
-import { PRESENCE_NOTIFY_CHANNEL } from "../../lib/notify";
+import {
+  PRESENCE_NOTIFY_CHANNEL,
+  ENTITY_NOTIFY_CHANNEL,
+} from "../../lib/notify";
 import {
   serializePresenceEvent,
   serializePresencePatch,
@@ -71,6 +74,35 @@ export const presenceRoutes = new Elysia()
                       ...row,
                       networkId,
                     }),
+                  });
+                } catch {
+                  // ignore malformed payloads
+                }
+              },
+            );
+
+            await listenClient.listen(
+              ENTITY_NOTIFY_CHANNEL,
+              (payload: string) => {
+                try {
+                  const parsed = JSON.parse(payload) as {
+                    organizationId?: string;
+                    kind?: string;
+                    entityId?: string;
+                    networkId?: string | null;
+                  };
+                  if (
+                    parsed.organizationId !== orgId ||
+                    !parsed.kind ||
+                    !parsed.entityId
+                  ) {
+                    return;
+                  }
+                  send({
+                    type: "entity",
+                    kind: parsed.kind,
+                    entityId: parsed.entityId,
+                    networkId: parsed.networkId ?? null,
                   });
                 } catch {
                   // ignore malformed payloads

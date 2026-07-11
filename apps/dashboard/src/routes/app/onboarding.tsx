@@ -16,7 +16,7 @@ function OnboardingPage() {
         onOpenChange={() => {}}
         showCloseButton={false}
         onCreated={() => {
-          void navigate({ to: "/app/machines" });
+          void navigate({ to: "/app" });
         }}
       />
     </div>

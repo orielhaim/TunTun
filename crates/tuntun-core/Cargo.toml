@@ -35,5 +35,9 @@ hickory-proto.workspace = true
 iroh.workspace = true
 iroh-gossip.workspace = true
 
+rustls.workspace = true
+tokio-rustls.workspace = true
+rustls-pemfile.workspace = true
+
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@elysiajs/cors": "^1.4.2",
+    "@peculiar/x509": "^2.0.0",
     "@tuntun/api": "workspace:*",
     "@tuntun/db": "workspace:*",
     "@tuntun/ip": "workspace:*",
@@ -18,6 +19,7 @@
     "elysia": "^1.4.29",
     "hash-wasm": "^4.12.0",
     "ky": "^2.0.2",
+    "reflect-metadata": "^0.2.2",
     "zod": "^4.4.3"
   }
 }

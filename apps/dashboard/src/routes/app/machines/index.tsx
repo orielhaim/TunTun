@@ -7,6 +7,8 @@ import { toast } from "sonner";
 
 import { AddMachinePanel } from "@/components/app/add-machine-panel";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
+import { CreateServeDialog } from "@/components/app/create-serve-dialog";
+import { CreateTunnelDialog } from "@/components/app/create-tunnel-dialog";
 import { DataTable } from "@/components/app/data-table";
 import { EmptyState } from "@/components/app/empty-state";
 import { EnrollmentTokenDialog } from "@/components/app/enrollment-token-dialog";
@@ -24,6 +26,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   seedPresenceCache,
@@ -32,8 +41,14 @@ import {
 import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
 import { useActiveOrganization } from "@/lib/auth-client";
 import type { AggregatedMachine } from "@/lib/machine-utils";
+import { getMachinePresence } from "@/lib/machine-utils";
 import { formatNetworkName } from "@/lib/network-utils";
-import { useDeviceMutations, useMachines } from "@/lib/queries/management";
+import {
+  useDeviceMutations,
+  useMachines,
+  useServes,
+  useTunnels,
+} from "@/lib/queries/management";
 import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/app/machines/")({
@@ -47,6 +62,8 @@ function MachinesPage() {
   const { data: role } = useMemberRole(orgId);
   const isAdmin = isAdminRole(role);
   const { data: machines, isPending } = useMachines(orgId);
+  const { data: tunnels } = useTunnels(orgId);
+  const { data: serves } = useServes(orgId);
   const deviceMutations = useDeviceMutations(orgId);
   usePresenceStream(orgId);
 
@@ -56,7 +73,17 @@ function MachinesPage() {
     }
   }, [orgId, machines, queryClient]);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "online" | "offline"
+  >("all");
   const [enrollOpen, setEnrollOpen] = useState(false);
+  const [tunnelOpen, setTunnelOpen] = useState(false);
+  const [serveOpen, setServeOpen] = useState(false);
+  const [actionEndpointId, setActionEndpointId] = useState<
+    string | undefined
+  >();
+  const [actionNetworkId, setActionNetworkId] = useState<string | undefined>();
+  const [actionHostname, setActionHostname] = useState<string | undefined>();
   const [confirmRemove, setConfirmRemove] = useState<{
     networkId: string;
     endpointId: string;
@@ -65,10 +92,36 @@ function MachinesPage() {
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [confirmBulkRemove, setConfirmBulkRemove] = useState(false);
 
+  const tunnelCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of tunnels ?? []) {
+      map.set(t.endpointId, (map.get(t.endpointId) ?? 0) + 1);
+    }
+    return map;
+  }, [tunnels]);
+
+  const serveCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const s of serves ?? []) {
+      map.set(s.endpointId, (map.get(s.endpointId) ?? 0) + 1);
+    }
+    return map;
+  }, [serves]);
+
   const filtered = useMemo(() => {
+    const now = Date.now();
+    let list = machines ?? [];
+    if (statusFilter !== "all") {
+      list = list.filter((m) => {
+        const presence = getMachinePresence(m, now);
+        return statusFilter === "online"
+          ? presence === "online"
+          : presence !== "online";
+      });
+    }
     const q = search.trim().toLowerCase();
-    if (!q || !machines) return machines ?? [];
-    return machines.filter(
+    if (!q) return list;
+    return list.filter(
       (m) =>
         m.hostname.toLowerCase().includes(q) ||
         m.networkName.toLowerCase().includes(q) ||
@@ -76,7 +129,7 @@ function MachinesPage() {
         (m.tenantIpv6?.includes(q) ?? false) ||
         (m.os?.toLowerCase().includes(q) ?? false),
     );
-  }, [machines, search]);
+  }, [machines, search, statusFilter]);
 
   const selectedMachines = useMemo(() => {
     if (!filtered.length) return [];
@@ -146,6 +199,24 @@ function MachinesPage() {
         ),
       },
       {
+        id: "tunnels",
+        header: "Tunnels",
+        cell: ({ row }) => (
+          <span className="tabular-nums">
+            {tunnelCounts.get(row.original.endpointId) ?? 0}
+          </span>
+        ),
+      },
+      {
+        id: "serves",
+        header: "Serves",
+        cell: ({ row }) => (
+          <span className="tabular-nums">
+            {serveCounts.get(row.original.endpointId) ?? 0}
+          </span>
+        ),
+      },
+      {
         id: "status",
         header: "Status",
         cell: ({ row }) => <StatusBadge orgId={orgId} device={row.original} />,
@@ -184,6 +255,26 @@ function MachinesPage() {
                   </DropdownMenuItem>
                   {isAdmin ? (
                     <>
+                      <DropdownMenuItem
+                        onClick={() => {
+                          setActionEndpointId(machine.endpointId);
+                          setActionNetworkId(machine.networkId);
+                          setActionHostname(machine.hostname);
+                          setTunnelOpen(true);
+                        }}
+                      >
+                        Create tunnel
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => {
+                          setActionEndpointId(machine.endpointId);
+                          setActionNetworkId(machine.networkId);
+                          setActionHostname(machine.hostname);
+                          setServeOpen(true);
+                        }}
+                      >
+                        Create serve
+                      </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() =>
                           void deviceMutations.updateMembership
@@ -228,7 +319,13 @@ function MachinesPage() {
         },
       },
     ],
-    [deviceMutations.updateMembership, isAdmin, orgId],
+    [
+      deviceMutations.updateMembership,
+      isAdmin,
+      orgId,
+      serveCounts,
+      tunnelCounts,
+    ],
   );
 
   return (
@@ -255,6 +352,23 @@ function MachinesPage() {
         searchPlaceholder="Search by name, network, IP, OS..."
         count={filtered.length}
         countLabel={filtered.length === 1 ? "machine" : "machines"}
+        filters={
+          <Select
+            value={statusFilter}
+            onValueChange={(value) =>
+              setStatusFilter((value as "all" | "online" | "offline") ?? "all")
+            }
+          >
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="online">Online</SelectItem>
+              <SelectItem value="offline">Offline</SelectItem>
+            </SelectContent>
+          </Select>
+        }
         actions={
           isAdmin && selectedMachines.length > 0 ? (
             <Button
@@ -297,11 +411,29 @@ function MachinesPage() {
       ) : null}
 
       {orgId ? (
-        <EnrollmentTokenDialog
-          orgId={orgId}
-          open={enrollOpen}
-          onOpenChange={setEnrollOpen}
-        />
+        <>
+          <EnrollmentTokenDialog
+            orgId={orgId}
+            open={enrollOpen}
+            onOpenChange={setEnrollOpen}
+          />
+          <CreateTunnelDialog
+            orgId={orgId}
+            open={tunnelOpen}
+            onOpenChange={setTunnelOpen}
+            defaultEndpointId={actionEndpointId}
+            defaultNetworkId={actionNetworkId}
+            defaultHostname={actionHostname}
+          />
+          <CreateServeDialog
+            orgId={orgId}
+            open={serveOpen}
+            onOpenChange={setServeOpen}
+            defaultEndpointId={actionEndpointId}
+            defaultNetworkId={actionNetworkId}
+            defaultHostname={actionHostname}
+          />
+        </>
       ) : null}
 
       <ConfirmDialog

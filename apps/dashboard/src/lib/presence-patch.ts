@@ -53,6 +53,11 @@ export function mergePresence<T extends Pick<Device, "status">>(
   device: T,
   patch: PresencePatch | undefined,
 ): T & PresencePatch {
-  if (!patch) return { ...device, ...pickPresenceFields(device as Device) };
+  if (!patch) {
+    return {
+      ...device,
+      ...pickPresenceFields(device as unknown as Device),
+    };
+  }
   return { ...device, ...patch };
 }

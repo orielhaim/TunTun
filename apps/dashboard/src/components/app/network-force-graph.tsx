@@ -27,6 +27,7 @@ const KIND_COLOR: Record<GraphKind, string> = {
   subnet: "#34d399",
   hostname: "#38bdf8",
   exit: "#fbbf24",
+  relay: "#ef4444",
 };
 
 const EDGE_COLOR: Record<TopologyEdge["kind"] | "hub", string> = {
@@ -35,10 +36,12 @@ const EDGE_COLOR: Record<TopologyEdge["kind"] | "hub", string> = {
   subnet: "#34d39988",
   hostname: "#38bdf888",
   exit: "#fbbf2488",
+  tunnel: "rgba(239, 68, 68, 0.85)",
 };
 
 function nodeRadius(node: GraphNode): number {
   if (node.kind === "hub") return 14;
+  if (node.kind === "relay") return 9;
   if (node.kind === "machine") return node.online ? 7 : 5;
   if (node.kind === "exit") return 8;
   return 6;
@@ -62,6 +65,7 @@ export function NetworkForceGraph({
   showHub = true,
   statusFilter = "all",
   kindFilter = "all",
+  heatmap = false,
 }: {
   nodes: TopologyNode[];
   edges: TopologyEdge[];
@@ -71,6 +75,8 @@ export function NetworkForceGraph({
   showHub?: boolean;
   statusFilter?: "all" | "online" | "offline";
   kindFilter?: "all" | TopologyNode["kind"];
+  /** When true, edge thickness scales more strongly with intensity. */
+  heatmap?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const fgRef = useRef<ForceGraphMethods<GraphNode, GraphLink> | undefined>(
@@ -121,16 +127,18 @@ export function NetworkForceGraph({
           ? n.online
             ? 1.4
             : 0.8
-          : n.kind === "exit"
-            ? 1.6
-            : 1,
+          : n.kind === "relay"
+            ? 1.8
+            : n.kind === "exit"
+              ? 1.6
+              : 1,
     }));
 
     const gLinks: GraphLink[] = edges
       .filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target))
       .map((e) => ({
         ...e,
-        curvature: e.kind === "peer" ? 0.12 : 0.05,
+        curvature: e.kind === "peer" ? 0.12 : e.kind === "tunnel" ? 0.2 : 0.05,
       }));
 
     if (showHub) {
@@ -223,6 +231,13 @@ export function NetworkForceGraph({
           else ctx.lineTo(px, py);
         }
         ctx.closePath();
+      } else if (node.kind === "relay") {
+        // Rounded diamond for relays
+        ctx.moveTo(x, y - r);
+        ctx.lineTo(x + r * 0.85, y);
+        ctx.lineTo(x, y + r);
+        ctx.lineTo(x - r * 0.85, y);
+        ctx.closePath();
       } else {
         ctx.arc(x, y, r, 0, Math.PI * 2);
       }
@@ -247,13 +262,69 @@ export function NetworkForceGraph({
         ctx.fill();
       }
 
-      const label = node.label;
+      const label =
+        node.kind === "machine"
+          ? [
+              node.label,
+              node.tunnelCount || node.serveCount
+                ? [
+                    node.tunnelCount ? `t${node.tunnelCount}` : null,
+                    node.serveCount ? `s${node.serveCount}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")
+          : node.kind === "relay" && node.publicHostname
+            ? `${node.label}`
+            : node.label;
       const fontSize = Math.max(10 / globalScale, 3.2);
       ctx.font = `${fontSize}px Geist Variable, ui-sans-serif, system-ui`;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       ctx.fillStyle = "rgba(226, 232, 240, 0.85)";
       ctx.fillText(label, x, y + r + 2.5);
+
+      if (node.kind === "machine" && (node.serveCount ?? 0) > 0) {
+        const tip = `${node.serveCount} serve${node.serveCount === 1 ? "" : "s"}`;
+        const tipSize = Math.max(8 / globalScale, 2.6);
+        ctx.font = `${tipSize}px Geist Variable, ui-sans-serif`;
+        ctx.fillStyle = "rgba(148, 163, 184, 0.75)";
+        ctx.fillText(tip, x, y + r + 2.5 + fontSize + 1);
+      }
+    },
+    [],
+  );
+
+  const paintLink = useCallback(
+    (link: GraphLink, ctx: CanvasRenderingContext2D, globalScale: number) => {
+      if (link.kind !== "tunnel") return;
+      const source = link.source as GraphNode | string | number | undefined;
+      const target = link.target as GraphNode | string | number | undefined;
+      if (
+        typeof source !== "object" ||
+        source == null ||
+        typeof target !== "object" ||
+        target == null
+      ) {
+        return;
+      }
+      const hostname =
+        (source as GraphNode).publicHostname ??
+        (target as GraphNode).publicHostname;
+      if (!hostname) return;
+      const x =
+        (((source as GraphNode).x ?? 0) + ((target as GraphNode).x ?? 0)) / 2;
+      const y =
+        (((source as GraphNode).y ?? 0) + ((target as GraphNode).y ?? 0)) / 2;
+      const fontSize = Math.max(8 / globalScale, 2.4);
+      ctx.font = `${fontSize}px Geist Mono Variable, ui-monospace, monospace`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "rgba(252, 165, 165, 0.85)";
+      ctx.fillText(hostname, x, y - 4);
     },
     [],
   );
@@ -267,13 +338,27 @@ export function NetworkForceGraph({
     return EDGE_COLOR[link.kind];
   }, []);
 
-  const linkWidth = useCallback((link: GraphLink) => {
-    if (linkSourceId(link).startsWith("hub:")) return 0.8;
-    return 0.6 + (link.intensity ?? 0.35) * 1.8;
+  const linkWidth = useCallback(
+    (link: GraphLink) => {
+      if (linkSourceId(link).startsWith("hub:")) return 0.8;
+      const intensity = link.intensity ?? 0.35;
+      if (heatmap) {
+        return 0.5 + intensity * 4.5;
+      }
+      if (link.kind === "tunnel") return 1.4;
+      return 0.6 + intensity * 1.8;
+    },
+    [heatmap],
+  );
+
+  const linkLineDash = useCallback((link: GraphLink) => {
+    if (link.kind === "tunnel") return [4, 3];
+    return null;
   }, []);
 
   const linkParticles = useCallback((link: GraphLink) => {
     if (linkSourceId(link).startsWith("hub:")) return 2;
+    if (link.kind === "tunnel") return 3;
     if (link.kind !== "peer")
       return Math.round(1 + (link.intensity ?? 0.3) * 2);
     return Math.max(1, Math.round((link.intensity ?? 0.35) * 6));
@@ -302,6 +387,8 @@ export function NetworkForceGraph({
         linkSource="source"
         linkTarget="target"
         nodeCanvasObject={paintNode}
+        linkCanvasObjectMode={() => "after"}
+        linkCanvasObject={paintLink}
         nodePointerAreaPaint={(node, color, ctx) => {
           const r = nodeRadius(node as GraphNode) + 4;
           ctx.beginPath();
@@ -311,6 +398,7 @@ export function NetworkForceGraph({
         }}
         linkColor={linkColor}
         linkWidth={linkWidth}
+        linkLineDash={linkLineDash}
         linkCurvature="curvature"
         linkDirectionalParticles={linkParticles}
         linkDirectionalParticleSpeed={linkParticleSpeed}

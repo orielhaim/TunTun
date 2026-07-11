@@ -1,10 +1,12 @@
 mod admin;
 mod audit;
 mod auth;
+mod ca_crypto;
 mod config;
 mod db;
 mod device_metadata;
 mod enrollment;
+mod entity_notify;
 mod ha;
 mod http;
 mod ip_alloc;
@@ -14,11 +16,13 @@ mod pg_inet;
 mod pg_notify;
 mod policy_store;
 mod presence;
+mod reconnect;
 mod register;
 mod service_auth;
 mod signing_key;
 mod snapshot;
 mod state;
+mod tunnels;
 mod ws_hub;
 
 use std::sync::Arc;
@@ -89,6 +93,17 @@ async fn main() -> anyhow::Result<()> {
             ticker.tick().await;
             if let Err(e) = presence::sweep_stale_connections(&presence_state.pool).await {
                 tracing::warn!(?e, "sweep_stale_connections failed");
+            }
+        }
+    });
+
+    let ttl_state = state.clone();
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(std::time::Duration::from_secs(30));
+        loop {
+            ticker.tick().await;
+            if let Err(e) = tunnels::expire_tunnels(&ttl_state).await {
+                tracing::warn!(?e, "expire_tunnels failed");
             }
         }
     });
