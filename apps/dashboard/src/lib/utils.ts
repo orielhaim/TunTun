@@ -1,1 +1,1 @@
-export { cn, type ClassValue } from "cnfast";
+export { type ClassValue, cn } from "cnfast";

@@ -1,6 +1,5 @@
-import { z } from "zod";
-
 import { ipv4CidrSchema } from "@tuntun/ip";
+import { z } from "zod";
 
 const networkNameSchema = z
   .string()

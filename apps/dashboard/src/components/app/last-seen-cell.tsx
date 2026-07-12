@@ -1,9 +1,8 @@
+import type { Device } from "@tuntun/api/management";
 import { memo } from "react";
-
 import { useLivePresence } from "@/hooks/use-live-presence";
 import { formatLastSeenLabel, getMachinePresence } from "@/lib/machine-utils";
 import { usePresenceClock } from "@/lib/presence-clock";
-import type { Device } from "@tuntun/api/management";
 import { cn } from "@/lib/utils";
 
 export const LastSeenCell = memo(function LastSeenCell({

@@ -21,6 +21,7 @@ pub async fn replay_endpoint_workloads(state: &SharedState, endpoint_id: &str) {
     }
 }
 
+#[allow(clippy::type_complexity)]
 async fn replay_tunnels(pool: &PgPool, hub: &WsHub, endpoint_id: &str) -> anyhow::Result<()> {
     let rows: Vec<(
         Uuid,
@@ -129,6 +130,7 @@ async fn load_redirect_rules(pool: &PgPool, tunnel_id: Uuid) -> Vec<tuntun_commo
         .collect()
 }
 
+#[allow(clippy::type_complexity)]
 async fn replay_serves(
     pool: &PgPool,
     hub: &WsHub,

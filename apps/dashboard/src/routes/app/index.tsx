@@ -1,10 +1,9 @@
-import { Link } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { CopyIcon, ExternalLinkIcon } from "lucide-react";
 import { useMemo } from "react";
 import { toast } from "sonner";
-
-import { EntityStatus } from "@/components/app/entity-status";
 import { EmptyState } from "@/components/app/empty-state";
+import { EntityStatus } from "@/components/app/entity-status";
 import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,7 +19,6 @@ import {
   useTunnels,
 } from "@/lib/queries/management";
 import { cn } from "@/lib/utils";
-import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/app/")({
   component: OverviewPage,
@@ -354,7 +352,8 @@ function OverviewPage() {
               <div className="absolute top-[38%] left-[42%] size-2.5 rounded-full bg-emerald-400/80" />
               <div className="absolute top-[58%] left-[58%] size-2 rounded-full bg-slate-400/60" />
               <div className="absolute top-1/2 right-[22%] size-3 -translate-y-1/2 rotate-45 bg-red-400/70" />
-              <svg className="absolute inset-0 size-full" aria-hidden>
+              <svg className="absolute inset-0 size-full" aria-hidden="true">
+                <title>Network mesh preview</title>
                 <line
                   x1="20%"
                   y1="50%"

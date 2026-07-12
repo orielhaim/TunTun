@@ -1,10 +1,9 @@
+import type { Device } from "@tuntun/api/management";
 import { memo } from "react";
-
 import { Badge } from "@/components/ui/badge";
 import { useLivePresence } from "@/hooks/use-live-presence";
 import { getMachinePresence, type MachinePresence } from "@/lib/machine-utils";
 import { usePresenceClock } from "@/lib/presence-clock";
-import type { Device } from "@tuntun/api/management";
 import { cn } from "@/lib/utils";
 
 const labels: Record<MachinePresence, string> = {

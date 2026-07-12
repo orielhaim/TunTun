@@ -1,0 +1,263 @@
+name: SDK
+
+env:
+  DEBUG: napi:*
+  APP_NAME: tuntun-node
+  MACOSX_DEPLOYMENT_TARGET: "10.13"
+  CARGO_INCREMENTAL: "1"
+
+on:
+  push:
+    branches:
+      - main
+    tags-ignore:
+      - "**"
+    paths:
+      - ".github/workflows/sdk.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/tuntun-common/**"
+      - "crates/tuntun-core/**"
+      - "crates/tuntun-node-napi/**"
+      - "packages/core/**"
+      - "package.json"
+      - "bun.lock"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: crates/tuntun-node-napi
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.96"
+          components: clippy, rustfmt
+
+      - name: Install dependencies
+        working-directory: .
+        run: bun install --frozen-lockfile
+
+      - name: Biome check
+        working-directory: .
+        run: bun run check
+
+      - name: Cargo fmt
+        working-directory: .
+        run: cargo fmt -- --check
+
+      - name: Clippy
+        working-directory: .
+        run: cargo clippy -p tuntun-node-napi --no-deps -- -D warnings
+
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          - host: macos-latest
+            target: x86_64-apple-darwin
+            build: bun run build -- --target x86_64-apple-darwin
+          - host: macos-latest
+            target: aarch64-apple-darwin
+            build: bun run build -- --target aarch64-apple-darwin
+          - host: windows-latest
+            target: x86_64-pc-windows-msvc
+            build: bun run build -- --target x86_64-pc-windows-msvc
+          - host: windows-latest
+            target: aarch64-pc-windows-msvc
+            build: bun run build -- --target aarch64-pc-windows-msvc
+          - host: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            build: bun run build -- --target x86_64-unknown-linux-gnu --use-napi-cross
+          - host: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            build: bun run build -- --target aarch64-unknown-linux-gnu --use-napi-cross
+          - host: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            build: bun run build -- --target x86_64-unknown-linux-musl -x
+          - host: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            build: bun run build -- --target aarch64-unknown-linux-musl -x
+    name: build - ${{ matrix.settings.target }}
+    runs-on: ${{ matrix.settings.host }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.96"
+          targets: ${{ matrix.settings.target }}
+
+      - name: Cache cargo
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ~/.napi-rs
+            .cargo-cache
+            target/
+          key: ${{ matrix.settings.target }}-cargo-${{ matrix.settings.host }}
+
+      - uses: mlugg/setup-zig@v2
+        if: ${{ contains(matrix.settings.target, 'musl') }}
+        with:
+          version: 0.14.1
+
+      - name: Install cargo-zigbuild
+        uses: taiki-e/install-action@v2
+        if: ${{ contains(matrix.settings.target, 'musl') }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          tool: cargo-zigbuild
+
+      - name: Install dependencies
+        working-directory: .
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: ${{ matrix.settings.build }}
+        shell: bash
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: bindings-${{ matrix.settings.target }}
+          path: crates/tuntun-node-napi/${{ env.APP_NAME }}.*.node
+          if-no-files-found: error
+
+  test:
+    name: Test ${{ matrix.settings.target }}
+    needs:
+      - build
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          - host: windows-latest
+            target: x86_64-pc-windows-msvc
+          - host: macos-latest
+            target: aarch64-apple-darwin
+          - host: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+    runs-on: ${{ matrix.settings.host }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        working-directory: .
+        run: bun install --frozen-lockfile
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: bindings-${{ matrix.settings.target }}
+          path: crates/tuntun-node-napi
+
+      - name: Test SDK
+        working-directory: .
+        run: bun --filter @tuntun/core test
+
+  publish:
+    name: Publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    needs:
+      - lint
+      - test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        working-directory: .
+        run: bun install --frozen-lockfile
+
+      - name: Resolve release channel
+        id: release
+        working-directory: .
+        shell: bash
+        run: |
+          set -euo pipefail
+          commit_message="$(git log -1 --pretty=%B)"
+          if printf '%s' "$commit_message" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "channel=latest" >> "$GITHUB_OUTPUT"
+          elif printf '%s' "$commit_message" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+'; then
+            echo "channel=next" >> "$GITHUB_OUTPUT"
+          else
+            echo "channel=skip" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create npm dirs
+        if: steps.release.outputs.channel != 'skip'
+        run: bun run create-npm-dirs
+
+      - name: Download all artifacts
+        if: steps.release.outputs.channel != 'skip'
+        uses: actions/download-artifact@v8
+        with:
+          path: crates/tuntun-node-napi/artifacts
+
+      - name: Move artifacts
+        if: steps.release.outputs.channel != 'skip'
+        run: bun run artifacts
+
+      - name: List native packages
+        if: steps.release.outputs.channel != 'skip'
+        run: ls -R ./npm
+        shell: bash
+
+      - name: Publish @tuntundev/sdk
+        if: steps.release.outputs.channel != 'skip'
+        run: |
+          if [ "${{ steps.release.outputs.channel }}" = "latest" ]; then
+            npm publish --access public --provenance
+          else
+            npm publish --tag next --access public --provenance
+          fi
+
+      - name: Skip publish
+        if: steps.release.outputs.channel == 'skip'
+        run: echo "Not a release commit, skipping publish"

@@ -1,5 +1,5 @@
 {
-  "name": "@tuntun/core-native",
+  "name": "@tuntundev/sdk",
   "version": "0.3.0",
   "main": "../index.js",
   "types": "../index.d.ts",

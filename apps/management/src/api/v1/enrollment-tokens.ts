@@ -1,17 +1,14 @@
-import { createEnrollmentTokenBody } from "@tuntun/api/management";
 import { randomBytes } from "node:crypto";
+import { createEnrollmentTokenBody } from "@tuntun/api/management";
+import { schema } from "@tuntun/db";
 import { and, eq, isNull } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { blake3 } from "hash-wasm";
-
-import { schema } from "@tuntun/db";
-
-import { getAuth } from "./middleware/authz";
-import { requireAdmin, requireAuth } from "./middleware/authz";
-import { notFound, sessionPlugin } from "./middleware/session";
 import { writeAudit } from "../../lib/audit";
 import { db } from "../../lib/db";
 import { toIso } from "../../lib/serialize";
+import { getAuth, requireAdmin, requireAuth } from "./middleware/authz";
+import { notFound, sessionPlugin } from "./middleware/session";
 
 function serializeToken(row: typeof schema.enrollmentTokens.$inferSelect) {
   return {

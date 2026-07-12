@@ -1,0 +1,22 @@
+{
+  "name": "@tuntundev/sdk-darwin-x64",
+  "version": "0.3.0",
+  "cpu": [
+    "x64"
+  ],
+  "main": "tuntun-node.darwin-x64.node",
+  "files": [
+    "tuntun-node.darwin-x64.node"
+  ],
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">= 18"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
+  "os": [
+    "darwin"
+  ]
+}

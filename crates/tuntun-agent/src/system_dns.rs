@@ -15,7 +15,7 @@ pub fn configure(dns_ip: Ipv4Addr, suffix: &str) -> anyhow::Result<DnsGuard> {
     }
     #[cfg(target_os = "windows")]
     {
-        return windows::configure(dns_ip, suffix);
+        windows::configure(dns_ip, suffix)
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
     {

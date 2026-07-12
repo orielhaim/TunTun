@@ -1,11 +1,13 @@
+import type { RegisterDeviceResponse } from "@tuntun/api/internal";
 import { registerSdkNodeBody, SDK_ENROLL_SCOPE } from "@tuntun/api/management";
 import { schema } from "@tuntun/db";
 import { formatIpv4Cidr } from "@tuntun/ip";
 import { and, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
-
 import { canAccessNetwork } from "../../lib/api-key-auth";
-
+import { writeAudit } from "../../lib/audit";
+import { registerDevice } from "../../lib/control-plane-client";
+import { db } from "../../lib/db";
 import {
   apiKeyAuthPlugin,
   getApiKeyAuth,
@@ -13,9 +15,6 @@ import {
   requireApiKeyScope,
 } from "./middleware/api-key-auth";
 import { badRequest, forbidden, notFound } from "./middleware/session";
-import { registerDevice } from "../../lib/control-plane-client";
-import { db } from "../../lib/db";
-import { writeAudit } from "../../lib/audit";
 
 export const sdkNodesRoutes = new Elysia()
   .use(apiKeyAuthPlugin)
@@ -62,7 +61,7 @@ export const sdkNodesRoutes = new Elysia()
         metadata.userAgent = userAgent;
       }
 
-      let registerResult;
+      let registerResult: RegisterDeviceResponse;
       try {
         registerResult = await registerDevice({
           endpointId: parsed.endpointId,

@@ -1,18 +1,15 @@
 import { createApiKeyBody } from "@tuntun/api/management";
+import { schema } from "@tuntun/db";
+import * as argon2 from "argon2";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { Elysia } from "elysia";
-import * as argon2 from "argon2";
-
-import { schema } from "@tuntun/db";
 
 import { generateApiKeySecret } from "../../lib/api-key-secret";
-
-import { getAuth } from "./middleware/authz";
-import { requireAdmin, requireAuth } from "./middleware/authz";
-import { badRequest, sessionPlugin } from "./middleware/session";
 import { writeAudit } from "../../lib/audit";
 import { db } from "../../lib/db";
 import { toIso } from "../../lib/serialize";
+import { getAuth, requireAdmin, requireAuth } from "./middleware/authz";
+import { badRequest, sessionPlugin } from "./middleware/session";
 
 function serializeApiKey(row: typeof schema.apiKeys.$inferSelect) {
   return {

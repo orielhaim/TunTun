@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { TunnelTrafficLog } from "@tuntun/api/management";
 import { formatDistanceToNow } from "date-fns";
@@ -9,9 +9,8 @@ import {
   ExternalLinkIcon,
   Trash2Icon,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { CopyField } from "@/components/app/copy-field";
 import { DataTable } from "@/components/app/data-table";
@@ -30,6 +29,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
@@ -39,17 +45,9 @@ import {
   useTunnelMutations,
   useTunnelPortMappings,
   useTunnelRedirectRules,
-  useTunnelTraffic,
   useTunnels,
+  useTunnelTraffic,
 } from "@/lib/queries/management";
-import { createFileRoute } from "@tanstack/react-router";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 export const Route = createFileRoute("/app/tunnels/$tunnelId")({
   component: TunnelDetailPage,

@@ -99,10 +99,10 @@ impl RoutingTable {
             }
         }
         // Exit node catches remaining (non-mesh) destinations when configured.
-        if !is_mesh_or_link_local(ip) {
-            if let Some(exit) = &tables.exit_node {
-                return Some(exit.clone());
-            }
+        if !is_mesh_or_link_local(ip)
+            && let Some(exit) = &tables.exit_node
+        {
+            return Some(exit.clone());
         }
         None
     }
@@ -237,6 +237,7 @@ impl RoutingTable {
         None
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn replace(
         &self,
         peers: &[PeerEntry],
@@ -294,21 +295,21 @@ impl RoutingTable {
 
         // Selected exit for this device → install as lowest-priority catch-all via subnets.
         let mut exit_node = None;
-        if let Some(exit_id) = &profile.exit_node_endpoint_id {
-            if let Some(exit) = exit_nodes.iter().find(|e| &e.endpoint_id == exit_id) {
-                let peer = peer_for_via(&by_endpoint, &exit.endpoint_id, exit.via_ip);
-                if let Some(peer) = peer {
-                    for cidr in &exit.allowed_cidrs {
-                        // Don't override more-specific subnet routes.
-                        if !subnets.iter().any(|(n, _)| n == cidr) {
-                            subnets.push((*cidr, peer.clone()));
-                        }
+        if let Some(exit_id) = &profile.exit_node_endpoint_id
+            && let Some(exit) = exit_nodes.iter().find(|e| &e.endpoint_id == exit_id)
+        {
+            let peer = peer_for_via(&by_endpoint, &exit.endpoint_id, exit.via_ip);
+            if let Some(peer) = peer {
+                for cidr in &exit.allowed_cidrs {
+                    // Don't override more-specific subnet routes.
+                    if !subnets.iter().any(|(n, _)| n == cidr) {
+                        subnets.push((*cidr, peer.clone()));
                     }
-                    exit_node = Some(peer);
                 }
+                exit_node = Some(peer);
             }
         }
-        subnets.sort_by(|a, b| b.0.prefix_len().cmp(&a.0.prefix_len()));
+        subnets.sort_by_key(|subnet| std::cmp::Reverse(subnet.0.prefix_len()));
 
         let mut hostname_exact = std::collections::HashMap::new();
         let mut hostname_wildcards = Vec::new();
@@ -338,7 +339,7 @@ impl RoutingTable {
                 hostname_wildcards.push(info);
             }
         }
-        hostname_wildcards.sort_by(|a, b| b.hostname.len().cmp(&a.hostname.len()));
+        hostname_wildcards.sort_by_key(|route| std::cmp::Reverse(route.hostname.len()));
 
         self.dynamic_synth.clear();
         self.inner.store(Arc::new(Tables {
@@ -551,7 +552,7 @@ mod tests {
     }
 
     #[test]
-    fn PeerDNS_resolves_peer_and_hostname_route() {
+    fn peer_dns_resolves_peer_and_hostname_route() {
         let table = RoutingTable::new();
         let self_id = "a".repeat(64);
         let gw = "b".repeat(64);

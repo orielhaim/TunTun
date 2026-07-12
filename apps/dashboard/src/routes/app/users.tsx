@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { createFileRoute } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
-import { format } from "date-fns";
-import { formatDistanceToNow } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import {
   DownloadIcon,
   MailIcon,
@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { DataTable } from "@/components/app/data-table";
 import { EmptyState } from "@/components/app/empty-state";
@@ -50,7 +49,6 @@ import {
   getUserInitials,
   tableHeaderClassName,
 } from "@/lib/user-utils";
-import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/app/users")({
   component: UsersPage,

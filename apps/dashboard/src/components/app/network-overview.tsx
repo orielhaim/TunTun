@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { Device, TopologyNode } from "@tuntun/api/management";
@@ -8,8 +9,7 @@ import {
   ShieldIcon,
   WaypointsIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import { DataTable } from "@/components/app/data-table";
 import { EnrollmentTokenDialog } from "@/components/app/enrollment-token-dialog";
@@ -29,11 +29,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
 import {
   seedPresenceCache,
   usePresenceStream,
 } from "@/hooks/use-presence-stream";
-import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { getMachinePresence } from "@/lib/machine-utils";
 import { usePresenceClock } from "@/lib/presence-clock";

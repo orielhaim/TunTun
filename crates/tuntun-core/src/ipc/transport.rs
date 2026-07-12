@@ -18,10 +18,10 @@ pub fn default_ipc_path(network_id: Uuid) -> PathBuf {
     #[cfg(windows)]
     {
         let base = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| ".".into());
-        return PathBuf::from(base)
+        PathBuf::from(base)
             .join("tuntun")
             .join("ipc")
-            .join(format!("{network_id}.pipe"));
+            .join(format!("{network_id}.pipe"))
     }
     #[cfg(not(any(unix, windows)))]
     {
@@ -94,7 +94,7 @@ impl IpcListener {
                 .first_pipe_instance(true)
                 .create(&name)?;
             tracing::info!(pipe = %name, marker = %path.display(), "IPC listening (windows)");
-            return Ok((
+            Ok((
                 Self {
                     windows: WindowsListener {
                         network_id,
@@ -104,7 +104,7 @@ impl IpcListener {
                     path: path.clone(),
                 },
                 path,
-            ));
+            ))
         }
         #[cfg(not(any(unix, windows)))]
         {

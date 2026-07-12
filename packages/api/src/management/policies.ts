@@ -1,6 +1,5 @@
-import { z } from "zod";
-
 import { ipCidrSchema } from "@tuntun/ip";
+import { z } from "zod";
 
 const cidrSelector = z.object({
   kind: z.literal("cidr"),

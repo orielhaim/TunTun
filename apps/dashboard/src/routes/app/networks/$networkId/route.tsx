@@ -1,6 +1,10 @@
-import { Link, Outlet, useRouterState } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Link,
+  Outlet,
+  useRouterState,
+} from "@tanstack/react-router";
 import { ChevronRightIcon } from "lucide-react";
-
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -13,7 +17,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useNetwork } from "@/lib/queries/management";
-import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/app/networks/$networkId")({
   component: NetworkLayout,

@@ -115,17 +115,12 @@ pub struct ExitNodeInfo {
     pub allowed_cidrs: Vec<ipnet::Ipv4Net>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum SplitTunnelMode {
     Include,
+    #[default]
     Exclude,
-}
-
-impl Default for SplitTunnelMode {
-    fn default() -> Self {
-        Self::Exclude
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

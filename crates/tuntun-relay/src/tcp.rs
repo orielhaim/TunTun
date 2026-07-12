@@ -186,11 +186,8 @@ async fn handle_tcp_client(
     };
     let down = async {
         let mut buf = vec![0u8; 32 * 1024];
-        loop {
-            match recv.read(&mut buf).await? {
-                Some(n) => tcp_write.write_all(&buf[..n]).await?,
-                None => break,
-            }
+        while let Some(n) = recv.read(&mut buf).await? {
+            tcp_write.write_all(&buf[..n]).await?;
         }
         Ok::<_, anyhow::Error>(())
     };

@@ -1,5 +1,5 @@
-import type { TopologyNode } from "@tuntun/api/management";
 import { Link } from "@tanstack/react-router";
+import type { TopologyNode } from "@tuntun/api/management";
 
 import { Badge } from "@/components/ui/badge";
 import {

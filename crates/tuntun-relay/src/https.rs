@@ -84,18 +84,18 @@ async fn handle_https_client(
     let source_ip = peer.ip().to_string();
     let meta = splice_tls_to_quic(tls, send, recv, basic_user, basic_hash).await?;
 
-    if let Some(client) = control {
-        if let Some((method, path)) = meta.request {
-            let latency_ms = started.elapsed().as_millis().min(i32::MAX as u128) as i32;
-            client.spawn_traffic_log(
-                tunnel_id,
-                method,
-                path,
-                meta.status_code.unwrap_or(0),
-                latency_ms,
-                Some(source_ip),
-            );
-        }
+    if let Some(client) = control
+        && let Some((method, path)) = meta.request
+    {
+        let latency_ms = started.elapsed().as_millis().min(i32::MAX as u128) as i32;
+        client.spawn_traffic_log(
+            tunnel_id,
+            method,
+            path,
+            meta.status_code.unwrap_or(0),
+            latency_ms,
+            Some(source_ip),
+        );
     }
     Ok(())
 }
@@ -131,21 +131,21 @@ async fn splice_tls_to_quic(
         None
     };
 
-    if let (Some(user), Some(hash)) = (basic_user, basic_hash) {
-        if n == 0 || !verify_basic_auth(&peek, user, hash) {
-            let body = "Unauthorized\n";
-            let resp = format!(
-                "HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Basic realm=\"TunTun\"\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                body.len(),
-                body
-            );
-            tls_write.write_all(resp.as_bytes()).await?;
-            tls_write.shutdown().await.ok();
-            return Ok(SpliceMeta {
-                request,
-                status_code: Some(401),
-            });
-        }
+    if let (Some(user), Some(hash)) = (basic_user, basic_hash)
+        && (n == 0 || !verify_basic_auth(&peek, user, hash))
+    {
+        let body = "Unauthorized\n";
+        let resp = format!(
+            "HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Basic realm=\"TunTun\"\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        tls_write.write_all(resp.as_bytes()).await?;
+        tls_write.shutdown().await.ok();
+        return Ok(SpliceMeta {
+            request,
+            status_code: Some(401),
+        });
     }
 
     if n > 0 {
@@ -166,11 +166,8 @@ async fn splice_tls_to_quic(
     };
     let down = async {
         let mut buf = vec![0u8; 32 * 1024];
-        loop {
-            match recv.read(&mut buf).await? {
-                Some(n) => tls_write.write_all(&buf[..n]).await?,
-                None => break,
-            }
+        while let Some(n) = recv.read(&mut buf).await? {
+            tls_write.write_all(&buf[..n]).await?;
         }
         tls_write.shutdown().await.ok();
         Ok::<_, anyhow::Error>(())

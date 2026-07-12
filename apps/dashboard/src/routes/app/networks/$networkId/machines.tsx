@@ -1,4 +1,4 @@
-import { redirect, createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 /** Machines list lives on the Mesh overview. */
 export const Route = createFileRoute("/app/networks/$networkId/machines")({

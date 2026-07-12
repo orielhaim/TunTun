@@ -1,9 +1,8 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
+import { useMemo } from "react";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useServes, useTunnels } from "@/lib/queries/management";
 import { cn } from "@/lib/utils";
-import { useRouterState } from "@tanstack/react-router";
-import { useMemo } from "react";
 
 const navItems = [
   { to: "/app", label: "Overview", exact: true },

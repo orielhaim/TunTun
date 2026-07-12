@@ -81,11 +81,11 @@ impl ManagementClient {
             "endpointId": endpoint_id,
             "hostname": hostname,
         });
-        if let Some(meta) = metadata {
-            if let Some(obj) = meta.as_object() {
-                for (k, v) in obj {
-                    body[k] = v.clone();
-                }
+        if let Some(meta) = metadata
+            && let Some(obj) = meta.as_object()
+        {
+            for (k, v) in obj {
+                body[k] = v.clone();
             }
         }
         let resp = self

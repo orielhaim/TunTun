@@ -1,9 +1,8 @@
+import { schema } from "@tuntun/db";
 import { and, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
-
 import { auth } from "../../../auth";
 import { db } from "../../../lib/db";
-import { schema } from "@tuntun/db";
 
 export type AuthContext = {
   user: { id: string; name: string; email: string };

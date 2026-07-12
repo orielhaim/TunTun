@@ -1,13 +1,13 @@
-import { Link } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { formatDistanceToNow } from "date-fns";
 import { ChevronRightIcon, XIcon } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { CopyField } from "@/components/app/copy-field";
 import { EntityStatus } from "@/components/app/entity-status";
 import { PageHeader } from "@/components/app/page-header";
+import { Badge } from "@/components/ui/badge";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -16,7 +16,6 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -40,7 +39,6 @@ import {
   useServePeers,
   useServes,
 } from "@/lib/queries/management";
-import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/app/serves/$serveId")({
   component: ServeDetailPage,
@@ -400,7 +398,7 @@ function ServeDetailPage() {
                           machine.endpointId,
                         );
                         return (
-                          <label
+                          <div
                             key={machine.endpointId}
                             className="flex items-center gap-2 text-sm"
                           >
@@ -423,7 +421,7 @@ function ServeDetailPage() {
                               }}
                             />
                             {machine.hostname}
-                          </label>
+                          </div>
                         );
                       })
                     )}

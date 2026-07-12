@@ -1,11 +1,10 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import type { DeviceMetadata } from "@tuntun/api/management";
 import { formatDistanceToNow } from "date-fns";
 import { ChevronRightIcon, PlusIcon } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { CopyField } from "@/components/app/copy-field";
 import { CreateServeDialog } from "@/components/app/create-serve-dialog";
@@ -30,11 +29,11 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
 import {
   seedPresenceCache,
   usePresenceStream,
 } from "@/hooks/use-presence-stream";
-import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
 import { useActiveOrganization } from "@/lib/auth-client";
 import {
   useDevice,
@@ -42,7 +41,6 @@ import {
   useServes,
   useTunnels,
 } from "@/lib/queries/management";
-import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/app/machines/$endpointId")({
   component: MachineDetailPage,

@@ -155,6 +155,7 @@ async fn load_active_serves(pool: &PgPool, network_id: Uuid) -> anyhow::Result<V
         .collect())
 }
 
+#[allow(clippy::type_complexity)]
 async fn load_tunnel_config(
     pool: &PgPool,
     endpoint_id: &str,

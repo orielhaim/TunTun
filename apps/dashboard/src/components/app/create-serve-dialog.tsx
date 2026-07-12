@@ -351,7 +351,7 @@ export function CreateServeDialog({
                           machine.endpointId,
                         );
                         return (
-                          <label
+                          <div
                             key={machine.endpointId}
                             className="flex items-center gap-2 text-sm"
                           >
@@ -373,7 +373,7 @@ export function CreateServeDialog({
                               }}
                             />
                             {machine.hostname}
-                          </label>
+                          </div>
                         );
                       })
                     )}

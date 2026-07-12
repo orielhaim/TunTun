@@ -15,7 +15,7 @@
     "README.md"
   ],
   "dependencies": {
-    "@tuntun/core-native": "workspace:*"
+    "@tuntundev/sdk": "workspace:*"
   },
   "devDependencies": {
     "@tuntun/api": "workspace:*",

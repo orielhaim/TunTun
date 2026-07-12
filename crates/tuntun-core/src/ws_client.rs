@@ -64,9 +64,8 @@ async fn run(
                         }
                         maybe_out = client_rx.recv() => {
                             let Some(m) = maybe_out else { break };
-                            if let Ok(t) = serde_json::to_string(&m) {
-                                if ws.send(Message::Text(t)).await.is_err() { break; }
-                            }
+                            if let Ok(t) = serde_json::to_string(&m)
+                                && ws.send(Message::Text(t)).await.is_err() { break; }
                         }
                     }
                 }

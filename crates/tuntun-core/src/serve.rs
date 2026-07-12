@@ -81,6 +81,7 @@ impl ServeManager {
             .collect()
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn start(
         &self,
         id: String,
@@ -311,6 +312,7 @@ async fn run_tcp_proxy(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_tls_proxy(
     bind: SocketAddr,
     local: SocketAddr,

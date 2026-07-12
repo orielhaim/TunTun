@@ -1,13 +1,13 @@
 import {
-  enroll as nativeEnroll,
-  TunTunNode as NativeNode,
-  type NodeConfig,
   type EnrollConfig,
   type EnrollResult,
+  TunTunNode as NativeNode,
+  type NodeConfig,
+  enroll as nativeEnroll,
   type PeerJs,
-} from "@tuntun/core-native";
+} from "@tuntundev/sdk";
 
-export type { NodeConfig, EnrollConfig, EnrollResult, PeerJs as Peer };
+export type { EnrollConfig, EnrollResult, NodeConfig, PeerJs as Peer };
 
 export interface CreateNodeOptions extends NodeConfig {
   /** Control plane URL (post-enrolment). Falls back to `TUNTUN_CONTROL_URL`. */

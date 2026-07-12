@@ -20,7 +20,8 @@
     "check": "biome check"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.3"
+    "@biomejs/biome": "2.5.3",
+    "lefthook": "^2.1.10"
   },
   "dependencies": {
     "ip-address": "^10.2.0",

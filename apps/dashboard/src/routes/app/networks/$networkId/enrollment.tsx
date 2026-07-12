@@ -1,14 +1,15 @@
+import { useQueryClient } from "@tanstack/react-query";
+import { createFileRoute } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { EnrollmentToken } from "@tuntun/api/management";
 import { formatDistanceToNow } from "date-fns";
 import { PlusIcon, TrashIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { DataTable } from "@/components/app/data-table";
-import { EnrollmentTokenDialog } from "@/components/app/enrollment-token-dialog";
 import { EmptyState } from "@/components/app/empty-state";
+import { EnrollmentTokenDialog } from "@/components/app/enrollment-token-dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
@@ -16,8 +17,6 @@ import { useActiveOrganization } from "@/lib/auth-client";
 import { createManagementClient } from "@/lib/management-client";
 import { useEnrollmentTokens } from "@/lib/queries/management";
 import { queryKeys } from "@/lib/query-keys";
-import { useQueryClient } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/app/networks/$networkId/enrollment")({
   component: NetworkEnrollmentPage,

@@ -3,18 +3,17 @@ import { randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
+import {
+  assignedIpPrefix,
+  resolveTestEnv,
+  type TestEnv,
+  waitForServices,
+} from "./helpers/env.ts";
 import {
   createNegativeTestKeys,
   deleteNegativeTestKeys,
   type NegativeTestKeys,
 } from "./helpers/fixtures.ts";
-import {
-  assignedIpPrefix,
-  resolveTestEnv,
-  waitForServices,
-  type TestEnv,
-} from "./helpers/env.ts";
 import { expectRegisterSuccess, registerSdkNode } from "./helpers/sdk-nodes.ts";
 
 const env = await resolveTestEnv();
@@ -167,7 +166,7 @@ describe.skipIf(!runTests)("TunTun SDK native", () => {
       sdk = await import("../src/index.ts");
     } catch (error) {
       throw new Error(
-        `Failed to load @tuntun/core native bindings. Run: bun run build:native --filter @tuntun/core\n${String(error)}`,
+        `Failed to load @tuntundev/sdk native bindings. Run: bun run build:native --filter @tuntun/core\n${String(error)}`,
       );
     }
   });

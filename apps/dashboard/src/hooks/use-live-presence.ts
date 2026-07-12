@@ -1,12 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-
+import type { Device } from "@tuntun/api/management";
 import {
   mergePresence,
-  pickPresenceFields,
   type PresencePatch,
+  pickPresenceFields,
 } from "@/lib/presence-patch";
 import { queryKeys } from "@/lib/query-keys";
-import type { Device } from "@tuntun/api/management";
 
 export type LivePresenceDevice = Pick<
   Device,

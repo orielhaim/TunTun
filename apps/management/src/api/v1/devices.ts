@@ -3,20 +3,17 @@ import {
   patchDeviceBody,
   patchDeviceMembershipBody,
 } from "@tuntun/api/management";
+import { schema } from "@tuntun/db";
 import { and, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
-
-import { schema } from "@tuntun/db";
-
-import { getAuth } from "./middleware/authz";
-import { requireAdmin, requireAuth } from "./middleware/authz";
-import { notFound, sessionPlugin } from "./middleware/session";
 import { writeAudit } from "../../lib/audit";
-import { applyDevicePatch, getDeviceInOrg } from "../../lib/device";
 import { db } from "../../lib/db";
+import { applyDevicePatch, getDeviceInOrg } from "../../lib/device";
 import { bumpNetworkAndNotify, bumpOrgAndNotify } from "../../lib/notify";
 import { removeDeviceMembership } from "../../lib/remove-device-membership";
 import { serializeDevice } from "../../lib/serialize-device";
+import { getAuth, requireAdmin, requireAuth } from "./middleware/authz";
+import { notFound, sessionPlugin } from "./middleware/session";
 
 async function getNetworkInOrg(networkId: string, organizationId: string) {
   return db.query.networks.findFirst({

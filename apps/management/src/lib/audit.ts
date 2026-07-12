@@ -1,6 +1,5 @@
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-
 import { schema } from "@tuntun/db";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 type Db = PostgresJsDatabase<typeof schema>;
 

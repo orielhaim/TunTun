@@ -59,7 +59,7 @@ fn read_os_version() -> Option<String> {
         if version.is_empty() {
             return None;
         }
-        return Some(version.to_string());
+        Some(version.to_string())
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]

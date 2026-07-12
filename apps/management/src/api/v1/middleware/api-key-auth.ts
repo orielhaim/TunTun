@@ -2,8 +2,8 @@ import { Elysia } from "elysia";
 
 import {
   hasScope,
-  verifyApiKeySecret,
   type VerifiedApiKey,
+  verifyApiKeySecret,
 } from "../../../lib/api-key-auth";
 import { forbidden, unauthorized } from "./session";
 

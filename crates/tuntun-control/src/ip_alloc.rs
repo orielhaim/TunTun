@@ -10,6 +10,7 @@ use crate::pg_inet::{self, PgIp};
 
 pub struct Allocated {
     pub ip: Ipv4Addr,
+    #[allow(dead_code)]
     pub prefix: u8,
 }
 
@@ -96,6 +97,9 @@ pub async fn allocate<'c>(
     })
 }
 
+#[allow(dead_code)]
+pub async fn _keep_unused_ref(_c: &mut PgConnection) {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -116,6 +120,3 @@ mod tests {
         assert!(!is_usable_host(&net, Ipv4Addr::new(10, 7, 0, 0)));
     }
 }
-
-#[allow(dead_code)]
-pub async fn _keep_unused_ref(_c: &mut PgConnection) {}

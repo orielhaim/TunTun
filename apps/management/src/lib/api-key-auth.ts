@@ -1,10 +1,8 @@
-import { and, eq, isNull, or } from "drizzle-orm";
-import * as argon2 from "argon2";
-
 import { schema } from "@tuntun/db";
-
-import { db } from "./db";
+import * as argon2 from "argon2";
+import { and, eq, isNull, or } from "drizzle-orm";
 import { parseApiKeyPrefix } from "./api-key-secret";
+import { db } from "./db";
 
 export type VerifiedApiKey = {
   id: string;

@@ -1,11 +1,11 @@
 import {
+  type ColumnDef,
   flexRender,
   getCoreRowModel,
-  useReactTable,
-  type ColumnDef,
   type OnChangeFn,
   type RowData,
   type RowSelectionState,
+  useReactTable,
 } from "@tanstack/react-table";
 
 import { Checkbox } from "@/components/ui/checkbox";

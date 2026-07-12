@@ -1,7 +1,6 @@
+import { schema } from "@tuntun/db";
 import { and, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-
-import { schema } from "@tuntun/db";
 
 import { writeAudit } from "./audit";
 import { bumpNetworkAndNotify, bumpOrgAndNotify } from "./notify";

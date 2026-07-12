@@ -77,9 +77,9 @@ function requireNative() {
         loadErrors.push(e);
       }
       try {
-        const binding = require("@tuntun/core-native-android-arm64");
+        const binding = require("@tuntundev/sdk-android-arm64");
         const bindingPackageVersion =
-          require("@tuntun/core-native-android-arm64/package.json").version;
+          require("@tuntundev/sdk-android-arm64/package.json").version;
         if (
           bindingPackageVersion !== "0.3.0" &&
           process.env.NAPI_RS_ENFORCE_VERSION_CHECK &&
@@ -100,9 +100,9 @@ function requireNative() {
         loadErrors.push(e);
       }
       try {
-        const binding = require("@tuntun/core-native-android-arm-eabi");
+        const binding = require("@tuntundev/sdk-android-arm-eabi");
         const bindingPackageVersion =
-          require("@tuntun/core-native-android-arm-eabi/package.json").version;
+          require("@tuntundev/sdk-android-arm-eabi/package.json").version;
         if (
           bindingPackageVersion !== "0.3.0" &&
           process.env.NAPI_RS_ENFORCE_VERSION_CHECK &&
@@ -137,9 +137,9 @@ function requireNative() {
           loadErrors.push(e);
         }
         try {
-          const binding = require("@tuntun/core-native-win32-x64-gnu");
+          const binding = require("@tuntundev/sdk-win32-x64-gnu");
           const bindingPackageVersion =
-            require("@tuntun/core-native-win32-x64-gnu/package.json").version;
+            require("@tuntundev/sdk-win32-x64-gnu/package.json").version;
           if (
             bindingPackageVersion !== "0.3.0" &&
             process.env.NAPI_RS_ENFORCE_VERSION_CHECK &&
@@ -160,9 +160,9 @@ function requireNative() {
           loadErrors.push(e);
         }
         try {
-          const binding = require("@tuntun/core-native-win32-x64-msvc");
+          const binding = require("@tuntundev/sdk-win32-x64-msvc");
           const bindingPackageVersion =
-            require("@tuntun/core-native-win32-x64-msvc/package.json").version;
+            require("@tuntundev/sdk-win32-x64-msvc/package.json").version;
           if (
             bindingPackageVersion !== "0.3.0" &&
             process.env.NAPI_RS_ENFORCE_VERSION_CHECK &&
@@ -184,9 +184,9 @@ function requireNative() {
         loadErrors.push(e);
       }
       try {
-        const binding = require("@tuntun/core-native-win32-ia32-msvc");
+        const binding = require("@tuntundev/sdk-win32-ia32-msvc");
         const bindingPackageVersion =
-          require("@tuntun/core-native-win32-ia32-msvc/package.json").version;
+          require("@tuntundev/sdk-win32-ia32-msvc/package.json").version;
         if (
           bindingPackageVersion !== "0.3.0" &&
           process.env.NAPI_RS_ENFORCE_VERSION_CHECK &&
@@ -207,9 +207,9 @@ function requireNative() {
         loadErrors.push(e);
       }
       try {
-        const binding = require("@tuntun/core-native-win32-arm64-msvc");
+        const binding = require("@tuntundev/sdk-win32-arm64-msvc");
         const bindingPackageVersion =
-          require("@tuntun/core-native-win32-arm64-msvc/package.json").version;
+          require("@tuntundev/sdk-win32-arm64-msvc/package.json").version;
         if (
           bindingPackageVersion !== "0.3.0" &&
           process.env.NAPI_RS_ENFORCE_VERSION_CHECK &&
@@ -235,9 +235,9 @@ function requireNative() {
       loadErrors.push(e);
     }
     try {
-      const binding = require("@tuntun/core-native-darwin-universal");
+      const binding = require("@tuntundev/sdk-darwin-universal");
       const bindingPackageVersion =
-        require("@tuntun/core-native-darwin-universal/package.json").version;
+        require("@tuntundev/sdk-darwin-universal/package.json").version;
       if (
         bindingPackageVersion !== "0.3.0" &&
         process.env.NAPI_RS_ENFORCE_VERSION_CHECK &&
@@ -258,9 +258,9 @@ function requireNative() {
         loadErrors.push(e);
       }
       try {
-        const binding = require("@tuntun/core-native-darwin-x64");
+        const binding = require("@tuntundev/sdk-darwin-x64");
         const bindingPackageVersion =
-          require("@tuntun/core-native-darwin-x64/package.json").version;
+          require("@tuntundev/sdk-darwin-x64/package.json").version;
         if (
           bindingPackageVersion !== "0.3.0" &&
           process.env.NAPI_RS_ENFORCE_VERSION_CHECK &&
@@ -281,9 +281,9 @@ function requireNative() {
         loadErrors.push(e);
       }
       try {
-        const binding = require("@tuntun/core-native-darwin-arm64");
+        const binding = require("@tuntundev/sdk-darwin-arm64");
         const bindingPackageVersion =
-          require("@tuntun/core-native-darwin-arm64/package.json").version;
+          require("@tuntundev/sdk-darwin-arm64/package.json").version;
         if (
           bindingPackageVersion !== "0.3.0" &&
           process.env.NAPI_RS_ENFORCE_VERSION_CHECK &&
@@ -310,9 +310,9 @@ function requireNative() {
         loadErrors.push(e);
       }
       try {
-        const binding = require("@tuntun/core-native-freebsd-x64");
+        const binding = require("@tuntundev/sdk-freebsd-x64");
         const bindingPackageVersion =
-          require("@tuntun/core-native-freebsd-x64/package.json").version;
+          require("@tuntundev/sdk-freebsd-x64/package.json").version;
         if (
           bindingPackageVersion !== "0.3.0" &&
           process.env.NAPI_RS_ENFORCE_VERSION_CHECK &&
@@ -333,9 +333,9 @@ function requireNative() {
         loadErrors.push(e);
       }
       try {
-        const binding = require("@tuntun/core-native-freebsd-arm64");
+        const binding = require("@tuntundev/sdk-freebsd-arm64");
         const bindingPackageVersion =
-          require("@tuntun/core-native-freebsd-arm64/package.json").version;
+          require("@tuntundev/sdk-freebsd-arm64/package.json").version;
         if (
           bindingPackageVersion !== "0.3.0" &&
           process.env.NAPI_RS_ENFORCE_VERSION_CHECK &&
@@ -363,9 +363,9 @@ function requireNative() {
           loadErrors.push(e);
         }
         try {
-          const binding = require("@tuntun/core-native-linux-x64-musl");
+          const binding = require("@tuntundev/sdk-linux-x64-musl");
           const bindingPackageVersion =
-            require("@tuntun/core-native-linux-x64-musl/package.json").version;
+            require("@tuntundev/sdk-linux-x64-musl/package.json").version;
           if (
             bindingPackageVersion !== "0.3.0" &&
             process.env.NAPI_RS_ENFORCE_VERSION_CHECK &&
@@ -386,9 +386,9 @@ function requireNative() {
           loadErrors.push(e);
         }
         try {
-          const binding = require("@tuntun/core-native-linux-x64-gnu");
+          const binding = require("@tuntundev/sdk-linux-x64-gnu");
           const bindingPackageVersion =
-            require("@tuntun/core-native-linux-x64-gnu/package.json").version;
+            require("@tuntundev/sdk-linux-x64-gnu/package.json").version;
           if (
             bindingPackageVersion !== "0.3.0" &&
             process.env.NAPI_RS_ENFORCE_VERSION_CHECK &&
@@ -411,9 +411,9 @@ function requireNative() {
           loadErrors.push(e);
         }
         try {
-          const binding = require("@tuntun/core-native-linux-arm64-musl");
+          const binding = require("@tuntundev/sdk-linux-arm64-musl");
           const bindingPackageVersion =
-            require("@tuntun/core-native-linux-arm64-musl/package.json").version;
+            require("@tuntundev/sdk-linux-arm64-musl/package.json").version;
           if (
             bindingPackageVersion !== "0.3.0" &&
             process.env.NAPI_RS_ENFORCE_VERSION_CHECK &&
@@ -434,9 +434,9 @@ function requireNative() {
           loadErrors.push(e);
         }
         try {
-          const binding = require("@tuntun/core-native-linux-arm64-gnu");
+          const binding = require("@tuntundev/sdk-linux-arm64-gnu");
           const bindingPackageVersion =
-            require("@tuntun/core-native-linux-arm64-gnu/package.json").version;
+            require("@tuntundev/sdk-linux-arm64-gnu/package.json").version;
           if (
             bindingPackageVersion !== "0.3.0" &&
             process.env.NAPI_RS_ENFORCE_VERSION_CHECK &&
@@ -459,9 +459,9 @@ function requireNative() {
           loadErrors.push(e);
         }
         try {
-          const binding = require("@tuntun/core-native-linux-arm-musleabihf");
+          const binding = require("@tuntundev/sdk-linux-arm-musleabihf");
           const bindingPackageVersion =
-            require("@tuntun/core-native-linux-arm-musleabihf/package.json").version;
+            require("@tuntundev/sdk-linux-arm-musleabihf/package.json").version;
           if (
             bindingPackageVersion !== "0.3.0" &&
             process.env.NAPI_RS_ENFORCE_VERSION_CHECK &&
@@ -482,9 +482,9 @@ function requireNative() {
           loadErrors.push(e);
         }
         try {
-          const binding = require("@tuntun/core-native-linux-arm-gnueabihf");
+          const binding = require("@tuntundev/sdk-linux-arm-gnueabihf");
           const bindingPackageVersion =
-            require("@tuntun/core-native-linux-arm-gnueabihf/package.json").version;
+            require("@tuntundev/sdk-linux-arm-gnueabihf/package.json").version;
           if (
             bindingPackageVersion !== "0.3.0" &&
             process.env.NAPI_RS_ENFORCE_VERSION_CHECK &&
@@ -507,9 +507,9 @@ function requireNative() {
           loadErrors.push(e);
         }
         try {
-          const binding = require("@tuntun/core-native-linux-loong64-musl");
+          const binding = require("@tuntundev/sdk-linux-loong64-musl");
           const bindingPackageVersion =
-            require("@tuntun/core-native-linux-loong64-musl/package.json").version;
+            require("@tuntundev/sdk-linux-loong64-musl/package.json").version;
           if (
             bindingPackageVersion !== "0.3.0" &&
             process.env.NAPI_RS_ENFORCE_VERSION_CHECK &&
@@ -530,9 +530,9 @@ function requireNative() {
           loadErrors.push(e);
         }
         try {
-          const binding = require("@tuntun/core-native-linux-loong64-gnu");
+          const binding = require("@tuntundev/sdk-linux-loong64-gnu");
           const bindingPackageVersion =
-            require("@tuntun/core-native-linux-loong64-gnu/package.json").version;
+            require("@tuntundev/sdk-linux-loong64-gnu/package.json").version;
           if (
             bindingPackageVersion !== "0.3.0" &&
             process.env.NAPI_RS_ENFORCE_VERSION_CHECK &&
@@ -555,9 +555,9 @@ function requireNative() {
           loadErrors.push(e);
         }
         try {
-          const binding = require("@tuntun/core-native-linux-riscv64-musl");
+          const binding = require("@tuntundev/sdk-linux-riscv64-musl");
           const bindingPackageVersion =
-            require("@tuntun/core-native-linux-riscv64-musl/package.json").version;
+            require("@tuntundev/sdk-linux-riscv64-musl/package.json").version;
           if (
             bindingPackageVersion !== "0.3.0" &&
             process.env.NAPI_RS_ENFORCE_VERSION_CHECK &&
@@ -578,9 +578,9 @@ function requireNative() {
           loadErrors.push(e);
         }
         try {
-          const binding = require("@tuntun/core-native-linux-riscv64-gnu");
+          const binding = require("@tuntundev/sdk-linux-riscv64-gnu");
           const bindingPackageVersion =
-            require("@tuntun/core-native-linux-riscv64-gnu/package.json").version;
+            require("@tuntundev/sdk-linux-riscv64-gnu/package.json").version;
           if (
             bindingPackageVersion !== "0.3.0" &&
             process.env.NAPI_RS_ENFORCE_VERSION_CHECK &&
@@ -602,9 +602,9 @@ function requireNative() {
         loadErrors.push(e);
       }
       try {
-        const binding = require("@tuntun/core-native-linux-ppc64-gnu");
+        const binding = require("@tuntundev/sdk-linux-ppc64-gnu");
         const bindingPackageVersion =
-          require("@tuntun/core-native-linux-ppc64-gnu/package.json").version;
+          require("@tuntundev/sdk-linux-ppc64-gnu/package.json").version;
         if (
           bindingPackageVersion !== "0.3.0" &&
           process.env.NAPI_RS_ENFORCE_VERSION_CHECK &&
@@ -625,9 +625,9 @@ function requireNative() {
         loadErrors.push(e);
       }
       try {
-        const binding = require("@tuntun/core-native-linux-s390x-gnu");
+        const binding = require("@tuntundev/sdk-linux-s390x-gnu");
         const bindingPackageVersion =
-          require("@tuntun/core-native-linux-s390x-gnu/package.json").version;
+          require("@tuntundev/sdk-linux-s390x-gnu/package.json").version;
         if (
           bindingPackageVersion !== "0.3.0" &&
           process.env.NAPI_RS_ENFORCE_VERSION_CHECK &&
@@ -654,9 +654,9 @@ function requireNative() {
         loadErrors.push(e);
       }
       try {
-        const binding = require("@tuntun/core-native-openharmony-arm64");
+        const binding = require("@tuntundev/sdk-openharmony-arm64");
         const bindingPackageVersion =
-          require("@tuntun/core-native-openharmony-arm64/package.json").version;
+          require("@tuntundev/sdk-openharmony-arm64/package.json").version;
         if (
           bindingPackageVersion !== "0.3.0" &&
           process.env.NAPI_RS_ENFORCE_VERSION_CHECK &&
@@ -677,9 +677,9 @@ function requireNative() {
         loadErrors.push(e);
       }
       try {
-        const binding = require("@tuntun/core-native-openharmony-x64");
+        const binding = require("@tuntundev/sdk-openharmony-x64");
         const bindingPackageVersion =
-          require("@tuntun/core-native-openharmony-x64/package.json").version;
+          require("@tuntundev/sdk-openharmony-x64/package.json").version;
         if (
           bindingPackageVersion !== "0.3.0" &&
           process.env.NAPI_RS_ENFORCE_VERSION_CHECK &&
@@ -700,9 +700,9 @@ function requireNative() {
         loadErrors.push(e);
       }
       try {
-        const binding = require("@tuntun/core-native-openharmony-arm");
+        const binding = require("@tuntundev/sdk-openharmony-arm");
         const bindingPackageVersion =
-          require("@tuntun/core-native-openharmony-arm/package.json").version;
+          require("@tuntundev/sdk-openharmony-arm/package.json").version;
         if (
           bindingPackageVersion !== "0.3.0" &&
           process.env.NAPI_RS_ENFORCE_VERSION_CHECK &&
@@ -756,7 +756,7 @@ if (!nativeBinding || forceWasi) {
   }
   if (!nativeBinding || forceWasi) {
     try {
-      wasiBinding = require("@tuntun/core-native-wasm32-wasi");
+      wasiBinding = require("@tuntundev/sdk-wasm32-wasi");
       nativeBinding = wasiBinding;
     } catch (err) {
       if (forceWasi) {

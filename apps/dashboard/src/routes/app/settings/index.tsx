@@ -1,6 +1,7 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { formatDistanceToNow } from "date-fns";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { CopyField } from "@/components/app/copy-field";
 import { EntityStatus } from "@/components/app/entity-status";
@@ -9,6 +10,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
 import { authClient, useActiveOrganization } from "@/lib/auth-client";
@@ -19,15 +27,6 @@ import {
   useTunnelSettings,
   useTunnelSettingsMutations,
 } from "@/lib/queries/management";
-import { createFileRoute } from "@tanstack/react-router";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { formatDistanceToNow } from "date-fns";
 
 export const Route = createFileRoute("/app/settings/")({
   component: OrganizationSettingsPage,

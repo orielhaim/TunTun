@@ -1,13 +1,11 @@
 import { schema } from "@tuntun/db";
 import { and, eq, inArray } from "drizzle-orm";
 import { Elysia } from "elysia";
-
-import { getAuth } from "./middleware/authz";
-import { requireAuth } from "./middleware/authz";
-import { notFound, sessionPlugin } from "./middleware/session";
 import { db } from "../../lib/db";
 import { deviceHostname } from "../../lib/device-metadata";
 import { toIso } from "../../lib/serialize";
+import { getAuth, requireAuth } from "./middleware/authz";
+import { notFound, sessionPlugin } from "./middleware/session";
 
 async function getNetworkInOrg(networkId: string, organizationId: string) {
   return db.query.networks.findFirst({

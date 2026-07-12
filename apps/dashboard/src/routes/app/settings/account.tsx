@@ -1,13 +1,12 @@
+import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-
 import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient, signOut, useSession } from "@/lib/auth-client";
-import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/app/settings/account")({
   component: AccountSettingsPage,

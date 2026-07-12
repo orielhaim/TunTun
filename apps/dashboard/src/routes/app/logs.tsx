@@ -1,7 +1,8 @@
+import { createFileRoute } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
+import type { AuditEntry } from "@tuntun/api/management";
 import { formatDistanceToNow } from "date-fns";
 import { useEffect, useMemo, useState } from "react";
-
 import { DataTable } from "@/components/app/data-table";
 import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
@@ -9,8 +10,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { createManagementClient } from "@/lib/management-client";
 import { useAuditLog } from "@/lib/queries/management";
-import type { AuditEntry } from "@tuntun/api/management";
-import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/app/logs")({
   component: LogsPage,

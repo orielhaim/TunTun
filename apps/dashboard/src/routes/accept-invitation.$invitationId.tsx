@@ -1,7 +1,6 @@
-import { useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -12,7 +11,6 @@ import {
 } from "@/components/ui/card";
 import { getSession } from "@/lib/auth.functions";
 import { authClient } from "@/lib/auth-client";
-import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/accept-invitation/$invitationId")({
   component: AcceptInvitationPage,

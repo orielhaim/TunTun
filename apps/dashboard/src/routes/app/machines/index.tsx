@@ -1,10 +1,9 @@
-import { Link } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { MoreHorizontalIcon, PlusIcon, Trash2Icon } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-
 import { AddMachinePanel } from "@/components/app/add-machine-panel";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { CreateServeDialog } from "@/components/app/create-serve-dialog";
@@ -34,11 +33,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
 import {
   seedPresenceCache,
   usePresenceStream,
 } from "@/hooks/use-presence-stream";
-import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
 import { useActiveOrganization } from "@/lib/auth-client";
 import type { AggregatedMachine } from "@/lib/machine-utils";
 import { getMachinePresence } from "@/lib/machine-utils";
@@ -49,7 +48,6 @@ import {
   useServes,
   useTunnels,
 } from "@/lib/queries/management";
-import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/app/machines/")({
   component: MachinesPage,

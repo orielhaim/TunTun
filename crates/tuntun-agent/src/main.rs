@@ -36,9 +36,7 @@ async fn main() -> anyhow::Result<()> {
             | crate::cli::Command::Serve(_)
             | crate::cli::Command::Tunnel(_)
     );
-    if !quiet {
-        crate::cli::init_logging(&cli);
-    } else if std::env::var_os("RUST_LOG").is_some() {
+    if !quiet || std::env::var_os("RUST_LOG").is_some() {
         crate::cli::init_logging(&cli);
     }
 

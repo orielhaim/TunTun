@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
+import type { ReactNode } from "react";
 
 import { NavTabs } from "@/components/app/nav-tabs";
 import { OrgSwitcher } from "@/components/app/org-switcher";

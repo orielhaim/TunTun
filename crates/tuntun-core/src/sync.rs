@@ -13,10 +13,10 @@ use crate::routing::RoutingTable;
 use crate::state::{StatePaths, save_snapshot_cache};
 use crate::ws_client::WsChannel;
 
-pub fn membership_for_network<'a>(
-    snap: &'a EndpointSnapshot,
+pub fn membership_for_network(
+    snap: &EndpointSnapshot,
     network_id: Uuid,
-) -> anyhow::Result<&'a NetworkMembershipSnapshot> {
+) -> anyhow::Result<&NetworkMembershipSnapshot> {
     snap.memberships
         .iter()
         .find(|m| m.network_id == network_id)
@@ -50,6 +50,7 @@ pub struct SyncHandles {
     pub version: Arc<ArcSwap<u64>>,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn spawn_ws_processor(
     mut ws: WsChannel,
     routes: RoutingTable,
@@ -244,24 +245,24 @@ pub fn spawn_poll_fallback(
             ticker.tick().await;
             match client.poll(**version.load()).await {
                 Ok(snap) => {
-                    if snap.version != **version.load() {
-                        if let Ok(m) = membership_for_network(&snap, network_id) {
-                            apply_membership(
-                                m,
-                                &routes,
-                                &acl,
-                                &version,
-                                snap.version,
-                                &self_endpoint_id,
-                            );
-                            tracing::info!(
-                                v = m.version,
-                                peers = m.ipv4_peers.len(),
-                                subnet_routes = m.subnet_routes.len(),
-                                hostname_routes = m.hostname_routes.len(),
-                                "snapshot via poll"
-                            );
-                        }
+                    if snap.version != **version.load()
+                        && let Ok(m) = membership_for_network(&snap, network_id)
+                    {
+                        apply_membership(
+                            m,
+                            &routes,
+                            &acl,
+                            &version,
+                            snap.version,
+                            &self_endpoint_id,
+                        );
+                        tracing::info!(
+                            v = m.version,
+                            peers = m.ipv4_peers.len(),
+                            subnet_routes = m.subnet_routes.len(),
+                            hostname_routes = m.hostname_routes.len(),
+                            "snapshot via poll"
+                        );
                     }
                 }
                 Err(e) => {

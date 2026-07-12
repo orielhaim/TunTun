@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Device, Network } from "@tuntun/api/management";
 
-import { aggregateMachines, type AggregatedMachine } from "@/lib/machine-utils";
+import { type AggregatedMachine, aggregateMachines } from "@/lib/machine-utils";
 import { createManagementClient } from "@/lib/management-client";
 import { queryKeys } from "@/lib/query-keys";
 

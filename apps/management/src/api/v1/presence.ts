@@ -2,19 +2,17 @@ import { createListenClient, schema } from "@tuntun/db";
 import { formatIp } from "@tuntun/ip";
 import { and, desc, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
-
-import { getAuth } from "./middleware/authz";
-import { requireAuth } from "./middleware/authz";
-import { notFound, sessionPlugin } from "./middleware/session";
 import { db } from "../../lib/db";
 import {
-  PRESENCE_NOTIFY_CHANNEL,
   ENTITY_NOTIFY_CHANNEL,
+  PRESENCE_NOTIFY_CHANNEL,
 } from "../../lib/notify";
 import {
   serializePresenceEvent,
   serializePresencePatch,
 } from "../../lib/serialize-device";
+import { getAuth, requireAuth } from "./middleware/authz";
+import { notFound, sessionPlugin } from "./middleware/session";
 
 export const presenceRoutes = new Elysia()
   .use(sessionPlugin)

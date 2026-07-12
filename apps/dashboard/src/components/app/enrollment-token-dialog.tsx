@@ -1,6 +1,6 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
-
 import { CopyField } from "@/components/app/copy-field";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,7 +23,6 @@ import {
 import { createManagementClient } from "@/lib/management-client";
 import { useNetworks } from "@/lib/queries/management";
 import { queryKeys } from "@/lib/query-keys";
-import { useQueryClient } from "@tanstack/react-query";
 
 type EnrollmentTokenDialogProps = {
   orgId: string;

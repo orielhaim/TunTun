@@ -5,14 +5,12 @@ import {
 import { schema } from "@tuntun/db";
 import { and, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
-
-import { getAuth } from "./middleware/authz";
-import { requireAdmin, requireAuth } from "./middleware/authz";
-import { notFound, sessionPlugin } from "./middleware/session";
 import { writeAudit } from "../../lib/audit";
 import { db } from "../../lib/db";
 import { bumpNetworkAndNotify } from "../../lib/notify";
 import { toIso } from "../../lib/serialize";
+import { getAuth, requireAdmin, requireAuth } from "./middleware/authz";
+import { notFound, sessionPlugin } from "./middleware/session";
 
 async function getNetworkInOrg(networkId: string, organizationId: string) {
   return db.query.networks.findFirst({

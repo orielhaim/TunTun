@@ -17,12 +17,12 @@ pub fn resolve_ca_key(raw: Option<&str>) -> [u8; 32] {
                 return out;
             }
         }
-        if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(raw) {
-            if bytes.len() == 32 {
-                let mut out = [0u8; 32];
-                out.copy_from_slice(&bytes);
-                return out;
-            }
+        if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(raw)
+            && bytes.len() == 32
+        {
+            let mut out = [0u8; 32];
+            out.copy_from_slice(&bytes);
+            return out;
         }
         tracing::warn!("TUNTUN_CA_ENCRYPTION_KEY invalid — using insecure local-dev CA key");
     } else {

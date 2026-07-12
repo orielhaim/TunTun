@@ -1,6 +1,5 @@
-import { z } from "zod";
-
 import { ipv4Schema } from "@tuntun/ip";
+import { z } from "zod";
 
 const hostnameSchema = z
   .string()

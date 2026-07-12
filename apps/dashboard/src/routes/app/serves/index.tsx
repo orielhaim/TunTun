@@ -1,9 +1,8 @@
-import { Link } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
 import { PlusIcon } from "lucide-react";
 import { useMemo, useState } from "react";
-
 import { CreateServeDialog } from "@/components/app/create-serve-dialog";
 import { DataTable } from "@/components/app/data-table";
 import { EmptyState } from "@/components/app/empty-state";
@@ -22,7 +21,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useServes } from "@/lib/queries/management";
-import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/app/serves/")({
   component: ServesPage,

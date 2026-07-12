@@ -1,7 +1,6 @@
+import { schema } from "@tuntun/db";
 import { eq, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-
-import { schema } from "@tuntun/db";
 
 export const NOTIFY_CHANNEL = "tuntun:network_changed";
 export const ORG_NOTIFY_CHANNEL = "tuntun:org_changed";

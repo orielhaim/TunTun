@@ -140,10 +140,11 @@ fn detect_default_gateway() -> Option<Ipv4Addr> {
         let text = String::from_utf8_lossy(&out.stdout);
         for line in text.lines() {
             let cols: Vec<_> = line.split_whitespace().collect();
-            if cols.len() >= 3 && cols[0] == "0.0.0.0" {
-                if let Ok(ip) = cols[2].parse::<Ipv4Addr>() {
-                    return Some(ip);
-                }
+            if cols.len() >= 3
+                && cols[0] == "0.0.0.0"
+                && let Ok(ip) = cols[2].parse::<Ipv4Addr>()
+            {
+                return Some(ip);
             }
         }
     }

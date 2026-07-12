@@ -1,0 +1,25 @@
+{
+  "name": "@tuntundev/sdk-linux-x64-musl",
+  "version": "0.3.0",
+  "cpu": [
+    "x64"
+  ],
+  "main": "tuntun-node.linux-x64-musl.node",
+  "files": [
+    "tuntun-node.linux-x64-musl.node"
+  ],
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">= 18"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
+  "os": [
+    "linux"
+  ],
+  "libc": [
+    "musl"
+  ]
+}

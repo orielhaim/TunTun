@@ -1,9 +1,8 @@
-import { schema, type Database } from "@tuntun/db";
+import { type Database, schema } from "@tuntun/db";
 import { formatIp } from "@tuntun/ip";
 import { and, eq } from "drizzle-orm";
-
-import { normalizeDeviceMetadata } from "./device-metadata";
 import { db } from "./db";
+import { normalizeDeviceMetadata } from "./device-metadata";
 import { toIso } from "./serialize";
 
 type DbConn = Database | Parameters<Parameters<Database["transaction"]>[0]>[0];

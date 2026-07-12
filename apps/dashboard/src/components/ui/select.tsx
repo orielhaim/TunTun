@@ -110,14 +110,13 @@ export function Select<Value, Multiple extends boolean | undefined = false>(
     [children],
   );
 
-  const registeredItems = React.useMemo(
-    () =>
-      Array.from(registryRef.current.entries()).map(([value, label]) => ({
-        label,
-        value,
-      })),
-    [registryVersion],
-  );
+  const registeredItems = React.useMemo(() => {
+    void registryVersion;
+    return Array.from(registryRef.current.entries()).map(([value, label]) => ({
+      label,
+      value,
+    }));
+  }, [registryVersion]);
 
   const items =
     itemsProp ??
@@ -395,4 +394,4 @@ export function SelectGroupLabel(
   );
 }
 
-export { SelectPrimitive, SelectPopup as SelectContent };
+export { SelectPopup as SelectContent, SelectPrimitive };

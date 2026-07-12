@@ -170,7 +170,7 @@ where
     F: FnMut(&PolicyRule, Direction) -> bool,
 {
     let mut sorted: Vec<&PolicyRule> = rules.iter().collect();
-    sorted.sort_by(|a, b| b.priority.cmp(&a.priority));
+    sorted.sort_by_key(|rule| std::cmp::Reverse(rule.priority));
 
     for r in sorted {
         if !matcher(r, direction) {
@@ -244,10 +244,11 @@ fn rule_matches_v6(r: &PolicyRule, ctx: &Ipv6EvalCtx<'_>, direction: Direction) 
 }
 
 fn proto_port_ok(r: &PolicyRule, protocol: Protocol, dst_port: Option<u16>) -> bool {
-    if let Some(proto) = r.protocol {
-        if proto != Protocol::Any && proto != protocol {
-            return false;
-        }
+    if let Some(proto) = r.protocol
+        && proto != Protocol::Any
+        && proto != protocol
+    {
+        return false;
     }
     if !r.ports.is_empty() {
         match dst_port {

@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { createFileRoute } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import type {
   CreateHostnameRouteBody,
@@ -10,7 +11,6 @@ import type {
 import { PlusIcon, SearchIcon, TrashIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { DataTable } from "@/components/app/data-table";
 import { Badge } from "@/components/ui/badge";
@@ -42,7 +42,6 @@ import {
 } from "@/lib/queries/management";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
-import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/app/networks/$networkId/routes")({
   component: NetworkRoutesPage,

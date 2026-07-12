@@ -1,8 +1,8 @@
 import { randomBytes, randomUUID } from "node:crypto";
 
 import { createDb, schema } from "@tuntun/db";
-import { eq } from "drizzle-orm";
 import * as argon2 from "argon2";
+import { eq } from "drizzle-orm";
 
 function generateApiKeySecret(): { secret: string; secretPrefix: string } {
   const segment = randomBytes(6).toString("base64url").slice(0, 8);

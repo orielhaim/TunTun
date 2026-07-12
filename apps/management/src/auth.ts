@@ -1,8 +1,7 @@
+import { getDb, schema } from "@tuntun/db";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { organization } from "better-auth/plugins";
-
-import { getDb, schema } from "@tuntun/db";
 
 import { createDefaultNetwork } from "./lib/default-network";
 

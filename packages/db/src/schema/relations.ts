@@ -11,14 +11,14 @@ import {
 import {
   apiKeys,
   devices,
+  internalCertificates,
   networks,
+  organizationCas,
   organizationPolicies,
   organizationTunnelSettings,
   relays,
-  tunnels,
   serves,
-  organizationCas,
-  internalCertificates,
+  tunnels,
 } from "./tuntun";
 
 export const userRelations = relations(user, ({ many }) => ({

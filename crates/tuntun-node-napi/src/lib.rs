@@ -104,7 +104,7 @@ pub async fn enroll(cfg: EnrollConfig) -> Result<EnrollResult> {
                 Error::from_reason("management_url is required for API key enrolment")
             })?;
         let client = tuntun_core::control::ManagementClient::new(management_url).map_err(err)?;
-        let network_uuid = uuid::Uuid::parse_str(&network_id)
+        let network_uuid = uuid::Uuid::parse_str(network_id)
             .map_err(|_| Error::from_reason("invalid network_id"))?;
         client
             .register_sdk_node(
@@ -171,8 +171,9 @@ pub struct TunTunNode {
 enum NodeInner {
     Coordinator {
         node: Arc<CoreNode>,
-        sock_path: PathBuf,
+        _sock_path: PathBuf,
     },
+    #[cfg_attr(not(unix), allow(dead_code))]
     Client {
         sock_path: PathBuf,
         network_id: uuid::Uuid,
@@ -226,7 +227,6 @@ impl TunTunNode {
             }
         };
         let persisted = PersistedState::load(&paths).map_err(err)?;
-        let network_id = persisted.network_id;
 
         let standalone = cfg.standalone.unwrap_or(false);
         let hostname = cfg
@@ -256,13 +256,14 @@ impl TunTunNode {
             return Ok(Self {
                 inner: Arc::new(NodeInner::Coordinator {
                     node,
-                    sock_path: PathBuf::new(),
+                    _sock_path: PathBuf::new(),
                 }),
             });
         }
 
         #[cfg(unix)]
         {
+            let network_id = persisted.network_id;
             match coordinator::acquire(network_id).await.map_err(err)? {
                 Role::Client {
                     conn: _drop_conn,
@@ -303,7 +304,10 @@ impl TunTunNode {
                     std::mem::forget(lock_holder); // held for process lifetime
                     spawn_coord_server(listener, node.clone());
                     Ok(Self {
-                        inner: Arc::new(NodeInner::Coordinator { node, sock_path }),
+                        inner: Arc::new(NodeInner::Coordinator {
+                            node,
+                            _sock_path: sock_path,
+                        }),
                     })
                 }
             }
@@ -330,7 +334,7 @@ impl TunTunNode {
             Ok(Self {
                 inner: Arc::new(NodeInner::Coordinator {
                     node,
-                    sock_path: PathBuf::new(),
+                    _sock_path: PathBuf::new(),
                 }),
             })
         }

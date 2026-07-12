@@ -56,6 +56,7 @@ fn bearer_token(req: &Request<Body>) -> Option<String> {
         .and_then(|v| v.strip_prefix("Bearer ").map(str::to_string))
 }
 
+#[allow(clippy::type_complexity)]
 pub async fn relay_register_handler(
     State(state): State<SharedState>,
     req: Request<Body>,
@@ -133,16 +134,15 @@ pub async fn relay_register_handler(
         return err(StatusCode::INTERNAL_SERVER_ERROR, &format!("db: {e}"));
     }
 
-    if used_at.is_none() {
-        if let Err(e) = sqlx::query(
+    if used_at.is_none()
+        && let Err(e) = sqlx::query(
             "UPDATE relay_registration_tokens SET used_at = now() WHERE token_hash = $1",
         )
         .bind(&token_hash)
         .execute(&mut *tx)
         .await
-        {
-            return err(StatusCode::INTERNAL_SERVER_ERROR, &format!("db: {e}"));
-        }
+    {
+        return err(StatusCode::INTERNAL_SERVER_ERROR, &format!("db: {e}"));
     }
 
     if let Err(e) = tx.commit().await {
@@ -238,6 +238,7 @@ pub async fn relay_heartbeat_handler(
                 .await;
     }
 
+    #[allow(clippy::type_complexity)]
     let tunnels: Vec<(
         Uuid,
         String,

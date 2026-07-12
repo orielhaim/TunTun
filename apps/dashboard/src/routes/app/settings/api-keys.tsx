@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { createFileRoute } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   API_KEY_SCOPES,
@@ -8,7 +9,6 @@ import {
 import { PlusIcon, TrashIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { CopyField } from "@/components/app/copy-field";
 import { DataTable } from "@/components/app/data-table";
@@ -31,7 +31,6 @@ import { useActiveOrganization } from "@/lib/auth-client";
 import { createManagementClient } from "@/lib/management-client";
 import { useApiKeys, useNetworks } from "@/lib/queries/management";
 import { queryKeys } from "@/lib/query-keys";
-import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/app/settings/api-keys")({
   component: ApiKeysPage,

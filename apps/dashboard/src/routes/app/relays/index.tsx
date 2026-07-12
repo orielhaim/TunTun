@@ -1,13 +1,12 @@
-import { Link } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { Relay } from "@tuntun/api/management";
 import { formatDistanceToNow } from "date-fns";
 import { PlusIcon } from "lucide-react";
 import { useMemo, useState } from "react";
-
-import { EntityStatus } from "@/components/app/entity-status";
 import { DataTable } from "@/components/app/data-table";
 import { EmptyState } from "@/components/app/empty-state";
+import { EntityStatus } from "@/components/app/entity-status";
 import { PageHeader } from "@/components/app/page-header";
 import { PageToolbar } from "@/components/app/page-toolbar";
 import { RegisterRelayDialog } from "@/components/app/register-relay-dialog";
@@ -16,7 +15,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useRelays } from "@/lib/queries/management";
-import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/app/relays/")({
   component: RelaysPage,

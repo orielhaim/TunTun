@@ -1,11 +1,10 @@
-import { Link } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { Network } from "@tuntun/api/management";
 import { formatDistanceToNow } from "date-fns";
 import { MoreHorizontalIcon, PlusIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { CreateNetworkDialog } from "@/components/app/create-network-dialog";
 import { DataTable } from "@/components/app/data-table";
@@ -29,7 +28,6 @@ import {
   useNetworkMutations,
   useNetworks,
 } from "@/lib/queries/management";
-import { createFileRoute } from "@tanstack/react-router";
 
 type NetworkRow = Network & { machineCount: number };
 

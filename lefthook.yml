@@ -1,0 +1,24 @@
+pre-commit:
+  parallel: false
+  jobs:
+    - name: format
+      glob: "*.{js,ts,jsx,tsx,json,jsonc,css,mjs,cjs}"
+      stage_fixed: true
+      run: bun run format --write --no-errors-on-unmatched -- {staged_files}
+
+    - name: lint
+      glob: "*.{js,ts,jsx,tsx,json,jsonc,css,mjs,cjs}"
+      run: bun run lint --no-errors-on-unmatched -- {staged_files}
+
+    - name: check
+      glob: "*.{js,ts,jsx,tsx,json,jsonc,css,mjs,cjs}"
+      run: bun run check --no-errors-on-unmatched -- {staged_files}
+
+    - name: rust format
+      glob: "**/*.rs"
+      stage_fixed: true
+      run: cargo fmt
+
+    - name: rust clippy
+      glob: "**/*.rs"
+      run: cargo clippy --workspace --all-targets -- -D warnings

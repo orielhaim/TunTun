@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
 import { SearchIcon } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";

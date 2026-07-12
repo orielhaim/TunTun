@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use axum::body::Bytes;
 use axum::extract::{Path, State};
 use axum::http::{Request, StatusCode};
 use axum::response::{IntoResponse, Response};
@@ -442,7 +441,7 @@ async fn verify_service(
 
     state
         .service_auth
-        .verify(&method, &path, &headers, &Bytes::from(body))
+        .verify(&method, &path, &headers, &body)
         .await
         .map_err(|e: ServiceAuthError| e.into_response())
 }

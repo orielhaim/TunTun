@@ -177,10 +177,8 @@ pub async fn run_ping(args: PingArgs) -> anyhow::Result<()> {
                 IpcResponse::PingSummary(s) => {
                     summary = Some(s);
                 }
-                IpcResponse::Error { message } => {
-                    if !out.json {
-                        out.writeln(out.red(&format!("  {message}")));
-                    }
+                IpcResponse::Error { message } if !out.json => {
+                    out.writeln(out.red(&format!("  {message}")));
                 }
                 _ => {}
             }

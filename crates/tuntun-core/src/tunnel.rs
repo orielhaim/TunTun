@@ -58,6 +58,7 @@ impl TunnelManager {
             .collect()
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn start(
         &self,
         tunnel_id: String,

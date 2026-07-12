@@ -1,6 +1,5 @@
-import { z } from "zod";
-
 import { ipv4CidrSchema } from "@tuntun/ip";
+import { z } from "zod";
 
 export const exitNodeSchema = z.object({
   endpointId: z.string().length(64),

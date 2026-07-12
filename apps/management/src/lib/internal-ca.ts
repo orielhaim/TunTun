@@ -16,9 +16,8 @@ import {
   randomBytes,
 } from "node:crypto";
 import * as x509 from "@peculiar/x509";
-import { and, eq, isNull } from "drizzle-orm";
-
 import { schema } from "@tuntun/db";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { db } from "./db";
 

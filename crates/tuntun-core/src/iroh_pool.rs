@@ -11,6 +11,7 @@ use tokio::sync::Mutex;
 pub struct ConnPool {
     endpoint: Endpoint,
     alpn: &'static [u8],
+    #[allow(clippy::type_complexity)]
     entries: Arc<DashMap<(EndpointId, &'static [u8]), Arc<Mutex<Option<Connection>>>>>,
 }
 
