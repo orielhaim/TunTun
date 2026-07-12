@@ -1,6 +1,5 @@
 use anyhow::Context;
 use ed25519_dalek::SigningKey;
-use rand::RngCore;
 use std::path::Path;
 
 #[derive(Clone)]
@@ -11,11 +10,9 @@ pub struct AgentIdentity {
 
 impl AgentIdentity {
     pub fn generate() -> Self {
-        let mut b = [0u8; 32];
-        rand::thread_rng().fill_bytes(&mut b);
-        let sk = SigningKey::from_bytes(&b);
+        let sk = SigningKey::generate(&mut rand::rng());
         Self {
-            secret_bytes: b,
+            secret_bytes: sk.to_bytes(),
             signing_key: sk,
         }
     }

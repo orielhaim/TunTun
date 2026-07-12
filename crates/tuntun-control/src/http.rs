@@ -408,7 +408,7 @@ async fn run_ws(
     {
         let msg = ServerMsg::Snapshot(snap);
         if let Ok(txt) = serde_json::to_string(&msg) {
-            let _ = ws_tx.send(Message::Text(txt)).await;
+            let _ = ws_tx.send(Message::text(txt)).await;
         }
     }
 
@@ -424,7 +424,7 @@ async fn run_ws(
             let Ok(txt) = serde_json::to_string(&msg) else {
                 continue;
             };
-            if ws_tx.send(Message::Text(txt)).await.is_err() {
+            if ws_tx.send(Message::text(txt)).await.is_err() {
                 break;
             }
         }
@@ -437,7 +437,7 @@ async fn run_ws(
         while let Some(Ok(msg)) = ws_rx.next().await {
             match msg {
                 Message::Text(txt) => {
-                    if let Ok(cm) = serde_json::from_str::<ClientMsg>(&txt) {
+                    if let Ok(cm) = serde_json::from_str::<ClientMsg>(txt.as_str()) {
                         match cm {
                             ClientMsg::Heartbeat { .. } => {
                                 if let Err(e) = crate::presence::record_heartbeat(&pool, &ep).await

@@ -1,5 +1,4 @@
 use ed25519_dalek::SigningKey;
-use rand::RngCore;
 use std::path::Path;
 
 pub fn load(policy_key_env: Option<&str>, path: &str) -> anyhow::Result<SigningKey> {
@@ -33,10 +32,8 @@ fn load_or_generate_file(path: &str) -> anyhow::Result<SigningKey> {
         let arr: [u8; 32] = bytes.as_slice().try_into().unwrap();
         return Ok(SigningKey::from_bytes(&arr));
     }
-    let mut arr = [0u8; 32];
-    rand::thread_rng().fill_bytes(&mut arr);
-    let sk = SigningKey::from_bytes(&arr);
-    std::fs::write(p, arr)?;
+    let sk = SigningKey::generate(&mut rand::rng());
+    std::fs::write(p, sk.to_bytes())?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;

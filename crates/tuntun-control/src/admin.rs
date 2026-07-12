@@ -71,7 +71,7 @@ pub async fn serve(bind: &str, state: AdminState) -> anyhow::Result<()> {
         .route("/internal/v1/health", get(health_handler))
         .route("/internal/v1/ready", get(ready_handler))
         .route(
-            "/internal/v1/networks/:network_id/validate",
+            "/internal/v1/networks/{network_id}/validate",
             post(validate_network_handler),
         )
         .route(

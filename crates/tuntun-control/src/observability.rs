@@ -1,25 +1,57 @@
 use crate::config::Args;
+use opentelemetry::trace::TracerProvider as _;
+use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::trace::SdkTracerProvider;
 use tracing_subscriber::{EnvFilter, prelude::*};
 
 pub fn init(args: &Args) -> anyhow::Result<()> {
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new("tuntun_control=info,tower_http=info,sqlx=warn"));
 
-    let fmt_layer = tracing_subscriber::fmt::layer().with_target(true);
+    let Some(endpoint) = args.otlp_endpoint.as_ref() else {
+        init_fmt_only(args.json_logs, filter);
+        return Ok(());
+    };
 
-    let registry = tracing_subscriber::registry().with(filter);
+    let exporter = opentelemetry_otlp::SpanExporter::builder()
+        .with_tonic()
+        .with_endpoint(endpoint.clone())
+        .build()?;
+
+    let provider = SdkTracerProvider::builder()
+        .with_batch_exporter(exporter)
+        .build();
+    let tracer = provider.tracer("tuntun-control");
+    opentelemetry::global::set_tracer_provider(provider);
 
     if args.json_logs {
-        registry.with(fmt_layer.json()).init();
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(tracing_subscriber::fmt::layer().json().with_target(true))
+            .with(tracing_opentelemetry::layer().with_tracer(tracer))
+            .init();
     } else {
-        registry.with(fmt_layer).init();
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(tracing_subscriber::fmt::layer().with_target(true))
+            .with(tracing_opentelemetry::layer().with_tracer(tracer))
+            .init();
     }
 
-    // OTLP is optional; if the endpoint isn't reachable we don't want to crash.
-    if let Some(_endpoint) = args.otlp_endpoint.as_ref() {
-        tracing::info!(
-            "OTLP endpoint configured (tracing-opentelemetry wire-up left to deployment)"
-        );
-    }
+    tracing::info!(%endpoint, "OTLP tracing enabled");
     Ok(())
+}
+
+fn init_fmt_only(json_logs: bool, filter: EnvFilter) {
+    if json_logs {
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(tracing_subscriber::fmt::layer().json().with_target(true))
+            .init();
+    } else {
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(tracing_subscriber::fmt::layer().with_target(true))
+            .init();
+    }
 }

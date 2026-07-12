@@ -67,7 +67,3 @@ pub async fn merge_device_metadata(
 
     Ok(())
 }
-
-pub fn device_hostname_expr(alias: &str) -> String {
-    format!("COALESCE(NULLIF({alias}.metadata->>'hostname', ''), left({alias}.endpoint_id, 8))")
-}

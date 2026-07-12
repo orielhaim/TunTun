@@ -50,3 +50,8 @@ ipnetwork.workspace = true
 
 prometheus.workspace = true
 aes-gcm = "0.10"
+
+tracing-opentelemetry.workspace = true
+opentelemetry.workspace = true
+opentelemetry_sdk.workspace = true
+opentelemetry-otlp.workspace = true

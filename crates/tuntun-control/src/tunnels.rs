@@ -6,7 +6,7 @@ use axum::extract::{Request, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use base64::Engine;
-use rand::RngCore;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
@@ -567,7 +567,7 @@ pub async fn create_tunnel_handler(
     let public_hostname = format!("{subdomain}.{base_domain}");
 
     let mut token_bytes = [0u8; 32];
-    rand::thread_rng().fill_bytes(&mut token_bytes);
+    rand::rng().fill_bytes(&mut token_bytes);
     let auth_token = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(token_bytes);
     let auth_hash = hash_token(&auth_token);
 

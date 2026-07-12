@@ -383,14 +383,15 @@ async fn load_ipv4_peers(
     self_endpoint_id: &str,
     _network_name: &str,
 ) -> anyhow::Result<Vec<PeerEntry>> {
-    let hostname_expr = crate::device_metadata::device_hostname_expr("e");
-    let peer_rows: Vec<(String, String, PgIp)> = sqlx::query_as(&format!(
-        "SELECT e.endpoint_id, {hostname_expr} AS hostname, nm.assigned_ip::inet \
+    let peer_rows: Vec<(String, String, PgIp)> = sqlx::query_as(
+        "SELECT e.endpoint_id, \
+            COALESCE(NULLIF(e.metadata->>'hostname', ''), left(e.endpoint_id, 8)) AS hostname, \
+            nm.assigned_ip::inet \
          FROM network_memberships nm \
          JOIN devices e ON e.endpoint_id = nm.endpoint_id \
          WHERE nm.network_id = $1 AND nm.status = 'active' AND nm.endpoint_id <> $2 \
            AND nm.last_seen > now() - interval '5 minutes'",
-    ))
+    )
     .bind(network_id)
     .bind(self_endpoint_id)
     .fetch_all(pool)
@@ -422,11 +423,12 @@ async fn load_ipv6_peers(
     organization_id: &str,
     self_endpoint_id: &str,
 ) -> anyhow::Result<Vec<Ipv6PeerEntry>> {
-    let hostname_expr = crate::device_metadata::device_hostname_expr("devices");
-    let rows: Vec<(String, String)> = sqlx::query_as(&format!(
-        "SELECT endpoint_id, {hostname_expr} AS hostname FROM devices \
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT endpoint_id, \
+            COALESCE(NULLIF(metadata->>'hostname', ''), left(endpoint_id, 8)) AS hostname \
+         FROM devices \
          WHERE organization_id = $1 AND ipv6_enabled AND endpoint_id <> $2",
-    ))
+    )
     .bind(organization_id)
     .bind(self_endpoint_id)
     .fetch_all(pool)

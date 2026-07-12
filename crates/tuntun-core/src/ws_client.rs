@@ -51,7 +51,7 @@ async fn run(
                             };
                             match res {
                                 Ok(Message::Text(t)) => {
-                                    match serde_json::from_str::<ServerMsg>(&t) {
+                                    match serde_json::from_str::<ServerMsg>(t.as_str()) {
                                         Ok(m) => { let _ = server_tx.send(m).await; }
                                         Err(e) => tracing::warn!(?e, "ws server msg parse"),
                                     }
@@ -65,7 +65,7 @@ async fn run(
                         maybe_out = client_rx.recv() => {
                             let Some(m) = maybe_out else { break };
                             if let Ok(t) = serde_json::to_string(&m)
-                                && ws.send(Message::Text(t)).await.is_err() { break; }
+                                && ws.send(Message::text(t)).await.is_err() { break; }
                         }
                     }
                 }
@@ -74,7 +74,7 @@ async fn run(
                 tracing::warn!(?e, wait_ms = backoff.as_millis(), "ws connect failed");
             }
         }
-        let jitter = Duration::from_millis(rand::random::<u64>() % 500);
+        let jitter = Duration::from_millis(rand::random_range(0..500));
         tokio::time::sleep(backoff + jitter).await;
         backoff = (backoff * 2).min(Duration::from_secs(60));
     }
