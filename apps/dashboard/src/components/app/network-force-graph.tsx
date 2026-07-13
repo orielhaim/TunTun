@@ -251,17 +251,28 @@ export function NetworkForceGraph({
 
   const [viewReady, setViewReady] = useState(false);
 
+  const meshNodeCount = useMemo(
+    () => graphData.nodes.filter((n) => n.kind !== "hub").length,
+    [graphData.nodes],
+  );
+
   const fitViewport = useCallback(() => {
     const fg = fgRef.current;
     if (!fg) return;
     fg.d3Force("charge", null);
     fg.d3Force("center", null);
     fg.d3Force("link", null);
-    fg.zoomToFit(0, 96);
+    if (meshNodeCount === 0) {
+      const zoom = size ? Math.min(4.5, Math.max(2.75, size.h / 115)) : 3.25;
+      fg.centerAt(0, 0, 0);
+      fg.zoom(zoom, 0);
+    } else {
+      fg.zoomToFit(0, 96);
+    }
     setViewReady(true);
-  }, []);
+  }, [meshNodeCount, size]);
 
-  const topologyKey = `${graphData.nodes.length}:${graphData.links.length}`;
+  const topologyKey = `${meshNodeCount}:${graphData.links.length}`;
 
   useEffect(() => {
     void topologyKey;
@@ -544,6 +555,8 @@ export function NetworkForceGraph({
             cooldownTicks={0}
             d3AlphaDecay={1}
             d3VelocityDecay={1}
+            minZoom={0.35}
+            maxZoom={6}
             enableNodeDrag={false}
             enableZoomInteraction={false}
             enablePanInteraction={false}

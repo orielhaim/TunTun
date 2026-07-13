@@ -1,0 +1,22 @@
+FROM rust:1.96-bookworm AS builder
+
+WORKDIR /src
+COPY Cargo.toml Cargo.lock ./
+COPY crates/ crates/
+
+RUN cargo fetch
+RUN cargo build --release --package tuntun-relay \
+    && strip target/release/tuntun-relay
+
+FROM debian:bookworm-slim
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /src/target/release/tuntun-relay /usr/local/bin/tuntun-relay
+
+EXPOSE 443 80
+
+ENTRYPOINT ["tuntun-relay"]
+CMD ["run"]

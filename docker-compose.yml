@@ -1,0 +1,112 @@
+name: tuntun
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tuntun
+      POSTGRES_PASSWORD: tuntun
+      POSTGRES_DB: tuntun
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tuntun"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migrate:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.management
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://tuntun:tuntun@postgres:5432/tuntun
+    entrypoint: ["sh", "-c", "cd packages/db && bunx drizzle-kit migrate"]
+    restart: "no"
+
+  control:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.control
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+      - "9091:9091"
+    environment:
+      DATABASE_URL: postgres://tuntun:tuntun@postgres:5432/tuntun
+      TUNTUN_BIND: "0.0.0.0:8080"
+      TUNTUN_ADMIN_BIND: "0.0.0.0:9091"
+      TUNTUN_SERVICE_SECRET: "${TUNTUN_SERVICE_SECRET:-change-me-to-a-random-secret-at-least-32-chars}"
+      TUNTUN_JSON_LOGS: "true"
+    healthcheck:
+      test: ["CMD", "tuntun-control", "--help"]
+      interval: 10s
+      timeout: 3s
+      start_period: 15s
+
+  management:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.management
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      control:
+        condition: service_started
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgres://tuntun:tuntun@postgres:5432/tuntun
+      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:-change-me-to-a-random-secret-at-least-32-chars}"
+      BETTER_AUTH_URL: "http://localhost:5173"
+      MANAGEMENT_PORT: "3000"
+      MANAGEMENT_WEB_ORIGIN: "http://localhost:5173"
+      TUNTUN_MANAGEMENT_PUBLIC_URL: "http://localhost:3000"
+      CONTROL_PLANE_ADMIN_URL: "http://control:9091"
+      TUNTUN_SERVICE_SECRET: "${TUNTUN_SERVICE_SECRET:-change-me-to-a-random-secret-at-least-32-chars}"
+      TUNTUN_MANAGEMENT_URL: "http://management:3000"
+      TUNTUN_CONTROL_URL: "http://control:8080"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bun",
+          "-e",
+          "fetch('http://localhost:3000/health').then(r=>{if(!r.ok)process.exit(1)})",
+        ]
+      interval: 10s
+      timeout: 3s
+      start_period: 10s
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.dashboard
+      args:
+        MANAGEMENT_API_URL: "http://management:3000"
+    restart: unless-stopped
+    depends_on:
+      management:
+        condition: service_healthy
+    ports:
+      - "5173:3000"
+    environment:
+      MANAGEMENT_API_URL: "http://management:3000"
+
+volumes:
+  pgdata:

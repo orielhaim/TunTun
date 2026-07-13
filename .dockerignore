@@ -1,0 +1,13 @@
+target/
+node_modules/
+**/node_modules
+.git/
+.env
+.env.*
+!.env.example
+*.log
+dist/
+.output/
+.vinxi/
+.nitro/
+**/.turbo/

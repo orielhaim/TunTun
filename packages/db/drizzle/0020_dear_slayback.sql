@@ -1,1 +1,0 @@
-ALTER TABLE "endpoint_send_settings" ALTER COLUMN "consent_mode" SET DEFAULT 'prompt';

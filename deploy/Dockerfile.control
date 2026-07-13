@@ -1,0 +1,37 @@
+FROM rust:1.96-bookworm AS planner
+
+WORKDIR /src
+RUN cargo install cargo-chef
+COPY Cargo.toml Cargo.lock ./
+COPY crates/ crates/
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM rust:1.96-bookworm AS builder
+WORKDIR /src
+RUN cargo install cargo-chef
+COPY --from=planner /src/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
+
+COPY Cargo.toml Cargo.lock ./
+COPY crates/ crates/
+RUN cargo build --release --package tuntun-control \
+    && strip target/release/tuntun-control
+
+FROM debian:bookworm-slim
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /src/target/release/tuntun-control /usr/local/bin/tuntun-control
+
+ENV TUNTUN_BIND=0.0.0.0:8080
+ENV TUNTUN_INTERNAL_BIND=0.0.0.0:9090
+ENV TUNTUN_ADMIN_BIND=0.0.0.0:9091
+
+EXPOSE 8080 9090 9091
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=15s \
+    CMD ["/usr/local/bin/tuntun-control", "--help"] || exit 1
+
+ENTRYPOINT ["tuntun-control"]
