@@ -131,11 +131,7 @@ async fn enroll_handler(
     match outcome {
         Ok(resp) => (StatusCode::OK, Json(resp)).into_response(),
         Err((code, msg)) => {
-            state
-                .metrics
-                .http_requests
-                .with_label_values(&["enroll", code.as_str()])
-                .inc();
+            state.metrics.http_request("enroll", code.as_str());
             err(code, &msg)
         }
     }
@@ -219,11 +215,7 @@ async fn enroll_inner(
     )
     .await?;
 
-    state
-        .metrics
-        .http_requests
-        .with_label_values(&["enroll", "200"])
-        .inc();
+    state.metrics.http_request("enroll", "200");
     Ok(resp)
 }
 
@@ -252,11 +244,7 @@ async fn consume_enrollment_token(
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db: {e}")))?;
 
     let (organization_id, network_id) = row.ok_or_else(|| {
-        state
-            .metrics
-            .auth_failures
-            .with_label_values(&["bad_enroll_token"])
-            .inc();
+        state.metrics.auth_failure("bad_enroll_token");
         (
             StatusCode::UNAUTHORIZED,
             "invalid or expired enrollment token".into(),
@@ -287,11 +275,7 @@ async fn resolve_quick_enroll(
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db: {e}")))?;
 
     let (organization_id, quick_enroll_enabled) = org.ok_or_else(|| {
-        state
-            .metrics
-            .auth_failures
-            .with_label_values(&["bad_quick_enroll"])
-            .inc();
+        state.metrics.auth_failure("bad_quick_enroll");
         (StatusCode::NOT_FOUND, "organization not found".into())
     })?;
 
@@ -505,11 +489,7 @@ async fn register_handler(State(state): State<SharedState>, req: Request<Body>) 
         Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, &format!("snapshot: {e}")),
     };
 
-    state
-        .metrics
-        .http_requests
-        .with_label_values(&["register", "200"])
-        .inc();
+    state.metrics.http_request("register", "200");
     (StatusCode::OK, Json(snap)).into_response()
 }
 
@@ -544,11 +524,7 @@ async fn poll_handler(State(state): State<SharedState>, req: Request<Body>) -> R
         Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, &format!("snapshot: {e}")),
     };
 
-    state
-        .metrics
-        .http_requests
-        .with_label_values(&["poll", "200"])
-        .inc();
+    state.metrics.http_request("poll", "200");
     (StatusCode::OK, Json(snap)).into_response()
 }
 
@@ -974,6 +950,113 @@ async fn run_ws(
                                         %session_id,
                                         "SshRecordingSaved update failed"
                                     );
+                                }
+                            }
+                            ClientMsg::TransferOffer {
+                                transfer_id,
+                                sender_endpoint_id,
+                                receiver_endpoint_id,
+                                file_name,
+                                size,
+                                blake3_hash,
+                                status,
+                                message,
+                            } => {
+                                let status = if status.is_empty() {
+                                    "offered".to_string()
+                                } else {
+                                    status
+                                };
+                                if let Err(e) = sqlx::query(
+                                    "INSERT INTO file_transfers \
+                                       (id, organization_id, network_id, sender_endpoint_id, \
+                                        receiver_endpoint_id, file_name, size_bytes, blake3_hash, \
+                                        status, progress_pct, bytes_transferred, message, created_at) \
+                                     SELECT $1::uuid, d.organization_id, nm.network_id, $2, $3, \
+                                            $4, $5, $6, $7, 0, 0, $8, now() \
+                                     FROM devices d \
+                                     JOIN network_memberships nm ON nm.endpoint_id = d.endpoint_id \
+                                       AND nm.status = 'active' \
+                                     WHERE d.endpoint_id = $2 \
+                                     LIMIT 1 \
+                                     ON CONFLICT (id) DO UPDATE SET \
+                                       status = EXCLUDED.status, \
+                                       receiver_endpoint_id = COALESCE(EXCLUDED.receiver_endpoint_id, file_transfers.receiver_endpoint_id), \
+                                       message = COALESCE(EXCLUDED.message, file_transfers.message)",
+                                )
+                                .bind(&transfer_id)
+                                .bind(&sender_endpoint_id)
+                                .bind(&receiver_endpoint_id)
+                                .bind(&file_name)
+                                .bind(size as i64)
+                                .bind(&blake3_hash)
+                                .bind(&status)
+                                .bind(&message)
+                                .execute(&pool)
+                                .await
+                                {
+                                    tracing::warn!(?e, %transfer_id, "TransferOffer upsert failed");
+                                }
+                            }
+                            ClientMsg::TransferProgress {
+                                transfer_id,
+                                percent,
+                                bytes_transferred,
+                                bytes_total: _,
+                            } => {
+                                if let Err(e) = sqlx::query(
+                                    "UPDATE file_transfers \
+                                     SET status = 'transferring', \
+                                         progress_pct = $2, \
+                                         bytes_transferred = $3 \
+                                     WHERE id = $1::uuid",
+                                )
+                                .bind(&transfer_id)
+                                .bind(percent.round() as i32)
+                                .bind(bytes_transferred as i64)
+                                .execute(&pool)
+                                .await
+                                {
+                                    tracing::warn!(?e, %transfer_id, "TransferProgress update failed");
+                                }
+                            }
+                            ClientMsg::TransferComplete {
+                                transfer_id,
+                                inbox_path,
+                                duration_ms: _,
+                            } => {
+                                if let Err(e) = sqlx::query(
+                                    "UPDATE file_transfers \
+                                     SET status = 'completed', progress_pct = 100, \
+                                         inbox_path = $2, completed_at = now() \
+                                     WHERE id = $1::uuid",
+                                )
+                                .bind(&transfer_id)
+                                .bind(&inbox_path)
+                                .execute(&pool)
+                                .await
+                                {
+                                    tracing::warn!(?e, %transfer_id, "TransferComplete update failed");
+                                }
+                            }
+                            ClientMsg::TransferFailed {
+                                transfer_id,
+                                error,
+                                rejected,
+                            } => {
+                                let status = if rejected { "rejected" } else { "failed" };
+                                if let Err(e) = sqlx::query(
+                                    "UPDATE file_transfers \
+                                     SET status = $2, error = $3, completed_at = now() \
+                                     WHERE id = $1::uuid",
+                                )
+                                .bind(&transfer_id)
+                                .bind(status)
+                                .bind(&error)
+                                .execute(&pool)
+                                .await
+                                {
+                                    tracing::warn!(?e, %transfer_id, "TransferFailed update failed");
                                 }
                             }
                             ClientMsg::Hello { .. } | ClientMsg::Pong { .. } => {}

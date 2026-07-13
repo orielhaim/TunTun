@@ -70,6 +70,10 @@ export const queryKeys = {
     [...queryKeys.org(orgId), "ssh-recordings"] as const,
   sshRecording: (orgId: string, sessionId: string) =>
     [...queryKeys.org(orgId), "ssh-recording", sessionId] as const,
+  transfers: (orgId: string, status?: string) =>
+    [...queryKeys.org(orgId), "transfers", status ?? "all"] as const,
+  sendSettings: (orgId: string, endpointId: string) =>
+    [...queryKeys.org(orgId), "send-settings", endpointId] as const,
   internalCa: (orgId: string) =>
     [...queryKeys.org(orgId), "internal-ca"] as const,
   tunnelSettings: (orgId: string) =>

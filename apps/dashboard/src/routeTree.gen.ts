@@ -24,6 +24,7 @@ import { Route as AppAccessRouteImport } from './routes/app/access'
 import { Route as AcceptInvitationInvitationIdRouteImport } from './routes/accept-invitation.$invitationId'
 import { Route as AppSettingsRouteRouteImport } from './routes/app/settings/route'
 import { Route as AppTunnelsIndexRouteImport } from './routes/app/tunnels/index'
+import { Route as AppTransfersIndexRouteImport } from './routes/app/transfers/index'
 import { Route as AppSshSessionsIndexRouteImport } from './routes/app/ssh-sessions/index'
 import { Route as AppSettingsIndexRouteImport } from './routes/app/settings/index'
 import { Route as AppServesIndexRouteImport } from './routes/app/serves/index'
@@ -118,6 +119,11 @@ const AppSettingsRouteRoute = AppSettingsRouteRouteImport.update({
 const AppTunnelsIndexRoute = AppTunnelsIndexRouteImport.update({
   id: '/tunnels/',
   path: '/tunnels/',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppTransfersIndexRoute = AppTransfersIndexRouteImport.update({
+  id: '/transfers/',
+  path: '/transfers/',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppSshSessionsIndexRoute = AppSshSessionsIndexRouteImport.update({
@@ -250,6 +256,7 @@ export interface FileRoutesByFullPath {
   '/app/serves/': typeof AppServesIndexRoute
   '/app/settings/': typeof AppSettingsIndexRoute
   '/app/ssh-sessions/': typeof AppSshSessionsIndexRoute
+  '/app/transfers/': typeof AppTransfersIndexRoute
   '/app/tunnels/': typeof AppTunnelsIndexRoute
   '/app/networks/$networkId/access': typeof AppNetworksNetworkIdAccessRoute
   '/app/networks/$networkId/enrollment': typeof AppNetworksNetworkIdEnrollmentRoute
@@ -283,6 +290,7 @@ export interface FileRoutesByTo {
   '/app/serves': typeof AppServesIndexRoute
   '/app/settings': typeof AppSettingsIndexRoute
   '/app/ssh-sessions': typeof AppSshSessionsIndexRoute
+  '/app/transfers': typeof AppTransfersIndexRoute
   '/app/tunnels': typeof AppTunnelsIndexRoute
   '/app/networks/$networkId/access': typeof AppNetworksNetworkIdAccessRoute
   '/app/networks/$networkId/enrollment': typeof AppNetworksNetworkIdEnrollmentRoute
@@ -320,6 +328,7 @@ export interface FileRoutesById {
   '/app/serves/': typeof AppServesIndexRoute
   '/app/settings/': typeof AppSettingsIndexRoute
   '/app/ssh-sessions/': typeof AppSshSessionsIndexRoute
+  '/app/transfers/': typeof AppTransfersIndexRoute
   '/app/tunnels/': typeof AppTunnelsIndexRoute
   '/app/networks/$networkId/access': typeof AppNetworksNetworkIdAccessRoute
   '/app/networks/$networkId/enrollment': typeof AppNetworksNetworkIdEnrollmentRoute
@@ -358,6 +367,7 @@ export interface FileRouteTypes {
     | '/app/serves/'
     | '/app/settings/'
     | '/app/ssh-sessions/'
+    | '/app/transfers/'
     | '/app/tunnels/'
     | '/app/networks/$networkId/access'
     | '/app/networks/$networkId/enrollment'
@@ -391,6 +401,7 @@ export interface FileRouteTypes {
     | '/app/serves'
     | '/app/settings'
     | '/app/ssh-sessions'
+    | '/app/transfers'
     | '/app/tunnels'
     | '/app/networks/$networkId/access'
     | '/app/networks/$networkId/enrollment'
@@ -427,6 +438,7 @@ export interface FileRouteTypes {
     | '/app/serves/'
     | '/app/settings/'
     | '/app/ssh-sessions/'
+    | '/app/transfers/'
     | '/app/tunnels/'
     | '/app/networks/$networkId/access'
     | '/app/networks/$networkId/enrollment'
@@ -552,6 +564,13 @@ declare module '@tanstack/react-router' {
       path: '/tunnels'
       fullPath: '/app/tunnels/'
       preLoaderRoute: typeof AppTunnelsIndexRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/app/transfers/': {
+      id: '/app/transfers/'
+      path: '/transfers'
+      fullPath: '/app/transfers/'
+      preLoaderRoute: typeof AppTransfersIndexRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/app/ssh-sessions/': {
@@ -746,6 +765,7 @@ interface AppRouteRouteChildren {
   AppRelaysIndexRoute: typeof AppRelaysIndexRoute
   AppServesIndexRoute: typeof AppServesIndexRoute
   AppSshSessionsIndexRoute: typeof AppSshSessionsIndexRoute
+  AppTransfersIndexRoute: typeof AppTransfersIndexRoute
   AppTunnelsIndexRoute: typeof AppTunnelsIndexRoute
 }
 
@@ -766,6 +786,7 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppRelaysIndexRoute: AppRelaysIndexRoute,
   AppServesIndexRoute: AppServesIndexRoute,
   AppSshSessionsIndexRoute: AppSshSessionsIndexRoute,
+  AppTransfersIndexRoute: AppTransfersIndexRoute,
   AppTunnelsIndexRoute: AppTunnelsIndexRoute,
 }
 

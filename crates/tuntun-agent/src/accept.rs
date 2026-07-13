@@ -8,9 +8,9 @@ use std::sync::Arc;
 use iroh::Endpoint;
 use tun_rs::AsyncDevice;
 use tuntun_common::ws::ClientMsg;
-use tuntun_common::{RECORDING_ALPN, SSH_ALPN, TUNNEL_ALPN};
+use tuntun_common::{RECORDING_ALPN, SEND_ALPN, SSH_ALPN, TUNNEL_ALPN};
 use tuntun_core::stream::{StreamHandler, TUNNEL_STREAM_ALPN, serve_stream_connection};
-use tuntun_core::{AclEngine, ConnPool, RoutingTable, SignedClient};
+use tuntun_core::{AclEngine, ConnPool, RoutingTable, SendManager, SignedClient};
 
 use crate::metrics::AgentMetrics;
 use crate::recorder::{RecordingStore, serve_recording_connection};
@@ -33,6 +33,7 @@ pub struct AcceptDeps {
     pub network_name: String,
     pub self_endpoint_id: String,
     pub recorder_enabled: bool,
+    pub send: SendManager,
 }
 
 pub fn spawn(deps: AcceptDeps) {
@@ -53,6 +54,7 @@ pub fn spawn(deps: AcceptDeps) {
             let network_name = deps.network_name.clone();
             let self_endpoint_id = deps.self_endpoint_id.clone();
             let recorder_enabled = deps.recorder_enabled;
+            let send = deps.send.clone();
             tokio::spawn(async move {
                 let conn = match incoming.await {
                     Ok(c) => c,
@@ -100,6 +102,10 @@ pub fn spawn(deps: AcceptDeps) {
                     } else {
                         tracing::debug!("ignoring recording ALPN (recorder not enabled)");
                     }
+                } else if alpn == SEND_ALPN {
+                    send.handle_offer_connection(conn).await;
+                } else if alpn == iroh_blobs::ALPN {
+                    send.handle_blobs_connection(conn).await;
                 } else {
                     tracing::debug!(
                         alpn = %String::from_utf8_lossy(alpn),

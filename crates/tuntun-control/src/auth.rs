@@ -47,21 +47,13 @@ pub async fn authenticate_with_limit(
         .get(HDR_ENDPOINT_ID)
         .and_then(|v| v.to_str().ok())
         .ok_or_else(|| {
-            state
-                .metrics
-                .auth_failures
-                .with_label_values(&["missing_id"])
-                .inc();
+            state.metrics.auth_failure("missing_id");
             AuthError(StatusCode::UNAUTHORIZED, "missing X-Endpoint-Id")
         })?
         .to_string();
 
     if tuntun_common::validate_endpoint_id(&endpoint_id).is_err() {
-        state
-            .metrics
-            .auth_failures
-            .with_label_values(&["bad_id"])
-            .inc();
+        state.metrics.auth_failure("bad_id");
         return Err(AuthError(StatusCode::BAD_REQUEST, "invalid X-Endpoint-Id"));
     }
 
@@ -71,20 +63,12 @@ pub async fn authenticate_with_limit(
         .and_then(|v| v.to_str().ok())
         .and_then(|s| s.parse().ok())
         .ok_or_else(|| {
-            state
-                .metrics
-                .auth_failures
-                .with_label_values(&["bad_ts"])
-                .inc();
+            state.metrics.auth_failure("bad_ts");
             AuthError(StatusCode::UNAUTHORIZED, "missing X-Timestamp")
         })?;
 
     if (Utc::now().timestamp() - ts).abs() > MAX_SKEW_SECS {
-        state
-            .metrics
-            .auth_failures
-            .with_label_values(&["stale_ts"])
-            .inc();
+        state.metrics.auth_failure("stale_ts");
         return Err(AuthError(StatusCode::UNAUTHORIZED, "stale timestamp"));
     }
 
@@ -93,11 +77,7 @@ pub async fn authenticate_with_limit(
         .get(HDR_SIGNATURE)
         .and_then(|v| v.to_str().ok())
         .ok_or_else(|| {
-            state
-                .metrics
-                .auth_failures
-                .with_label_values(&["missing_sig"])
-                .inc();
+            state.metrics.auth_failure("missing_sig");
             AuthError(StatusCode::UNAUTHORIZED, "missing X-Endpoint-Signature")
         })?
         .to_string();
@@ -117,11 +97,7 @@ pub async fn authenticate_with_limit(
             })?;
 
     let organization_id = organization_id.ok_or_else(|| {
-        state
-            .metrics
-            .auth_failures
-            .with_label_values(&["unknown_device"])
-            .inc();
+        state.metrics.auth_failure("unknown_device");
         AuthError(StatusCode::UNAUTHORIZED, "unknown device; enroll first")
     })?;
 
@@ -137,11 +113,7 @@ pub async fn authenticate_with_limit(
     })?;
 
     if active_membership.unwrap_or(0) == 0 {
-        state
-            .metrics
-            .auth_failures
-            .with_label_values(&["unknown_device"])
-            .inc();
+        state.metrics.auth_failure("unknown_device");
         return Err(AuthError(
             StatusCode::UNAUTHORIZED,
             "unknown device; enroll first",
@@ -152,11 +124,7 @@ pub async fn authenticate_with_limit(
         .map_err(|_| AuthError(StatusCode::BAD_REQUEST, "invalid pubkey"))?;
 
     tuntun_common::signing::verify(&vk, method, path, ts, &body, &sig).map_err(|_| {
-        state
-            .metrics
-            .auth_failures
-            .with_label_values(&["bad_sig"])
-            .inc();
+        state.metrics.auth_failure("bad_sig");
         AuthError(StatusCode::UNAUTHORIZED, "bad signature")
     })?;
 

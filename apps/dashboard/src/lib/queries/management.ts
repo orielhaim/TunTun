@@ -635,6 +635,97 @@ export function useSshSessionMutations(orgId: string | undefined) {
   };
 }
 
+export function useTransfers(orgId: string | undefined, status?: string) {
+  return useQuery({
+    queryKey: orgId ? queryKeys.transfers(orgId, status) : ["transfers"],
+    enabled: Boolean(orgId),
+    refetchInterval: 3_000,
+    queryFn: async () => {
+      const { transfers } = await createManagementClient(orgId!).listTransfers({
+        status,
+        limit: 100,
+      });
+      return transfers;
+    },
+  });
+}
+
+export function useTransferMutations(orgId: string | undefined) {
+  const queryClient = useQueryClient();
+  const invalidate = () => {
+    if (orgId) {
+      void queryClient.invalidateQueries({
+        queryKey: [...queryKeys.org(orgId), "transfers"],
+      });
+    }
+  };
+  return {
+    accept: useMutation({
+      mutationFn: async (args: { transferId: string; endpointId: string }) => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).acceptTransfer(
+          args.transferId,
+          args.endpointId,
+        );
+      },
+      onSuccess: invalidate,
+    }),
+    reject: useMutation({
+      mutationFn: async (args: {
+        transferId: string;
+        endpointId: string;
+        reason?: string;
+      }) => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).rejectTransfer(
+          args.transferId,
+          args.endpointId,
+          args.reason,
+        );
+      },
+      onSuccess: invalidate,
+    }),
+  };
+}
+
+export function useSendSettings(
+  orgId: string | undefined,
+  endpointId: string | undefined,
+) {
+  return useQuery({
+    queryKey:
+      orgId && endpointId
+        ? queryKeys.sendSettings(orgId, endpointId)
+        : ["send-settings"],
+    enabled: Boolean(orgId && endpointId),
+    queryFn: async () =>
+      createManagementClient(orgId!).getSendSettings(endpointId!),
+  });
+}
+
+export function useUpdateSendSettings(orgId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      endpointId: string;
+      consentMode?: "auto_accept" | "prompt" | "deny";
+      inboxPath?: string | null;
+      pinBlobs?: boolean;
+    }) => {
+      if (!orgId) throw new Error("No organization");
+      const { endpointId, ...body } = args;
+      return createManagementClient(orgId).updateSendSettings(endpointId, body);
+    },
+    onSuccess: (_data, vars) => {
+      if (orgId) {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.sendSettings(orgId, vars.endpointId),
+        });
+      }
+    },
+  });
+}
+
 export function useServePeers(
   orgId: string | undefined,
   networkId: string | undefined,

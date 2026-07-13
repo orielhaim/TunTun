@@ -51,17 +51,17 @@ pub async fn run_outbound(
         }
         let packet = &buf[..n];
         let Some(parsed) = ip::parse_ipv4(packet) else {
-            metrics.dropped.with_label_values(&["non_ipv4"]).inc();
+            metrics.dropped_inc("non_ipv4");
             continue;
         };
 
         if routes.is_advertised_destination(&parsed.dst) {
-            metrics.dropped.with_label_values(&["local_subnet"]).inc();
+            metrics.dropped_inc("local_subnet");
             continue;
         }
 
         let Some(peer) = routes.lookup_ip(&parsed.dst) else {
-            metrics.dropped.with_label_values(&["no_route"]).inc();
+            metrics.dropped_inc("no_route");
             continue;
         };
         if !acl.allow_packet(
@@ -71,7 +71,7 @@ pub async fn run_outbound(
             parsed.protocol,
             Direction::Outbound,
         ) {
-            metrics.dropped.with_label_values(&["policy_deny"]).inc();
+            metrics.dropped_inc("policy_deny");
             continue;
         }
         let payload = Bytes::copy_from_slice(packet);
@@ -83,17 +83,17 @@ pub async fn run_outbound(
             match pool.get(peer_endpoint).await {
                 Ok(conn) => match send_datagram(&conn, payload) {
                     Ok(()) => {
-                        m.packets.with_label_values(&["out"]).inc();
-                        m.bytes.with_label_values(&["out"]).inc_by(n);
+                        m.packets_inc("out");
+                        m.bytes_add("out", n);
                     }
                     Err(e) => {
                         tracing::warn!(%peer_endpoint, ?e, "send_datagram failed");
-                        m.dropped.with_label_values(&["send_failed"]).inc();
+                        m.dropped_inc("send_failed");
                     }
                 },
                 Err(e) => {
                     tracing::warn!(%peer_endpoint, ?e, "dial failed");
-                    m.dropped.with_label_values(&["dial_failed"]).inc();
+                    m.dropped_inc("dial_failed");
                 }
             }
         });
@@ -116,7 +116,7 @@ pub async fn serve_tunnel_connection(
         return;
     }
     tracing::info!(%remote_id, "peer connected");
-    metrics.active_conns.inc();
+    metrics.active_conns_inc();
     loop {
         match conn.read_datagram().await {
             Ok(dg) => {
@@ -133,21 +133,18 @@ pub async fn serve_tunnel_connection(
                         parsed.protocol,
                         Direction::Inbound,
                     ) {
-                        metrics.dropped.with_label_values(&["policy_deny_in"]).inc();
+                        metrics.dropped_inc("policy_deny_in");
                         continue;
                     }
                 }
                 let n = dg.len() as u64;
                 if let Err(e) = tun.send(&dg).await {
                     tracing::warn!(?e, "tun send failed");
-                    metrics
-                        .dropped
-                        .with_label_values(&["tun_send_failed"])
-                        .inc();
+                    metrics.dropped_inc("tun_send_failed");
                     break;
                 }
-                metrics.packets.with_label_values(&["in"]).inc();
-                metrics.bytes.with_label_values(&["in"]).inc_by(n);
+                metrics.packets_inc("in");
+                metrics.bytes_add("in", n);
             }
             Err(e) => {
                 tracing::debug!(?e, "read_datagram closed");
@@ -155,6 +152,6 @@ pub async fn serve_tunnel_connection(
             }
         }
     }
-    metrics.active_conns.dec();
+    metrics.active_conns_dec();
     tracing::info!(%remote_id, "peer disconnected");
 }

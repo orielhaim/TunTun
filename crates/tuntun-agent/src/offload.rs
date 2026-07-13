@@ -4,8 +4,8 @@
 use std::sync::Arc;
 
 use bytes::Bytes;
-use crossbeam_channel::{Receiver, Sender, bounded};
 use iroh::EndpointId;
+use tokio::sync::mpsc;
 use tun_rs::{DeviceBuilder, SyncDevice};
 
 use crate::ip;
@@ -57,7 +57,7 @@ pub fn spawn_outbound_threads(
     metrics: AgentMetrics,
     runtime: tokio::runtime::Handle,
 ) {
-    let peer_senders: Arc<dashmap::DashMap<EndpointId, Sender<Bytes>>> =
+    let peer_senders: Arc<dashmap::DashMap<EndpointId, mpsc::Sender<Bytes>>> =
         Arc::new(dashmap::DashMap::new());
 
     for (idx, queue) in tun.queues.into_iter().enumerate() {
@@ -94,7 +94,7 @@ fn run_outbound_thread(
     pool: ConnPool,
     metrics: AgentMetrics,
     runtime: tokio::runtime::Handle,
-    peer_senders: Arc<dashmap::DashMap<EndpointId, Sender<Bytes>>>,
+    peer_senders: Arc<dashmap::DashMap<EndpointId, mpsc::Sender<Bytes>>>,
 ) {
     tracing::info!(queue = idx, "TUN outbound thread started (offload path)");
     // NOTE: This is the shape of the fast path. `recv_multiple` requires a
@@ -115,15 +115,15 @@ fn run_outbound_thread(
         }
         let packet = &buf[..n];
         let Some(parsed) = ip::parse_ipv4(packet) else {
-            metrics.dropped.with_label_values(&["non_ipv4"]).inc();
+            metrics.dropped_inc("non_ipv4");
             continue;
         };
         if routes.is_advertised_destination(&parsed.dst) {
-            metrics.dropped.with_label_values(&["local_subnet"]).inc();
+            metrics.dropped_inc("local_subnet");
             continue;
         }
         let Some(peer) = routes.lookup_ip(&parsed.dst) else {
-            metrics.dropped.with_label_values(&["no_route"]).inc();
+            metrics.dropped_inc("no_route");
             continue;
         };
         if !acl.allow_packet(
@@ -133,14 +133,14 @@ fn run_outbound_thread(
             parsed.protocol,
             Direction::Outbound,
         ) {
-            metrics.dropped.with_label_values(&["policy_deny"]).inc();
+            metrics.dropped_inc("policy_deny");
             continue;
         }
 
         let sender = peer_senders
             .entry(peer.endpoint)
             .or_insert_with(|| {
-                let (tx, rx) = bounded::<Bytes>(2048);
+                let (tx, rx) = mpsc::channel::<Bytes>(2048);
                 spawn_peer_drain(
                     runtime.clone(),
                     pool.clone(),
@@ -156,13 +156,10 @@ fn run_outbound_thread(
         let n = pkt.len() as u64;
         match sender.try_send(pkt) {
             Ok(()) => {
-                metrics.packets.with_label_values(&["out"]).inc();
-                metrics.bytes.with_label_values(&["out"]).inc_by(n);
+                metrics.packets_inc("out");
+                metrics.bytes_add("out", n);
             }
-            Err(_) => metrics
-                .dropped
-                .with_label_values(&["peer_queue_full"])
-                .inc(),
+            Err(_) => metrics.dropped_inc("peer_queue_full"),
         }
     }
 }
@@ -171,7 +168,7 @@ fn spawn_peer_drain(
     rt: tokio::runtime::Handle,
     pool: ConnPool,
     peer: EndpointId,
-    rx: Receiver<Bytes>,
+    mut rx: mpsc::Receiver<Bytes>,
     metrics: AgentMetrics,
 ) {
     rt.spawn(async move {
@@ -182,19 +179,11 @@ fn spawn_peer_drain(
                 return;
             }
         };
-        loop {
-            match rx.try_recv() {
-                Ok(pkt) => {
-                    if let Err(e) = send_datagram(&conn, pkt) {
-                        tracing::warn!(%peer, ?e, "peer drain: send failed");
-                        metrics.dropped.with_label_values(&["send_failed"]).inc();
-                        break;
-                    }
-                }
-                Err(crossbeam_channel::TryRecvError::Empty) => {
-                    tokio::task::yield_now().await;
-                }
-                Err(crossbeam_channel::TryRecvError::Disconnected) => break,
+        while let Some(pkt) = rx.recv().await {
+            if let Err(e) = send_datagram(&conn, pkt) {
+                tracing::warn!(%peer, ?e, "peer drain: send failed");
+                metrics.dropped_inc("send_failed");
+                break;
             }
         }
     });

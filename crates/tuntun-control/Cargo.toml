@@ -10,7 +10,6 @@ tuntun-common.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 futures-util.workspace = true
-async-trait.workspace = true
 
 axum.workspace = true
 tower.workspace = true
@@ -48,7 +47,8 @@ chrono.workspace = true
 ipnet.workspace = true
 ipnetwork.workspace = true
 
-prometheus.workspace = true
+metrics.workspace = true
+metrics-exporter-prometheus.workspace = true
 aes-gcm = "0.10"
 
 tracing-opentelemetry.workspace = true

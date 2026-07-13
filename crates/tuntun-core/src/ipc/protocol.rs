@@ -114,6 +114,33 @@ pub enum IpcRequest {
     SshAuthPoll {
         challenge_token: String,
     },
+
+    /// Send a file or directory to a peer (hostname / IP / endpoint id / `tag:name`).
+    SendFile {
+        path: String,
+        target: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    SendAccept {
+        transfer_id: String,
+    },
+    SendReject {
+        transfer_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+    },
+    SendList,
+    SendHistory,
+    SendConfig,
+    SendSetConfig {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        consent: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        inbox_path: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pin_blobs: Option<bool>,
+    },
 }
 
 fn default_ssh_list_limit() -> u32 {
@@ -178,6 +205,11 @@ pub enum IpcResponse {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         proof_token: Option<String>,
     },
+    Transfer(TransferInfo),
+    Transfers {
+        transfers: Vec<TransferInfo>,
+    },
+    SendConfig(SendConfigInfo),
     Ok {
         message: String,
     },
@@ -365,6 +397,35 @@ pub struct TunnelInfo {
     pub public_url: String,
     pub relay: String,
     pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransferInfo {
+    pub transfer_id: String,
+    pub direction: String,
+    pub peer_endpoint_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub peer_hostname: Option<String>,
+    pub file_name: String,
+    pub size: u64,
+    pub hash: String,
+    pub status: String,
+    pub percent: f32,
+    pub bytes_transferred: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inbox_path: Option<String>,
+    pub is_directory: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SendConfigInfo {
+    pub consent: String,
+    pub inbox_path: String,
+    pub pin_blobs: bool,
 }
 
 /// Convenience: self IPv4 as string for status.

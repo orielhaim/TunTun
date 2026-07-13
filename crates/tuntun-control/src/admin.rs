@@ -86,6 +86,19 @@ pub async fn serve(bind: &str, state: AdminState) -> anyhow::Result<()> {
             "/internal/v1/ssh/kill-session",
             post(kill_ssh_session_handler),
         )
+        .route("/internal/v1/transfers/send", post(send_file_handler))
+        .route(
+            "/internal/v1/transfers/accept",
+            post(accept_transfer_handler),
+        )
+        .route(
+            "/internal/v1/transfers/reject",
+            post(reject_transfer_handler),
+        )
+        .route(
+            "/internal/v1/transfers/set-consent",
+            post(set_send_consent_handler),
+        )
         .with_state(Arc::new(state));
 
     let listener = tokio::net::TcpListener::bind(bind).await?;
@@ -472,6 +485,140 @@ async fn kill_ssh_session_handler(
         )
         .await;
     (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response()
+}
+
+#[derive(serde::Deserialize)]
+struct SendFilePush {
+    endpoint_id: String,
+    transfer_id: String,
+    path: String,
+    target: String,
+    #[serde(default)]
+    message: Option<String>,
+}
+
+async fn send_file_handler(
+    State(state): State<Arc<AdminState>>,
+    req: Request<axum::body::Body>,
+) -> Response {
+    let (parsed, state) = match parse_admin_json::<SendFilePush>(state, req).await {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+    state
+        .ws_hub
+        .push_to(
+            &parsed.endpoint_id,
+            tuntun_common::ws::ServerMsg::SendFile {
+                transfer_id: parsed.transfer_id,
+                path: parsed.path,
+                target: parsed.target,
+                message: parsed.message,
+            },
+        )
+        .await;
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response()
+}
+
+#[derive(serde::Deserialize)]
+struct TransferIdPush {
+    endpoint_id: String,
+    transfer_id: String,
+    #[serde(default)]
+    reason: Option<String>,
+}
+
+async fn accept_transfer_handler(
+    State(state): State<Arc<AdminState>>,
+    req: Request<axum::body::Body>,
+) -> Response {
+    let (parsed, state) = match parse_admin_json::<TransferIdPush>(state, req).await {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+    state
+        .ws_hub
+        .push_to(
+            &parsed.endpoint_id,
+            tuntun_common::ws::ServerMsg::AcceptTransfer {
+                transfer_id: parsed.transfer_id,
+            },
+        )
+        .await;
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response()
+}
+
+async fn reject_transfer_handler(
+    State(state): State<Arc<AdminState>>,
+    req: Request<axum::body::Body>,
+) -> Response {
+    let (parsed, state) = match parse_admin_json::<TransferIdPush>(state, req).await {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+    state
+        .ws_hub
+        .push_to(
+            &parsed.endpoint_id,
+            tuntun_common::ws::ServerMsg::RejectTransfer {
+                transfer_id: parsed.transfer_id,
+                reason: parsed.reason,
+            },
+        )
+        .await;
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response()
+}
+
+#[derive(serde::Deserialize)]
+struct SetSendConsentPush {
+    endpoint_id: String,
+    mode: String,
+    #[serde(default)]
+    inbox_path: Option<String>,
+    #[serde(default)]
+    pin_blobs: bool,
+}
+
+async fn set_send_consent_handler(
+    State(state): State<Arc<AdminState>>,
+    req: Request<axum::body::Body>,
+) -> Response {
+    let (parsed, state) = match parse_admin_json::<SetSendConsentPush>(state, req).await {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+    state
+        .ws_hub
+        .push_to(
+            &parsed.endpoint_id,
+            tuntun_common::ws::ServerMsg::SetSendConsent {
+                mode: parsed.mode,
+                inbox_path: parsed.inbox_path,
+                pin_blobs: parsed.pin_blobs,
+            },
+        )
+        .await;
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response()
+}
+
+async fn parse_admin_json<T: serde::de::DeserializeOwned>(
+    state: Arc<AdminState>,
+    req: Request<axum::body::Body>,
+) -> Result<(T, Arc<AdminState>), Response> {
+    let method = req.method().to_string();
+    let path = req.uri().path().to_string();
+    let headers = req.headers().clone();
+    let body = axum::body::to_bytes(req.into_body(), 1024 * 1024)
+        .await
+        .map_err(|_| StatusCode::BAD_REQUEST.into_response())?;
+    state
+        .service_auth
+        .verify(&method, &path, &headers, &body)
+        .await
+        .map_err(|e: ServiceAuthError| e.into_response())?;
+    let parsed: T = serde_json::from_slice(&body)
+        .map_err(|_| (StatusCode::BAD_REQUEST, "invalid json").into_response())?;
+    Ok((parsed, state))
 }
 
 async fn verify_service(

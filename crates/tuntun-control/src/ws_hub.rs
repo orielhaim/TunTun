@@ -44,10 +44,9 @@ impl WsHub {
                 .or_default()
                 .insert(endpoint_id.clone());
         }
-        self.metrics.ws_connected.inc();
+        self.metrics.ws_connected_inc();
         self.metrics
-            .devices_online
-            .set(self.inner.subs.len() as i64);
+            .devices_online_set(self.inner.subs.len() as i64);
         rx
     }
 
@@ -58,10 +57,9 @@ impl WsHub {
                 set.remove(endpoint_id);
             }
         }
-        self.metrics.ws_connected.dec();
+        self.metrics.ws_connected_dec();
         self.metrics
-            .devices_online
-            .set(self.inner.subs.len() as i64);
+            .devices_online_set(self.inner.subs.len() as i64);
     }
 
     pub fn connection_count(&self) -> i64 {

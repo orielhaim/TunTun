@@ -48,6 +48,10 @@ pub enum Command {
     ///
     /// Examples: `tuntun ssh db-server`, `tuntun ssh db-server -u root`, `tuntun ssh db-server -- uname -a`
     Ssh(crate::cmds_ssh::SshArgs),
+    /// Send a file or directory to a peer over the mesh (P2P via iroh-blobs)
+    ///
+    /// Examples: `tuntun send ./file.txt db-server`, `tuntun send ./dir tag:production`
+    Send(crate::cmds_send::SendArgs),
     /// Sign in via browser (device authorization) and store a management token
     Login(crate::cmds_login::LoginArgs),
     /// Clear stored management tokens

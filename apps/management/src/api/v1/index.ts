@@ -19,6 +19,7 @@ import { sshSessionsRoutes } from "./ssh-sessions";
 import { ssoSettingsRoutes } from "./sso-settings";
 import { subnetRoutesRoutes } from "./subnet-routes";
 import { topologyRoutes } from "./topology";
+import { transfersRoutes } from "./transfers";
 import { tunnelSettingsRoutes } from "./tunnel-settings";
 import { tunnelsRoutes } from "./tunnels";
 
@@ -43,4 +44,5 @@ export const apiV1 = new Elysia({ prefix: "/api/v1" })
   .use(tunnelSettingsRoutes)
   .use(ssoSettingsRoutes)
   .use(internalCaRoutes)
-  .use(servesRoutes);
+  .use(servesRoutes)
+  .use(transfersRoutes);

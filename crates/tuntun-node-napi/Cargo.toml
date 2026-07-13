@@ -26,6 +26,7 @@ bytes.workspace = true
 futures-util.workspace = true
 
 iroh.workspace = true
+iroh-blobs.workspace = true
 chrono.workspace = true
 
 [build-dependencies]

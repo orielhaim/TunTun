@@ -272,3 +272,71 @@ export async function pushKillSshSession(body: {
     })
     .json();
 }
+
+export async function pushSendFile(body: {
+  endpointId: string;
+  transferId: string;
+  path: string;
+  target: string;
+  message?: string;
+}): Promise<void> {
+  await getClient()
+    .post("/internal/v1/transfers/send", {
+      json: {
+        endpoint_id: body.endpointId,
+        transfer_id: body.transferId,
+        path: body.path,
+        target: body.target,
+        message: body.message,
+      },
+    })
+    .json();
+}
+
+export async function pushAcceptTransfer(body: {
+  endpointId: string;
+  transferId: string;
+}): Promise<void> {
+  await getClient()
+    .post("/internal/v1/transfers/accept", {
+      json: {
+        endpoint_id: body.endpointId,
+        transfer_id: body.transferId,
+      },
+    })
+    .json();
+}
+
+export async function pushRejectTransfer(body: {
+  endpointId: string;
+  transferId: string;
+  reason?: string;
+}): Promise<void> {
+  await getClient()
+    .post("/internal/v1/transfers/reject", {
+      json: {
+        endpoint_id: body.endpointId,
+        transfer_id: body.transferId,
+        reason: body.reason,
+      },
+    })
+    .json();
+}
+
+export async function pushSetSendConsent(body: {
+  endpointId: string;
+  mode: string;
+  inboxPath?: string;
+  pinBlobs: boolean;
+}): Promise<void> {
+  await getClient()
+    .post("/internal/v1/transfers/set-consent", {
+      json: {
+        endpoint_id: body.endpointId,
+        mode: body.mode,
+        inbox_path: body.inboxPath,
+        pin_blobs: body.pinBlobs,
+      },
+    })
+    .json();
+}

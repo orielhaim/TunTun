@@ -51,6 +51,32 @@ tuntun tunnel off 3000
 
 Tunnels support **path-based redirects** and **TCP port mappings** on the tunnel detail page in the dashboard.
 
+### Send - transfer files over the mesh
+
+Copy files and directories between machines peer-to-peer over the mesh (BLAKE3-verified via iroh-blobs). No public upload, no shared drive - the sender offers, the receiver consents (or auto-accepts), and the payload lands in `~/TunTun/inbox/` by default.
+
+```bash
+# Send a file or directory to a peer (hostname, mesh IP, or endpoint id)
+tuntun send ./report.pdf db-server
+tuntun send ./photos laptop --message "from the shoot"
+
+# Multicast to every machine with a tag
+tuntun send ./build.tar.gz tag:ci
+
+# Pending offers (when consent mode is prompt)
+tuntun send list
+tuntun send accept <transfer_id>
+tuntun send reject <transfer_id>
+
+tuntun send history
+tuntun send config
+tuntun send config --consent prompt --inbox ~/TunTun/inbox
+```
+
+Consent modes: `prompt` (default; shared-tag peers still auto-accept), `auto_accept`, or `deny`. Watch progress, approve pending transfers, and change per-machine consent from the dashboard (**Transfers**).
+
+Also available from the Node SDK.
+
 ### Self-hosted relays
 
 Register your own edge relay, point DNS at it, and terminate public tunnels on infrastructure you control. Optional Let’s Encrypt for non-wildcard domains, or bring your own certificates.
@@ -107,7 +133,7 @@ Group gateways so that if one goes offline, another can take over and routes kee
 
 ### Dashboard
 
-The web UI covers **Overview**, **Machines**, **Relays**, **Tunnels**, **Serves**, **SSH**, **Networks** (mesh map, access, routes, enrollment), **Users**, **Access**, **Logs**, and **Settings** (organization, internal CA, tunnel defaults, SSO, API keys, account / CLI authorization).
+The web UI covers **Overview**, **Machines**, **Relays**, **Tunnels**, **Serves**, **Transfers**, **SSH**, **Networks** (mesh map, access, routes, enrollment), **Users**, **Access**, **Logs**, and **Settings** (organization, internal CA, tunnel defaults, SSO, API keys, account / CLI authorization).
 
 ## What makes TunTun different
 
@@ -198,7 +224,7 @@ sudo tuntun run
 sudo tuntun run --recorder
 ```
 
-Creates the virtual interface (default `tuntun0`), connects to peers, and applies routing, PeerDNS, serves, tunnels, and policies from the control plane.
+Creates the virtual interface (default `tuntun0`), connects to peers, and applies routing, PeerDNS, serves, tunnels, file transfers, and policies from the control plane.
 
 Useful options: `--ifname`, `--poll-secs`, `--metrics-bind`, `--disable-gossip`, `--recorder`.
 
@@ -236,6 +262,11 @@ Global flags: `--state-dir`, `--json-logs`.
 | `tuntun netcheck` | Quick pass/fail connectivity check |
 | `tuntun serve <port>` | Expose a local port on the mesh |
 | `tuntun tunnel <port>` | Expose a local port via a public relay |
+| `tuntun send <path> <target>` | P2P send a file/dir to a peer or `tag:name` |
+| `tuntun send list` | Active / pending transfers |
+| `tuntun send accept / reject <id>` | Respond to a pending offer |
+| `tuntun send history` | Past transfers |
+| `tuntun send config` | Consent mode, inbox path, pin blobs |
 | `tuntun ssh <target>` | Identity-based SSH to a peer |
 | `tuntun ssh sessions` | List SSH sessions |
 | `tuntun ssh recordings` | List session recordings |
@@ -243,7 +274,7 @@ Global flags: `--state-dir`, `--json-logs`.
 | `tuntun login` | Sign in to management (device auth) |
 | `tuntun logout` | Clear stored management tokens |
 
-Serve and tunnel stay inside the mesh vs go public through a relay, respectively. Both can also be created from the dashboard.
+Serve and tunnel stay inside the mesh vs go public through a relay, respectively. Both can also be created from the dashboard. Send moves files peer-to-peer on the mesh; manage consent and history under **Transfers**.
 
 ## Relays (public tunnels)
 

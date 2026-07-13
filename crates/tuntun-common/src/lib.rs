@@ -2,6 +2,7 @@ pub mod ipv6;
 pub mod policy;
 pub mod recording;
 pub mod relay;
+pub mod send;
 pub mod signing;
 pub mod ssh;
 pub mod ws;
@@ -23,6 +24,9 @@ pub use ssh::SSH_ALPN;
 
 /// ALPN for SSH session recording streams.
 pub use recording::RECORDING_ALPN;
+
+/// ALPN for file-transfer offer streams.
+pub use send::SEND_ALPN;
 
 /// Header the agent sends with every authenticated request.
 pub const HDR_ENDPOINT_ID: &str = "x-endpoint-id";

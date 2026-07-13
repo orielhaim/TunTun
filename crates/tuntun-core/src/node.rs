@@ -4,13 +4,14 @@ use std::time::Duration;
 use anyhow::Context;
 use arc_swap::ArcSwap;
 use iroh::{Endpoint, SecretKey, endpoint::presets};
-use tuntun_common::TUNNEL_ALPN;
+use tuntun_common::{SEND_ALPN, TUNNEL_ALPN};
 
 use crate::acl::{AclEngine, SelfIdentity};
 use crate::control::{SignedClient, basic_metadata};
 use crate::identity::AgentIdentity;
 use crate::iroh_pool::ConnPool;
 use crate::routing::RoutingTable;
+use crate::send::SendManager;
 use crate::serve::ServeManager;
 use crate::state::{PersistedState, StatePaths, load_snapshot_cache, save_snapshot_cache};
 use crate::stream::TUNNEL_STREAM_ALPN;
@@ -62,6 +63,7 @@ pub struct CoreNode {
     pub paths: StatePaths,
     pub serves: ServeManager,
     pub tunnels: TunnelManager,
+    pub send: SendManager,
     pub signed: SignedClient,
 }
 
@@ -80,6 +82,9 @@ impl CoreNode {
         if cfg.advertise_recording_alpn {
             alpns.push(tuntun_common::RECORDING_ALPN.to_vec());
         }
+        // File transfer (offer + iroh-blobs) available on both agent and SDK nodes.
+        alpns.push(SEND_ALPN.to_vec());
+        alpns.push(iroh_blobs::ALPN.to_vec());
 
         let secret = SecretKey::from_bytes(&identity.secret_bytes);
         let endpoint = Endpoint::builder(presets::N0)
@@ -143,6 +148,15 @@ impl CoreNode {
         let serves = ServeManager::new(membership.assigned_ipv4, routes.clone());
         let pool = ConnPool::new(endpoint.clone(), TUNNEL_STREAM_ALPN);
         let tunnels = TunnelManager::new(pool.clone());
+        let send = SendManager::open(
+            paths.dir.join("blobs"),
+            pool.clone(),
+            routes.clone(),
+            acl.clone(),
+            my_id_hex.clone(),
+        )
+        .await
+        .context("open send manager")?;
 
         // Sync loops.
         let ws = crate::ws_client::spawn(
@@ -151,6 +165,7 @@ impl CoreNode {
             identity.signing_key.clone(),
         );
         serves.set_client_tx(ws.tx.clone());
+        send.set_client_tx(ws.tx.clone());
         spawn_ws_processor(
             ws,
             routes.clone(),
@@ -162,6 +177,7 @@ impl CoreNode {
             cfg.agent_version,
             Some(serves.clone()),
             Some(tunnels.clone()),
+            Some(send.clone()),
             cfg.on_kill_ssh.clone(),
         );
         spawn_poll_fallback(
@@ -186,6 +202,7 @@ impl CoreNode {
             paths,
             serves,
             tunnels,
+            send,
             signed,
         })
     }

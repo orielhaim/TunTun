@@ -110,6 +110,7 @@ pub async fn run(
         network_name: node.persisted.network_name.clone(),
         self_endpoint_id: node.endpoint_id_hex(),
         recorder_enabled: args.recorder,
+        send: node.send.clone(),
     });
 
     let dns_cfg = membership_snap.dns.clone();
@@ -134,6 +135,7 @@ pub async fn run(
         peer_dns_active: dns_guard.is_some(),
         serves: node.serves.clone(),
         tunnels: node.tunnels.clone(),
+        send: node.send.clone(),
     });
     let _ipc_task = spawn_ipc_server(node.persisted.network_id, ipc_state);
 

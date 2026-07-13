@@ -1133,6 +1133,78 @@ export const serveSessions = pgTable(
   ],
 );
 
+/** P2P file transfers reported by agents. */
+export const fileTransfers = pgTable(
+  "file_transfers",
+  {
+    id: id(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    networkId: uuid("network_id")
+      .notNull()
+      .references(() => networks.id, { onDelete: "cascade" }),
+    senderEndpointId: text("sender_endpoint_id").notNull(),
+    receiverEndpointId: text("receiver_endpoint_id"),
+    fileName: text("file_name").notNull(),
+    sizeBytes: bigint("size_bytes", { mode: "number" }).notNull().default(0),
+    blake3Hash: text("blake3_hash").notNull(),
+    status: text("status").notNull().default("offered"),
+    progressPct: integer("progress_pct").notNull().default(0),
+    bytesTransferred: bigint("bytes_transferred", { mode: "number" })
+      .notNull()
+      .default(0),
+    error: text("error"),
+    message: text("message"),
+    inboxPath: text("inbox_path"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("file_transfers_by_org_created_idx").on(
+      table.organizationId,
+      table.createdAt,
+    ),
+    index("file_transfers_by_network_created_idx").on(
+      table.networkId,
+      table.createdAt,
+    ),
+    index("file_transfers_by_status_idx").on(table.status),
+    index("file_transfers_by_sender_idx").on(table.senderEndpointId),
+    index("file_transfers_by_receiver_idx").on(table.receiverEndpointId),
+    check(
+      "file_transfers_status_check",
+      sql`${table.status} IN ('offered', 'pending', 'transferring', 'completed', 'failed', 'rejected')`,
+    ),
+  ],
+);
+
+/** Per-endpoint file-transfer consent / inbox settings. */
+export const endpointSendSettings = pgTable(
+  "endpoint_send_settings",
+  {
+    endpointId: text("endpoint_id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    consentMode: text("consent_mode").notNull().default("prompt"),
+    inboxPath: text("inbox_path"),
+    pinBlobs: boolean("pin_blobs").notNull().default(false),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("endpoint_send_settings_by_org_idx").on(table.organizationId),
+    check(
+      "endpoint_send_settings_consent_check",
+      sql`${table.consentMode} IN ('auto_accept', 'prompt', 'deny')`,
+    ),
+  ],
+);
+
 export const networksRelations = relations(networks, ({ one, many }) => ({
   organization: one(organization, {
     fields: [networks.organizationId],
@@ -1152,6 +1224,7 @@ export const networksRelations = relations(networks, ({ one, many }) => ({
   nodeGroups: many(nodeGroups),
   tunnels: many(tunnels),
   serves: many(serves),
+  fileTransfers: many(fileTransfers),
 }));
 
 export const devicesRelations = relations(devices, ({ one, many }) => ({
@@ -1507,6 +1580,27 @@ export const sshAuthChecksRelations = relations(sshAuthChecks, ({ one }) => ({
     references: [organization.id],
   }),
 }));
+
+export const fileTransfersRelations = relations(fileTransfers, ({ one }) => ({
+  organization: one(organization, {
+    fields: [fileTransfers.organizationId],
+    references: [organization.id],
+  }),
+  network: one(networks, {
+    fields: [fileTransfers.networkId],
+    references: [networks.id],
+  }),
+}));
+
+export const endpointSendSettingsRelations = relations(
+  endpointSendSettings,
+  ({ one }) => ({
+    organization: one(organization, {
+      fields: [endpointSendSettings.organizationId],
+      references: [organization.id],
+    }),
+  }),
+);
 
 export const sshAuthChallengesRelations = relations(
   sshAuthChallenges,

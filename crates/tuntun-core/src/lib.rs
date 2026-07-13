@@ -9,6 +9,7 @@ pub mod node;
 pub mod ping;
 pub mod recording;
 pub mod routing;
+pub mod send;
 pub mod serve;
 pub mod ssh;
 pub mod state;
@@ -23,6 +24,7 @@ pub use identity::AgentIdentity;
 pub use iroh_pool::ConnPool;
 pub use node::{CoreNode, CoreNodeConfig, KillSshHook};
 pub use routing::{PeerInfo, RoutingTable};
+pub use send::{SendConfig, SendManager, TransferDirection, TransferRecord, TransferStatus};
 pub use serve::{ServeAcl, ServeManager};
 pub use state::{CliAuthTokens, PersistedState, StatePaths};
 pub use stream::{

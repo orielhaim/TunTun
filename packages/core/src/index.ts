@@ -213,7 +213,76 @@ export class TunTunNode {
   async close(): Promise<void> {
     await this.native.close();
   }
+
+  /** Send a local file or directory to a mesh peer. */
+  async sendFile(
+    path: string,
+    target: string,
+    message?: string,
+  ): Promise<TransferInfo[]> {
+    return (this.native as any).sendFile(path, target, message);
+  }
+
+  /** Accept a pending inbound offer (prompt consent). */
+  async acceptTransfer(transferId: string): Promise<TransferInfo> {
+    return (this.native as any).acceptTransfer(transferId);
+  }
+
+  /** Reject a pending inbound offer. */
+  async rejectTransfer(transferId: string, reason?: string): Promise<void> {
+    await (this.native as any).rejectTransfer(transferId, reason);
+  }
+
+  /** Pending inbound offers waiting for accept/reject. */
+  async listPendingTransfers(): Promise<TransferInfo[]> {
+    return (this.native as any).listPendingTransfers();
+  }
+
+  /** Active + pending transfers. */
+  async listTransfers(): Promise<TransferInfo[]> {
+    return (this.native as any).listTransfers();
+  }
+
+  /**
+   * Poll for new pending file offers. Returns an unsubscribe function.
+   */
+  onFileOffer(
+    callback: (offer: TransferInfo) => void,
+    intervalMs = 1000,
+  ): () => void {
+    const seen = new Set<string>();
+    const timer = setInterval(() => {
+      void this.listPendingTransfers()
+        .then((pending) => {
+          for (const p of pending) {
+            if (!seen.has(p.transferId)) {
+              seen.add(p.transferId);
+              callback(p);
+            }
+          }
+        })
+        .catch(() => {});
+    }, intervalMs);
+    return () => clearInterval(timer);
+  }
 }
+
+export type TransferInfo = {
+  transferId: string;
+  direction: string;
+  peerEndpointId: string;
+  peerHostname?: string | null;
+  fileName: string;
+  size: number | bigint;
+  hash: string;
+  status: string;
+  percent: number;
+  bytesTransferred: number | bigint;
+  message?: string | null;
+  error?: string | null;
+  inboxPath?: string | null;
+  isDirectory: boolean;
+};
 
 function indexOfSeq(haystack: Uint8Array, needle: number[]): number {
   outer: for (let i = 0; i <= haystack.length - needle.length; i++) {

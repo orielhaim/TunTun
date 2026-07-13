@@ -2,6 +2,7 @@ mod accept;
 mod cli;
 mod cmds;
 mod cmds_login;
+mod cmds_send;
 mod cmds_ssh;
 mod forward;
 mod gossip_presence;
@@ -41,6 +42,7 @@ async fn main() -> anyhow::Result<()> {
             | crate::cli::Command::Serve(_)
             | crate::cli::Command::Tunnel(_)
             | crate::cli::Command::Ssh(_)
+            | crate::cli::Command::Send(_)
             | crate::cli::Command::Login(_)
             | crate::cli::Command::Logout(_)
     );
@@ -68,6 +70,7 @@ async fn main() -> anyhow::Result<()> {
         crate::cli::Command::Serve(a) => crate::cmds::run_serve(a).await,
         crate::cli::Command::Tunnel(a) => crate::cmds::run_tunnel(a).await,
         crate::cli::Command::Ssh(a) => crate::cmds_ssh::run_ssh(a).await,
+        crate::cli::Command::Send(a) => crate::cmds_send::run(a).await,
         crate::cli::Command::Login(a) => crate::cmds_login::run_login(a).await,
         crate::cli::Command::Logout(a) => crate::cmds_login::run_logout(a).await,
     }

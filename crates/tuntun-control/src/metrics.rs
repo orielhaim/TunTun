@@ -1,47 +1,60 @@
-use prometheus::{Encoder, IntCounterVec, IntGauge, Registry, TextEncoder, opts};
+use std::time::Duration;
+
+use metrics::{counter, describe_counter, describe_gauge, gauge};
+use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 
 #[derive(Clone)]
 pub struct Metrics {
-    pub registry: Registry,
-    pub http_requests: IntCounterVec,
-    pub auth_failures: IntCounterVec,
-    pub devices_online: IntGauge,
-    pub ws_connected: IntGauge,
+    handle: PrometheusHandle,
 }
 
 impl Metrics {
     pub fn new() -> anyhow::Result<Self> {
-        let registry = Registry::new();
-        let http_requests = IntCounterVec::new(
-            opts!("tuntun_http_requests_total", "HTTP requests processed"),
-            &["endpoint", "status"],
-        )?;
-        let auth_failures = IntCounterVec::new(
-            opts!("tuntun_auth_failures_total", "Failed auth attempts"),
-            &["reason"],
-        )?;
-        let devices_online = IntGauge::new("tuntun_devices_online", "Devices with live WS")?;
-        let ws_connected = IntGauge::new("tuntun_ws_connected", "Currently open WS sessions")?;
+        let handle = PrometheusBuilder::new().install_recorder()?;
 
-        registry.register(Box::new(http_requests.clone()))?;
-        registry.register(Box::new(auth_failures.clone()))?;
-        registry.register(Box::new(devices_online.clone()))?;
-        registry.register(Box::new(ws_connected.clone()))?;
+        describe_counter!("tuntun_http_requests_total", "HTTP requests processed");
+        describe_counter!("tuntun_auth_failures_total", "Failed auth attempts");
+        describe_gauge!("tuntun_devices_online", "Devices with live WS");
+        describe_gauge!("tuntun_ws_connected", "Currently open WS sessions");
 
-        Ok(Self {
-            registry,
-            http_requests,
-            auth_failures,
-            devices_online,
-            ws_connected,
-        })
+        let upkeep = handle.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(5));
+            loop {
+                interval.tick().await;
+                upkeep.run_upkeep();
+            }
+        });
+
+        Ok(Self { handle })
+    }
+
+    pub fn http_request(&self, endpoint: &'static str, status: impl AsRef<str>) {
+        counter!(
+            "tuntun_http_requests_total",
+            "endpoint" => endpoint,
+            "status" => status.as_ref().to_string()
+        )
+        .increment(1);
+    }
+
+    pub fn auth_failure(&self, reason: &'static str) {
+        counter!("tuntun_auth_failures_total", "reason" => reason).increment(1);
+    }
+
+    pub fn ws_connected_inc(&self) {
+        gauge!("tuntun_ws_connected").increment(1.0);
+    }
+
+    pub fn ws_connected_dec(&self) {
+        gauge!("tuntun_ws_connected").decrement(1.0);
+    }
+
+    pub fn devices_online_set(&self, n: i64) {
+        gauge!("tuntun_devices_online").set(n as f64);
     }
 
     pub fn render(&self) -> String {
-        let mut buf = Vec::new();
-        let encoder = TextEncoder::new();
-        let mf = self.registry.gather();
-        let _ = encoder.encode(&mf, &mut buf);
-        String::from_utf8(buf).unwrap_or_default()
+        self.handle.render()
     }
 }

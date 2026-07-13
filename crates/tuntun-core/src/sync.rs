@@ -63,6 +63,7 @@ pub fn spawn_ws_processor(
     agent_version: &'static str,
     serves: Option<crate::serve::ServeManager>,
     tunnels: Option<crate::tunnel::TunnelManager>,
+    send: Option<crate::send::SendManager>,
     on_kill_ssh: Option<crate::node::KillSshHook>,
 ) {
     tokio::spawn(async move {
@@ -225,6 +226,77 @@ pub fn spawn_ws_processor(
                                 tracing::info!(%session_id, "KillSshSession handled");
                             } else {
                                 tracing::warn!(%session_id, "KillSshSession ignored (no hook)");
+                            }
+                        }
+                        ServerMsg::SendFile {
+                            transfer_id,
+                            path,
+                            target,
+                            message,
+                        } => {
+                            if let Some(mgr) = &send {
+                                let path = std::path::PathBuf::from(path);
+                                match mgr
+                                    .send_file_with_id(
+                                        &path,
+                                        &target,
+                                        message,
+                                        Some(transfer_id.clone()),
+                                    )
+                                    .await
+                                {
+                                    Ok(_) => {
+                                        tracing::info!(%transfer_id, "SendFile started");
+                                    }
+                                    Err(e) => {
+                                        tracing::warn!(?e, %transfer_id, "SendFile failed");
+                                        let _ = ws
+                                            .tx
+                                            .send(ClientMsg::TransferFailed {
+                                                transfer_id,
+                                                error: e.to_string(),
+                                                rejected: false,
+                                            })
+                                            .await;
+                                    }
+                                }
+                            }
+                        }
+                        ServerMsg::AcceptTransfer { transfer_id } => {
+                            if let Some(mgr) = &send
+                                && let Err(e) = mgr.accept_pending(&transfer_id).await
+                            {
+                                tracing::warn!(?e, %transfer_id, "AcceptTransfer failed");
+                            }
+                        }
+                        ServerMsg::RejectTransfer {
+                            transfer_id,
+                            reason,
+                        } => {
+                            if let Some(mgr) = &send
+                                && let Err(e) = mgr.reject_pending(&transfer_id, reason).await
+                            {
+                                tracing::warn!(?e, %transfer_id, "RejectTransfer failed");
+                            }
+                        }
+                        ServerMsg::SetSendConsent {
+                            mode,
+                            inbox_path,
+                            pin_blobs,
+                        } => {
+                            if let Some(mgr) = &send {
+                                let mut cfg = mgr.config();
+                                if let Some(m) =
+                                    tuntun_common::send::SendConsentMode::parse(&mode)
+                                {
+                                    cfg.consent = m;
+                                }
+                                if let Some(p) = inbox_path {
+                                    cfg.inbox_path = std::path::PathBuf::from(p);
+                                }
+                                cfg.pin_blobs = pin_blobs;
+                                mgr.set_config(cfg);
+                                tracing::info!(%mode, "SetSendConsent applied");
                             }
                         }
                     }

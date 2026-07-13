@@ -36,7 +36,10 @@ import {
   deviceDetailSchema,
   deviceListResponse,
   deviceSshAuthSchema,
+  endpointSendSettingsSchema,
   enrollmentTokenListResponse,
+  fileTransferListResponse,
+  fileTransferSchema,
   hostnameRouteListResponse,
   hostnameRouteSchema,
   internalCaSchema,
@@ -90,7 +93,9 @@ import {
   tunnelRoutingRuleSchema,
   tunnelSchema,
   tunnelTrafficListResponse,
+  type UpdateSendSettingsBody,
   type UpsertOrganizationSsoProviderBody,
+  updateSendSettingsBody,
   upsertOrganizationSsoProviderBody,
 } from "@tuntun/api/management";
 import type { z } from "zod";
@@ -835,6 +840,53 @@ export function createManagementClient(orgId: string) {
       request(orgId, org(`/ssh-sessions/${sessionId}/kill`), {
         method: "POST",
       }),
+
+    listTransfers: (opts?: { status?: string; limit?: number }) => {
+      const params = new URLSearchParams();
+      if (opts?.status) params.set("status", opts.status);
+      if (opts?.limit) params.set("limit", String(opts.limit));
+      const qs = params.toString();
+      return request(
+        orgId,
+        org(`/transfers${qs ? `?${qs}` : ""}`),
+        {},
+        fileTransferListResponse,
+      );
+    },
+
+    getTransfer: (transferId: string) =>
+      request(orgId, org(`/transfers/${transferId}`), {}, fileTransferSchema),
+
+    acceptTransfer: (transferId: string, endpointId: string) =>
+      request(orgId, org(`/transfers/${transferId}/accept`), {
+        method: "POST",
+        body: JSON.stringify({ endpointId }),
+      }),
+
+    rejectTransfer: (transferId: string, endpointId: string, reason?: string) =>
+      request(orgId, org(`/transfers/${transferId}/reject`), {
+        method: "POST",
+        body: JSON.stringify({ endpointId, reason }),
+      }),
+
+    getSendSettings: (endpointId: string) =>
+      request(
+        orgId,
+        org(`/endpoints/${endpointId}/send-settings`),
+        {},
+        endpointSendSettingsSchema,
+      ),
+
+    updateSendSettings: (endpointId: string, body: UpdateSendSettingsBody) =>
+      request(
+        orgId,
+        org(`/endpoints/${endpointId}/send-settings`),
+        {
+          method: "PUT",
+          body: JSON.stringify(updateSendSettingsBody.parse(body)),
+        },
+        endpointSendSettingsSchema,
+      ),
   };
 }
 

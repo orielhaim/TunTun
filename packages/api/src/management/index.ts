@@ -18,6 +18,7 @@ export * from "./ssh-policies";
 export * from "./sso-settings";
 export * from "./subnet-routes";
 export * from "./topology";
+export * from "./transfers";
 export * from "./tunnel-routing-rules";
 export * from "./tunnel-settings";
 export * from "./tunnel-traffic";

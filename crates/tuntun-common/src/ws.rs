@@ -61,6 +61,33 @@ pub enum ServerMsg {
     KillSshSession {
         session_id: String,
     },
+
+    /// Dashboard / CP asks sender agent to publish and offer a local file.
+    SendFile {
+        transfer_id: String,
+        path: String,
+        target: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    /// Dashboard / CP accepts a pending inbound offer on the receiver agent.
+    AcceptTransfer {
+        transfer_id: String,
+    },
+    /// Dashboard / CP rejects a pending inbound offer on the receiver agent.
+    RejectTransfer {
+        transfer_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+    },
+    /// Push per-machine send consent / inbox settings.
+    SetSendConsent {
+        mode: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        inbox_path: Option<String>,
+        #[serde(default)]
+        pin_blobs: bool,
+    },
 }
 
 fn default_all_peers() -> String {
@@ -148,6 +175,44 @@ pub enum ClientMsg {
         byte_size: u64,
         #[serde(default)]
         content_sha256: String,
+    },
+
+    /// Agent notified CP that a transfer offer was sent (or received pending).
+    TransferOffer {
+        transfer_id: String,
+        sender_endpoint_id: EndpointIdHex,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        receiver_endpoint_id: Option<EndpointIdHex>,
+        file_name: String,
+        size: u64,
+        blake3_hash: String,
+        #[serde(default)]
+        status: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    /// Progress update while downloading / uploading.
+    TransferProgress {
+        transfer_id: String,
+        percent: f32,
+        bytes_transferred: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        bytes_total: Option<u64>,
+    },
+    /// Transfer finished successfully.
+    TransferComplete {
+        transfer_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        inbox_path: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        duration_ms: Option<u64>,
+    },
+    /// Transfer failed or was rejected.
+    TransferFailed {
+        transfer_id: String,
+        error: String,
+        #[serde(default)]
+        rejected: bool,
     },
 }
 

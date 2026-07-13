@@ -465,6 +465,120 @@ impl TunTunNode {
         }
         Ok(())
     }
+
+    /// Send a local file or directory to a mesh peer.
+    #[napi]
+    pub async fn send_file(
+        &self,
+        path: String,
+        target: String,
+        message: Option<String>,
+    ) -> Result<Vec<TransferJs>> {
+        let node = self.require_coordinator()?;
+        let records = node
+            .send
+            .send_file(std::path::Path::new(&path), &target, message)
+            .await
+            .map_err(err)?;
+        Ok(records.into_iter().map(TransferJs::from).collect())
+    }
+
+    /// Accept a pending inbound transfer offer.
+    #[napi]
+    pub async fn accept_transfer(&self, transfer_id: String) -> Result<TransferJs> {
+        let node = self.require_coordinator()?;
+        let record = node.send.accept_pending(&transfer_id).await.map_err(err)?;
+        Ok(TransferJs::from(record))
+    }
+
+    /// Reject a pending inbound transfer offer.
+    #[napi]
+    pub async fn reject_transfer(&self, transfer_id: String, reason: Option<String>) -> Result<()> {
+        let node = self.require_coordinator()?;
+        node.send
+            .reject_pending(&transfer_id, reason)
+            .await
+            .map_err(err)?;
+        Ok(())
+    }
+
+    /// List pending inbound offers (prompt consent mode).
+    #[napi]
+    pub async fn list_pending_transfers(&self) -> Result<Vec<TransferJs>> {
+        let node = self.require_coordinator()?;
+        Ok(node
+            .send
+            .list_pending()
+            .into_iter()
+            .map(TransferJs::from)
+            .collect())
+    }
+
+    /// List active transfers.
+    #[napi]
+    pub async fn list_transfers(&self) -> Result<Vec<TransferJs>> {
+        let node = self.require_coordinator()?;
+        Ok(node
+            .send
+            .list_active()
+            .into_iter()
+            .chain(node.send.list_pending())
+            .map(TransferJs::from)
+            .collect())
+    }
+
+    fn require_coordinator(&self) -> Result<&CoreNode> {
+        match &*self.inner {
+            NodeInner::Coordinator { node, .. } => Ok(node),
+            #[cfg(unix)]
+            NodeInner::Client { .. } => Err(Error::from_reason(
+                "send APIs require the coordinator process (standalone or primary SDK node)",
+            )),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct TransferJs {
+    pub transfer_id: String,
+    pub direction: String,
+    pub peer_endpoint_id: String,
+    pub peer_hostname: Option<String>,
+    pub file_name: String,
+    pub size: i64,
+    pub hash: String,
+    pub status: String,
+    pub percent: f64,
+    pub bytes_transferred: i64,
+    pub message: Option<String>,
+    pub error: Option<String>,
+    pub inbox_path: Option<String>,
+    pub is_directory: bool,
+}
+
+impl From<tuntun_core::TransferRecord> for TransferJs {
+    fn from(r: tuntun_core::TransferRecord) -> Self {
+        use tuntun_core::TransferDirection;
+        Self {
+            transfer_id: r.transfer_id,
+            direction: match r.direction {
+                TransferDirection::Outbound => "outbound".into(),
+                TransferDirection::Inbound => "inbound".into(),
+            },
+            peer_endpoint_id: r.peer_endpoint_id,
+            peer_hostname: r.peer_hostname,
+            file_name: r.file_name,
+            size: r.size as i64,
+            hash: r.hash,
+            status: r.status.as_str().into(),
+            percent: r.percent as f64,
+            bytes_transferred: r.bytes_transferred as i64,
+            message: r.message,
+            error: r.error,
+            inbox_path: r.inbox_path,
+            is_directory: r.is_directory,
+        }
+    }
 }
 
 fn resolve_peer(node: &CoreNode, host: &str) -> Option<Arc<tuntun_core::PeerInfo>> {
@@ -478,10 +592,9 @@ fn resolve_peer(node: &CoreNode, host: &str) -> Option<Arc<tuntun_core::PeerInfo
 
 fn spawn_stream_acceptor(node: Arc<CoreNode>) {
     let ep = node.endpoint.clone();
+    let send_mgr = node.send.clone();
     let handler: tuntun_core::stream::StreamHandler = Arc::new(|accepted| {
         Box::pin(async move {
-            // Default: log and drop. Applications register their own handler
-            // via `TunTunNode.serve()` - see below.
             tracing::info!(
                 peer = %accepted.peer_hex,
                 host = %accepted.header.host,
@@ -492,9 +605,29 @@ fn spawn_stream_acceptor(node: Arc<CoreNode>) {
         })
     });
     tokio::spawn(async move {
-        if let Err(e) = tuntun_core::stream::serve_stream_acceptor(ep, handler).await {
-            tracing::error!(?e, "stream acceptor exited");
+        tracing::info!("SDK unified ALPN acceptor started");
+        while let Some(incoming) = ep.accept().await {
+            let handler = handler.clone();
+            let send_mgr = send_mgr.clone();
+            tokio::spawn(async move {
+                let conn = match incoming.await {
+                    Ok(c) => c,
+                    Err(e) => {
+                        tracing::warn!(?e, "handshake");
+                        return;
+                    }
+                };
+                let alpn = conn.alpn();
+                if alpn == tuntun_core::TUNNEL_STREAM_ALPN {
+                    tuntun_core::serve_stream_connection(conn, handler).await;
+                } else if alpn == tuntun_common::SEND_ALPN {
+                    send_mgr.handle_offer_connection(conn).await;
+                } else if alpn == iroh_blobs::ALPN {
+                    send_mgr.handle_blobs_connection(conn).await;
+                }
+            });
         }
+        tracing::error!("SDK ALPN acceptor exited");
     });
 }
 

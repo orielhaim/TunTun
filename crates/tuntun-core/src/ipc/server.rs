@@ -13,6 +13,7 @@ use super::protocol::{
 };
 use super::transport::{IpcListener, IpcStream};
 use crate::node::CoreNode;
+use crate::send::SendManager;
 use crate::serve::ServeManager;
 use crate::tunnel::TunnelManager;
 
@@ -27,6 +28,7 @@ pub struct AgentIpcState {
     pub peer_dns_active: bool,
     pub serves: ServeManager,
     pub tunnels: TunnelManager,
+    pub send: SendManager,
 }
 
 impl AgentIpcState {
@@ -245,12 +247,127 @@ async fn dispatch(req: IpcRequest, state: &AgentIpcState) -> IpcResponse {
                 },
             }
         }
+        IpcRequest::SendFile {
+            path,
+            target,
+            message,
+        } => match state
+            .send
+            .send_file(std::path::Path::new(&path), &target, message)
+            .await
+        {
+            Ok(records) => IpcResponse::Transfers {
+                transfers: records.into_iter().map(transfer_info).collect(),
+            },
+            Err(e) => IpcResponse::Error {
+                message: e.to_string(),
+            },
+        },
+        IpcRequest::SendAccept { transfer_id } => {
+            match state.send.accept_pending(&transfer_id).await {
+                Ok(r) => IpcResponse::Transfer(transfer_info(r)),
+                Err(e) => IpcResponse::Error {
+                    message: e.to_string(),
+                },
+            }
+        }
+        IpcRequest::SendReject {
+            transfer_id,
+            reason,
+        } => match state.send.reject_pending(&transfer_id, reason).await {
+            Ok(()) => IpcResponse::Ok {
+                message: "rejected".into(),
+            },
+            Err(e) => IpcResponse::Error {
+                message: e.to_string(),
+            },
+        },
+        IpcRequest::SendList => {
+            let mut transfers: Vec<_> = state
+                .send
+                .list_active()
+                .into_iter()
+                .chain(state.send.list_pending())
+                .map(transfer_info)
+                .collect();
+            transfers.sort_by(|a, b| a.transfer_id.cmp(&b.transfer_id));
+            transfers.dedup_by(|a, b| a.transfer_id == b.transfer_id);
+            IpcResponse::Transfers { transfers }
+        }
+        IpcRequest::SendHistory => IpcResponse::Transfers {
+            transfers: state
+                .send
+                .list_history()
+                .into_iter()
+                .map(transfer_info)
+                .collect(),
+        },
+        IpcRequest::SendConfig => {
+            let cfg = state.send.config();
+            IpcResponse::SendConfig(super::protocol::SendConfigInfo {
+                consent: cfg.consent.as_str().into(),
+                inbox_path: cfg.inbox_path.display().to_string(),
+                pin_blobs: cfg.pin_blobs,
+            })
+        }
+        IpcRequest::SendSetConfig {
+            consent,
+            inbox_path,
+            pin_blobs,
+        } => {
+            let mut cfg = state.send.config();
+            if let Some(c) = consent {
+                match tuntun_common::send::SendConsentMode::parse(&c) {
+                    Some(m) => cfg.consent = m,
+                    None => {
+                        return IpcResponse::Error {
+                            message: format!("invalid consent mode: {c}"),
+                        };
+                    }
+                }
+            }
+            if let Some(p) = inbox_path {
+                cfg.inbox_path = std::path::PathBuf::from(p);
+            }
+            if let Some(p) = pin_blobs {
+                cfg.pin_blobs = p;
+            }
+            state.send.set_config(cfg.clone());
+            IpcResponse::SendConfig(super::protocol::SendConfigInfo {
+                consent: cfg.consent.as_str().into(),
+                inbox_path: cfg.inbox_path.display().to_string(),
+                pin_blobs: cfg.pin_blobs,
+            })
+        }
         // Handled earlier:
         IpcRequest::OpenStream { .. } | IpcRequest::Ssh { .. } | IpcRequest::Ping { .. } => {
             IpcResponse::Error {
                 message: "internal: request should have been handled specially".into(),
             }
         }
+    }
+}
+
+fn transfer_info(r: crate::send::TransferRecord) -> super::protocol::TransferInfo {
+    use crate::send::TransferDirection;
+    super::protocol::TransferInfo {
+        transfer_id: r.transfer_id,
+        direction: match r.direction {
+            TransferDirection::Outbound => "outbound".into(),
+            TransferDirection::Inbound => "inbound".into(),
+        },
+        peer_endpoint_id: r.peer_endpoint_id,
+        peer_hostname: r.peer_hostname,
+        file_name: r.file_name,
+        size: r.size,
+        hash: r.hash,
+        status: r.status.as_str().into(),
+        percent: r.percent,
+        bytes_transferred: r.bytes_transferred,
+        message: r.message,
+        error: r.error,
+        inbox_path: r.inbox_path,
+        is_directory: r.is_directory,
     }
 }
 

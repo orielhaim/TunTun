@@ -1,48 +1,56 @@
-use prometheus::{Encoder, IntCounterVec, IntGauge, Registry, TextEncoder, opts};
+use std::time::Duration;
+
+use metrics::{counter, describe_counter, describe_gauge, gauge};
+use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 
 #[derive(Clone)]
 pub struct AgentMetrics {
-    pub registry: Registry,
-    pub packets: IntCounterVec,
-    pub bytes: IntCounterVec,
-    pub dropped: IntCounterVec,
-    pub active_conns: IntGauge,
+    handle: PrometheusHandle,
 }
 
 impl AgentMetrics {
     pub fn new() -> anyhow::Result<Self> {
-        let registry = Registry::new();
-        let packets = IntCounterVec::new(
-            opts!("tuntun_packets_total", "Packets processed by the tunnel"),
-            &["direction"],
-        )?;
-        let bytes = IntCounterVec::new(
-            opts!("tuntun_bytes_total", "Bytes processed by the tunnel"),
-            &["direction"],
-        )?;
-        let dropped = IntCounterVec::new(
-            opts!("tuntun_dropped_packets_total", "Packets dropped"),
-            &["reason"],
-        )?;
-        let active_conns = IntGauge::new("tuntun_active_connections", "Live peer connections")?;
-        registry.register(Box::new(packets.clone()))?;
-        registry.register(Box::new(bytes.clone()))?;
-        registry.register(Box::new(dropped.clone()))?;
-        registry.register(Box::new(active_conns.clone()))?;
-        Ok(Self {
-            registry,
-            packets,
-            bytes,
-            dropped,
-            active_conns,
-        })
+        let handle = PrometheusBuilder::new().install_recorder()?;
+
+        describe_counter!("tuntun_packets_total", "Packets processed by the tunnel");
+        describe_counter!("tuntun_bytes_total", "Bytes processed by the tunnel");
+        describe_counter!("tuntun_dropped_packets_total", "Packets dropped");
+        describe_gauge!("tuntun_active_connections", "Live peer connections");
+
+        let upkeep = handle.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(5));
+            loop {
+                interval.tick().await;
+                upkeep.run_upkeep();
+            }
+        });
+
+        Ok(Self { handle })
+    }
+
+    pub fn packets_inc(&self, direction: &'static str) {
+        counter!("tuntun_packets_total", "direction" => direction).increment(1);
+    }
+
+    pub fn bytes_add(&self, direction: &'static str, n: u64) {
+        counter!("tuntun_bytes_total", "direction" => direction).increment(n);
+    }
+
+    pub fn dropped_inc(&self, reason: &'static str) {
+        counter!("tuntun_dropped_packets_total", "reason" => reason).increment(1);
+    }
+
+    pub fn active_conns_inc(&self) {
+        gauge!("tuntun_active_connections").increment(1.0);
+    }
+
+    pub fn active_conns_dec(&self) {
+        gauge!("tuntun_active_connections").decrement(1.0);
     }
 
     pub fn render(&self) -> String {
-        let mut buf = Vec::new();
-        let mf = self.registry.gather();
-        let _ = TextEncoder::new().encode(&mf, &mut buf);
-        String::from_utf8(buf).unwrap_or_default()
+        self.handle.render()
     }
 }
 
