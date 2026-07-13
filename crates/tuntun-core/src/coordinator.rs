@@ -245,21 +245,12 @@ pub async fn client_open_stream(sock: &Path, host: &str, port: u16) -> anyhow::R
     buf.push(b'\n');
     conn.write_all(&buf).await?;
 
-    let (r, w) = conn.into_split();
-    let mut br = BufReader::new(r);
+    let mut br = BufReader::new(conn);
     let mut line = String::new();
     br.read_line(&mut line).await?;
     let resp: CoordResp = serde_json::from_str(line.trim())?;
     match resp {
-        CoordResp::Ready => {
-            let r = br.into_inner();
-            Ok(UnixStream::from_std(
-                std::os::unix::io::AsRawFd::as_raw_fd(&r)
-                    .try_into()
-                    .unwrap(),
-            )
-            .unwrap_or_else(|_| unreachable!("split reassembly")))
-        }
+        CoordResp::Ready => Ok(br.into_inner()),
         CoordResp::Error { message } => bail!("coord error: {message}"),
         CoordResp::Peers { .. } => bail!("unexpected peers response"),
     }
