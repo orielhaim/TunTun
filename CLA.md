@@ -27,7 +27,7 @@ You grant to TunTun a perpetual, worldwide, non-exclusive,
 royalty-free, irrevocable copyright license to use, copy,
 modify, merge, publish, distribute, sublicense, and sell your
 Contributions, and to permit others to do the same, under any
-license — including the AGPL v3, any future open-source
+license - including the AGPL v3, any future open-source
 license, and any commercial or proprietary license that TunTun
 offers for the Software.
 

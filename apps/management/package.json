@@ -8,6 +8,8 @@
     "start": "bun run src/index.ts"
   },
   "dependencies": {
+    "@better-auth/oauth-provider": "^1.6.23",
+    "@better-auth/sso": "^1.6.23",
     "@elysiajs/cors": "^1.4.2",
     "@peculiar/x509": "^2.0.0",
     "@tuntun/api": "workspace:*",

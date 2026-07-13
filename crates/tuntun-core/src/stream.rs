@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, bail};
 use bytes::{BufMut, BytesMut};
-use iroh::endpoint::{RecvStream, SendStream};
+use iroh::endpoint::{Connection, RecvStream, SendStream};
 use iroh::{Endpoint, EndpointId};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -84,6 +84,38 @@ pub struct AcceptedStream {
     pub recv: RecvStream,
 }
 
+/// Handle an already-accepted connection negotiated with [`TUNNEL_STREAM_ALPN`].
+pub async fn serve_stream_connection(conn: Connection, handler: StreamHandler) {
+    let peer = conn.remote_id();
+    let peer_hex = format!("{peer}");
+    loop {
+        let (send, mut recv) = match conn.accept_bi().await {
+            Ok(pair) => pair,
+            Err(e) => {
+                tracing::debug!(%peer_hex, ?e, "accept_bi closed");
+                break;
+            }
+        };
+        let header = match StreamHeader::read_from(&mut recv).await {
+            Ok(h) => h,
+            Err(e) => {
+                tracing::warn!(%peer_hex, ?e, "bad stream header");
+                continue;
+            }
+        };
+        let accepted = AcceptedStream {
+            peer,
+            peer_hex: peer_hex.clone(),
+            header,
+            send,
+            recv,
+        };
+        let h = handler.clone();
+        tokio::spawn(async move { h(accepted).await });
+    }
+}
+
+/// Standalone accept loop for SDK / single-ALPN endpoints.
 pub async fn serve_stream_acceptor(
     endpoint: Endpoint,
     handler: StreamHandler,
@@ -101,36 +133,9 @@ pub async fn serve_stream_acceptor(
             };
             let alpn = conn.alpn();
             if alpn != TUNNEL_STREAM_ALPN {
-                // not ours; let it drop
                 return;
             }
-            let peer = conn.remote_id();
-            let peer_hex = format!("{peer}");
-            loop {
-                let (send, mut recv) = match conn.accept_bi().await {
-                    Ok(pair) => pair,
-                    Err(e) => {
-                        tracing::debug!(%peer_hex, ?e, "accept_bi closed");
-                        break;
-                    }
-                };
-                let header = match StreamHeader::read_from(&mut recv).await {
-                    Ok(h) => h,
-                    Err(e) => {
-                        tracing::warn!(%peer_hex, ?e, "bad stream header");
-                        continue;
-                    }
-                };
-                let accepted = AcceptedStream {
-                    peer,
-                    peer_hex: peer_hex.clone(),
-                    header,
-                    send,
-                    recv,
-                };
-                let h = handler.clone();
-                tokio::spawn(async move { h(accepted).await });
-            }
+            serve_stream_connection(conn, handler).await;
         });
     }
     Ok(())

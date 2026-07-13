@@ -19,7 +19,16 @@ fn err(code: StatusCode, msg: &str) -> Response {
     (code, Json(json!({ "error": msg }))).into_response()
 }
 
-// ---------- Relay register / heartbeat (Bearer token auth) ----------
+type ActiveTunnelRow = (
+    Uuid,
+    String,
+    String,
+    i32,
+    String,
+    Option<String>,
+    Option<String>,
+    Uuid,
+);
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -238,22 +247,12 @@ pub async fn relay_heartbeat_handler(
                 .await;
     }
 
-    #[allow(clippy::type_complexity)]
-    let tunnels: Vec<(
-        Uuid,
-        String,
-        Option<String>,
-        i32,
-        String,
-        Option<String>,
-        Option<String>,
-        Uuid,
-    )> = match sqlx::query_as(
-        "SELECT id, subdomain, relay_auth_token, local_port, protocol, \
-                basic_auth_user, basic_auth_password_hash, network_id \
-         FROM tunnels \
-         WHERE relay_id = $1 AND status IN ('connecting', 'active') \
-           AND relay_auth_token IS NOT NULL",
+    let tunnels: Vec<ActiveTunnelRow> = match sqlx::query_as(
+        "SELECT t.id, t.subdomain, s.relay_auth_token, t.local_port, t.protocol, \
+                t.basic_auth_user, t.basic_auth_password_hash, t.network_id \
+         FROM tunnels t \
+         JOIN tunnel_secrets s ON s.tunnel_id = t.id \
+         WHERE t.relay_id = $1 AND t.status IN ('connecting', 'active')",
     )
     .bind(relay_id)
     .fetch_all(&state.pool)
@@ -267,7 +266,7 @@ pub async fn relay_heartbeat_handler(
     for (
         tunnel_id,
         subdomain,
-        token,
+        auth_token,
         local_port,
         protocol,
         basic_auth_user,
@@ -275,19 +274,15 @@ pub async fn relay_heartbeat_handler(
         network_id,
     ) in tunnels
     {
-        let Some(auth_token) = token else {
-            continue;
-        };
-
         let redirect_rules: Vec<(String, i32, Option<String>, Option<ipnetwork::IpNetwork>)> =
             match sqlx::query_as(
                 "SELECT r.path_pattern, r.target_port, r.target_endpoint_id, m.assigned_ip \
-                 FROM tunnel_redirect_rules r \
+                 FROM tunnel_routing_rules r \
                  LEFT JOIN network_memberships m \
                    ON m.endpoint_id = r.target_endpoint_id \
                   AND m.network_id = $2 \
                   AND m.status = 'active' \
-                 WHERE r.tunnel_id = $1 \
+                 WHERE r.tunnel_id = $1 AND r.kind = 'path' \
                  ORDER BY r.priority DESC, r.created_at ASC",
             )
             .bind(tunnel_id)
@@ -304,14 +299,14 @@ pub async fn relay_heartbeat_handler(
 
         let port_mappings: Vec<(i32, i32, Option<String>, Option<ipnetwork::IpNetwork>)> =
             match sqlx::query_as(
-                "SELECT p.external_port, p.target_port, p.target_endpoint_id, m.assigned_ip \
-                 FROM tunnel_port_mappings p \
+                "SELECT r.external_port, r.target_port, r.target_endpoint_id, m.assigned_ip \
+                 FROM tunnel_routing_rules r \
                  LEFT JOIN network_memberships m \
-                   ON m.endpoint_id = p.target_endpoint_id \
+                   ON m.endpoint_id = r.target_endpoint_id \
                   AND m.network_id = $2 \
                   AND m.status = 'active' \
-                 WHERE p.tunnel_id = $1 \
-                 ORDER BY p.external_port ASC",
+                 WHERE r.tunnel_id = $1 AND r.kind = 'port' \
+                 ORDER BY r.external_port ASC",
             )
             .bind(tunnel_id)
             .bind(network_id)
@@ -497,7 +492,7 @@ pub async fn create_tunnel_handler(
     let Some((relay_id, relay_domain, relay_endpoint)) = relay_row else {
         return err(
             StatusCode::CONFLICT,
-            "no healthy relay — register one with tuntun-relay register",
+            "no healthy relay - register one with tuntun-relay register",
         );
     };
     let Some(relay_endpoint_id) = relay_endpoint.filter(|s| !s.is_empty()) else {
@@ -574,8 +569,8 @@ pub async fn create_tunnel_handler(
     let tunnel_id: Uuid = match sqlx::query_scalar(
         "INSERT INTO tunnels \
            (organization_id, network_id, endpoint_id, relay_id, local_port, protocol, \
-            subdomain, public_hostname, status, relay_auth_hash, relay_auth_token) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'connecting', $9, $10) \
+            subdomain, public_hostname, status, relay_auth_hash) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'connecting', $9) \
          RETURNING id",
     )
     .bind(&auth.organization_id)
@@ -587,7 +582,6 @@ pub async fn create_tunnel_handler(
     .bind(&subdomain)
     .bind(&public_hostname)
     .bind(&auth_hash)
-    .bind(&auth_token)
     .fetch_one(&state.pool)
     .await
     {
@@ -600,6 +594,20 @@ pub async fn create_tunnel_handler(
             return err(StatusCode::INTERNAL_SERVER_ERROR, &format!("db: {e}"));
         }
     };
+
+    if let Err(e) =
+        sqlx::query("INSERT INTO tunnel_secrets (tunnel_id, relay_auth_token) VALUES ($1, $2)")
+            .bind(tunnel_id)
+            .bind(&auth_token)
+            .execute(&state.pool)
+            .await
+    {
+        let _ = sqlx::query("DELETE FROM tunnels WHERE id = $1")
+            .bind(tunnel_id)
+            .execute(&state.pool)
+            .await;
+        return err(StatusCode::INTERNAL_SERVER_ERROR, &format!("db: {e}"));
+    }
 
     let _ = crate::pg_notify::emit_network_changed(&state.pool, network_id).await;
 
@@ -628,13 +636,13 @@ async fn load_redirect_rules(
 ) -> Vec<tuntun_common::RedirectRule> {
     let rows: Vec<(String, i32, Option<ipnetwork::IpNetwork>)> = match sqlx::query_as(
         "SELECT r.path_pattern, r.target_port, m.assigned_ip \
-         FROM tunnel_redirect_rules r \
+         FROM tunnel_routing_rules r \
          JOIN tunnels t ON t.id = r.tunnel_id \
          LEFT JOIN network_memberships m \
            ON m.endpoint_id = r.target_endpoint_id \
           AND m.network_id = t.network_id \
           AND m.status = 'active' \
-         WHERE r.tunnel_id = $1 \
+         WHERE r.tunnel_id = $1 AND r.kind = 'path' \
          ORDER BY r.priority DESC, r.created_at ASC",
     )
     .bind(tunnel_id)

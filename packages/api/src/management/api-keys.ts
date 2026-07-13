@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/** Known API key scopes — enforced in code, not stored in separate tables. */
+/** Known API key scopes - enforced in code, not stored in separate tables. */
 export const API_KEY_SCOPE_VALUES = ["sdk:enroll"] as const;
 
 export type ApiKeyScope = (typeof API_KEY_SCOPE_VALUES)[number];

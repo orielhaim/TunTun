@@ -175,7 +175,7 @@ function UsersPage() {
         meta: { headerClassName: tableHeaderClassName },
         cell: ({ row }) => {
           const createdAt = row.original.createdAt;
-          if (!createdAt) return "—";
+          if (!createdAt) return "-";
           return format(new Date(createdAt), "MMM d, yyyy");
         },
       },
@@ -183,7 +183,7 @@ function UsersPage() {
         id: "lastSeen",
         header: "Last seen",
         meta: { headerClassName: tableHeaderClassName },
-        cell: () => <span className="text-muted-foreground text-sm">—</span>,
+        cell: () => <span className="text-muted-foreground text-sm">-</span>,
       },
       ...(isAdmin
         ? [

@@ -1,4 +1,4 @@
-//! Public HTTPS listener — TLS terminate by SNI, reverse-tunnel splice to agent.
+//! Public HTTPS listener - TLS terminate by SNI, reverse-tunnel splice to agent.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -57,7 +57,7 @@ async fn handle_https_client(
     let started = Instant::now();
     let tls = acceptor.accept(tcp).await.context("TLS handshake")?;
     let host = extract_server_name(&tls)
-        .with_context(|| format!("client {peer} sent no SNI — cannot route tunnel"))?;
+        .with_context(|| format!("client {peer} sent no SNI - cannot route tunnel"))?;
 
     let slot = registry
         .get(&host)

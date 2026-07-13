@@ -5,22 +5,15 @@ use std::sync::Arc;
 
 use tokio::net::TcpStream;
 use tuntun_core::RoutingTable;
-use tuntun_core::stream::{
-    AcceptedStream, StreamHandler, serve_stream_acceptor, splice_bidirectional,
-};
+use tuntun_core::stream::{AcceptedStream, StreamHandler, splice_bidirectional};
 
-pub fn spawn(endpoint: iroh::Endpoint, routes: RoutingTable) {
-    let handler: StreamHandler = Arc::new(move |accepted| {
+pub fn stream_handler(routes: RoutingTable) -> StreamHandler {
+    Arc::new(move |accepted| {
         let routes = routes.clone();
         Box::pin(async move {
             handle_accepted(accepted, &routes).await;
         })
-    });
-    tokio::spawn(async move {
-        if let Err(e) = serve_stream_acceptor(endpoint, handler).await {
-            tracing::error!(?e, "subnet stream acceptor exited");
-        }
-    });
+    })
 }
 
 async fn handle_accepted(accepted: AcceptedStream, routes: &RoutingTable) {

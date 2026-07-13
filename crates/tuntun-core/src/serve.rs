@@ -1,4 +1,4 @@
-//! TunTun Serve — TLS (or TCP) reverse proxy on the mesh interface → localhost.
+//! TunTun Serve - TLS (or TCP) reverse proxy on the mesh interface → localhost.
 //!
 //! `tuntun serve 3000` listens on the agent's mesh IP with an internal-CA cert
 //! and forwards decrypted traffic to `127.0.0.1:3000`.
@@ -72,6 +72,10 @@ impl ServeManager {
         *self.client_tx.lock() = Some(tx);
     }
 
+    pub fn client_tx(&self) -> Option<mpsc::Sender<ClientMsg>> {
+        self.client_tx.lock().clone()
+    }
+
     pub fn list(&self) -> Vec<ServeInfo> {
         self.inner
             .lock()
@@ -95,11 +99,11 @@ impl ServeManager {
         {
             let guard = self.inner.lock();
             if let Some(existing) = guard.serves.values().find(|s| s.info.id == id) {
-                tracing::debug!(%id, port, "serve already active — skipping start");
+                tracing::debug!(%id, port, "serve already active - skipping start");
                 return Ok(existing.info.clone());
             }
             if guard.serves.contains_key(&port) {
-                // Port held by a different serve id — replace it.
+                // Port held by a different serve id - replace it.
                 drop(guard);
                 let _ = self.stop(port);
             }
@@ -199,7 +203,7 @@ fn allow_peer(routes: &RoutingTable, acl: &ServeAcl, peer_addr: SocketAddr) -> b
                 std::net::IpAddr::V4(ip) => ip,
                 std::net::IpAddr::V6(_) => return false,
             }) else {
-                // Unknown peer — deny in tags mode.
+                // Unknown peer - deny in tags mode.
                 return false;
             };
             peer.tags

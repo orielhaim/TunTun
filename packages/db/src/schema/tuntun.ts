@@ -13,6 +13,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -30,7 +31,16 @@ const cidr = customType<{ data: string; driverData: string }>({
   },
 });
 
+const id = () => uuid("id").primaryKey().default(sql`uuidv7()`);
+
 export const policyActionValues = ["allow", "deny"] as const;
+export const policyScopeValues = ["network", "organization"] as const;
+export const tunnelRoutingKindValues = ["path", "port"] as const;
+export const organizationCaStatusValues = [
+  "active",
+  "rotated",
+  "revoked",
+] as const;
 export const membershipStatusValues = [
   "active",
   "suspended",
@@ -40,7 +50,7 @@ export const membershipStatusValues = [
 export const deviceTypeValues = ["agent", "sdk"] as const;
 
 export const apiKeys = pgTable("api_keys", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: id(),
   organizationId: text("organization_id")
     .notNull()
     .references(() => organization.id, { onDelete: "cascade" }),
@@ -61,7 +71,7 @@ export const apiKeys = pgTable("api_keys", {
 export const networks = pgTable(
   "networks",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id(),
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
@@ -77,7 +87,6 @@ export const networks = pgTable(
   (table) => [unique().on(table.organizationId, table.name)],
 );
 
-/** Tenant-scoped machine identity (one row per endpoint_id). */
 export const devices = pgTable(
   "devices",
   {
@@ -85,7 +94,6 @@ export const devices = pgTable(
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
-    /** Stable ULA derived from endpoint_id at enrollment. */
     tenantIpv6: inet("tenant_ipv6").notNull().unique(),
     ipv6Enabled: boolean("ipv6_enabled").notNull().default(false),
     ipv6EnabledAt: timestamp("ipv6_enabled_at", { withTimezone: true }),
@@ -120,7 +128,6 @@ export const devices = pgTable(
   ],
 );
 
-/** Per-network membership and IPv4 assignment (authoritative IP ledger). */
 export const networkMemberships = pgTable(
   "network_memberships",
   {
@@ -200,83 +207,243 @@ export const deviceTags = pgTable(
 export const policies = pgTable(
   "policies",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    /** Null = organization-wide policy. */
+    networkId: uuid("network_id").references(() => networks.id, {
+      onDelete: "cascade",
+    }),
+    scope: text("scope").notNull(),
+    srcSelector: jsonb("src_selector").notNull(),
+    dstSelector: jsonb("dst_selector").notNull(),
+    action: text("action").notNull(),
+    ports: jsonb("ports").notNull().default([]),
+    protocol: text("protocol"),
+    priority: integer("priority").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("policies_by_org_priority_idx").on(
+      table.organizationId,
+      table.priority,
+    ),
+    index("policies_by_network_priority_idx")
+      .on(table.networkId, table.priority)
+      .where(sql`${table.networkId} IS NOT NULL`),
+    check("policies_action_check", sql`${table.action} IN ('allow', 'deny')`),
+    check(
+      "policies_scope_check",
+      sql`${table.scope} IN ('network', 'organization')`,
+    ),
+    check(
+      "policies_scope_network_id_check",
+      sql`(${table.scope} = 'organization' AND ${table.networkId} IS NULL)
+          OR (${table.scope} = 'network' AND ${table.networkId} IS NOT NULL)`,
+    ),
+  ],
+);
+
+/** Application-level SSH access rules (separate from L3/L4 network ACL). */
+export const sshPolicies = pgTable(
+  "ssh_policies",
+  {
+    id: id(),
     networkId: uuid("network_id")
       .notNull()
       .references(() => networks.id, { onDelete: "cascade" }),
     srcSelector: jsonb("src_selector").notNull(),
     dstSelector: jsonb("dst_selector").notNull(),
     action: text("action").notNull(),
-    ports: jsonb("ports").notNull().default([]),
-    protocol: text("protocol"),
+    users: jsonb("users").notNull().default([]),
+    record: boolean("record").notNull().default(false),
+    recorder: jsonb("recorder"),
+    enforceRecorder: boolean("enforce_recorder").notNull().default(false),
+    checkPeriodSecs: integer("check_period_secs"),
     priority: integer("priority").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
   },
   (table) => [
-    index("policies_by_network_idx").on(table.networkId),
-    index("policies_by_network_priority_idx").on(
+    index("ssh_policies_by_network_priority_idx").on(
       table.networkId,
       table.priority,
     ),
-    check("policies_action_check", sql`${table.action} IN ('allow', 'deny')`),
+    check(
+      "ssh_policies_action_check",
+      sql`${table.action} IN ('accept', 'check', 'deny')`,
+    ),
   ],
 );
 
-export const organizationPolicies = pgTable(
-  "organization_policies",
+export const sshSessions = pgTable(
+  "ssh_sessions",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id(),
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
-    srcSelector: jsonb("src_selector").notNull(),
-    dstSelector: jsonb("dst_selector").notNull(),
-    action: text("action").notNull(),
-    ports: jsonb("ports").notNull().default([]),
-    protocol: text("protocol"),
-    priority: integer("priority").notNull().default(0),
+    networkId: uuid("network_id")
+      .notNull()
+      .references(() => networks.id, { onDelete: "cascade" }),
+    srcEndpointId: text("src_endpoint_id").notNull(),
+    dstEndpointId: text("dst_endpoint_id").notNull(),
+    srcHostname: text("src_hostname"),
+    dstHostname: text("dst_hostname"),
+    targetUser: text("target_user").notNull(),
+    status: text("status").notNull().default("active"),
+    recorded: boolean("recorded").notNull().default(false),
+    startedAt: timestamp("started_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    durationMs: integer("duration_ms"),
+  },
+  (table) => [
+    index("ssh_sessions_by_org_started_idx").on(
+      table.organizationId,
+      table.startedAt,
+    ),
+    index("ssh_sessions_by_network_started_idx").on(
+      table.networkId,
+      table.startedAt,
+    ),
+    index("ssh_sessions_by_dst_started_idx").on(
+      table.dstEndpointId,
+      table.startedAt,
+    ),
+    index("ssh_sessions_by_status_idx").on(table.status),
+    check(
+      "ssh_sessions_status_check",
+      sql`${table.status} IN ('active', 'ended', 'killed')`,
+    ),
+  ],
+);
+
+export const sshRecordings = pgTable(
+  "ssh_recordings",
+  {
+    id: id(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => sshSessions.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    networkId: uuid("network_id")
+      .notNull()
+      .references(() => networks.id, { onDelete: "cascade" }),
+    recorderEndpointId: text("recorder_endpoint_id").notNull(),
+    castText: text("cast_text").notNull(),
+    contentSha256: text("content_sha256").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    durationMs: integer("duration_ms"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
   },
   (table) => [
-    index("organization_policies_by_organization_idx").on(table.organizationId),
-    index("organization_policies_by_org_priority_idx").on(
+    index("ssh_recordings_by_session_idx").on(table.sessionId),
+    unique("ssh_recordings_session_unique").on(table.sessionId),
+    index("ssh_recordings_by_org_created_idx").on(
       table.organizationId,
-      table.priority,
+      table.createdAt,
     ),
-    check(
-      "organization_policies_action_check",
-      sql`${table.action} IN ('allow', 'deny')`,
+    index("ssh_recordings_by_network_created_idx").on(
+      table.networkId,
+      table.createdAt,
     ),
   ],
 );
 
-export const enrollmentTokens = pgTable("enrollment_tokens", {
-  tokenHash: text("token_hash").primaryKey(),
-  organizationId: text("organization_id")
-    .notNull()
-    .references(() => organization.id, { onDelete: "cascade" }),
-  networkId: uuid("network_id")
-    .notNull()
-    .references(() => networks.id, { onDelete: "cascade" }),
-  createdBy: text("created_by")
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-  usedAt: timestamp("used_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-});
+export const sshAuthChecks = pgTable(
+  "ssh_auth_checks",
+  {
+    endpointId: text("endpoint_id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    authenticatedAt: timestamp("authenticated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    method: text("method").notNull().default("oidc"),
+    identityEmail: text("identity_email"),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("ssh_auth_checks_by_org_idx").on(table.organizationId),
+    check(
+      "ssh_auth_checks_method_check",
+      sql`${table.method} IN ('oidc', 'session', 'saml')`,
+    ),
+  ],
+);
 
-/** CIDR ranges advertised by a machine as subnet routes (LAN/IoT gateways). */
+export const sshAuthChallenges = pgTable(
+  "ssh_auth_challenges",
+  {
+    token: text("token").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    networkId: uuid("network_id")
+      .notNull()
+      .references(() => networks.id, { onDelete: "cascade" }),
+    endpointId: text("endpoint_id").notNull(),
+    dstEndpointId: text("dst_endpoint_id").notNull(),
+    status: text("status").notNull().default("pending"),
+    proofToken: text("proof_token"),
+    proofExpiresAt: timestamp("proof_expires_at", { withTimezone: true }),
+    proofConsumedAt: timestamp("proof_consumed_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("ssh_auth_challenges_by_endpoint_idx").on(table.endpointId),
+    index("ssh_auth_challenges_by_proof_idx").on(table.proofToken),
+    index("ssh_auth_challenges_by_expires_at_idx").on(table.expiresAt),
+    check(
+      "ssh_auth_challenges_status_check",
+      sql`${table.status} IN ('pending', 'completed', 'expired', 'failed')`,
+    ),
+  ],
+);
+
+export const enrollmentTokens = pgTable(
+  "enrollment_tokens",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    networkId: uuid("network_id")
+      .notNull()
+      .references(() => networks.id, { onDelete: "cascade" }),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [index("enrollment_tokens_by_expires_at_idx").on(table.expiresAt)],
+);
+
 export const subnetRoutes = pgTable(
   "subnet_routes",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id(),
     endpointId: text("endpoint_id")
       .notNull()
       .references(() => devices.endpointId, { onDelete: "cascade" }),
@@ -292,7 +459,6 @@ export const subnetRoutes = pgTable(
   },
   (table) => [
     unique("subnet_routes_network_cidr_unique").on(table.networkId, table.cidr),
-    index("subnet_routes_by_network_idx").on(table.networkId),
     index("subnet_routes_by_endpoint_idx").on(table.endpointId),
     index("subnet_routes_by_network_enabled_idx").on(
       table.networkId,
@@ -301,15 +467,10 @@ export const subnetRoutes = pgTable(
   ],
 );
 
-/**
- * Hostname → gateway mappings. Traffic for the hostname is sent to the
- * advertising machine, which resolves locally (or via optional target_ip).
- * Wildcards store the suffix without `*.` and set `isWildcard`.
- */
 export const hostnameRoutes = pgTable(
   "hostname_routes",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id(),
     endpointId: text("endpoint_id")
       .notNull()
       .references(() => devices.endpointId, { onDelete: "cascade" }),
@@ -332,7 +493,6 @@ export const hostnameRoutes = pgTable(
       table.hostname,
       table.isWildcard,
     ),
-    index("hostname_routes_by_network_idx").on(table.networkId),
     index("hostname_routes_by_endpoint_idx").on(table.endpointId),
     index("hostname_routes_by_network_enabled_idx").on(
       table.networkId,
@@ -341,7 +501,6 @@ export const hostnameRoutes = pgTable(
   ],
 );
 
-/** Machines that may act as internet exit nodes. */
 export const exitNodeConfig = pgTable(
   "exit_node_config",
   {
@@ -365,7 +524,6 @@ export const exitNodeConfig = pgTable(
       .notNull(),
   },
   (table) => [
-    index("exit_node_config_by_network_idx").on(table.networkId),
     index("exit_node_config_by_network_enabled_idx").on(
       table.networkId,
       table.enabled,
@@ -375,7 +533,6 @@ export const exitNodeConfig = pgTable(
 
 export const splitTunnelModeValues = ["include", "exclude"] as const;
 
-/** Per-device tunnel preferences (exit node + split tunnel). */
 export const deviceProfiles = pgTable(
   "device_profiles",
   {
@@ -405,11 +562,10 @@ export const deviceProfiles = pgTable(
   ],
 );
 
-/** HA groups that share subnet/hostname routes with active/passive failover. */
 export const nodeGroups = pgTable(
   "node_groups",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id(),
     networkId: uuid("network_id")
       .notNull()
       .references(() => networks.id, { onDelete: "cascade" }),
@@ -451,7 +607,6 @@ export const nodeGroupMembers = pgTable(
   ],
 );
 
-/** Per-peer-pair telemetry reported by agents (latency, throughput, path). */
 export const peerMetrics = pgTable(
   "peer_metrics",
   {
@@ -503,6 +658,10 @@ export const auditLog = pgTable(
       table.organizationId,
       table.at,
     ),
+    index("audit_log_by_organization_actor_idx").on(
+      table.organizationId,
+      table.actor,
+    ),
   ],
 );
 
@@ -516,11 +675,10 @@ export const relayStatusValues = [
 
 export const relayKindValues = ["hosted", "self_hosted"] as const;
 
-/** Public edge relays that terminate tunnels (not mesh members). */
 export const relays = pgTable(
   "relays",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id(),
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
@@ -558,7 +716,6 @@ export const relays = pgTable(
       "relays_status_check",
       sql`${table.status} IN ('pending', 'healthy', 'degraded', 'offline', 'disabled')`,
     ),
-    index("relays_by_organization_idx").on(table.organizationId),
     index("relays_by_organization_status_idx").on(
       table.organizationId,
       table.status,
@@ -566,24 +723,29 @@ export const relays = pgTable(
   ],
 );
 
-/** One-time tokens for registering a self-hosted relay (like enrollment tokens). */
-export const relayRegistrationTokens = pgTable("relay_registration_tokens", {
-  tokenHash: text("token_hash").primaryKey(),
-  organizationId: text("organization_id")
-    .notNull()
-    .references(() => organization.id, { onDelete: "cascade" }),
-  relayId: uuid("relay_id")
-    .notNull()
-    .references(() => relays.id, { onDelete: "cascade" }),
-  createdBy: text("created_by")
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
-  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-  usedAt: timestamp("used_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-});
+export const relayRegistrationTokens = pgTable(
+  "relay_registration_tokens",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    relayId: uuid("relay_id")
+      .notNull()
+      .references(() => relays.id, { onDelete: "cascade" }),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("relay_registration_tokens_by_expires_at_idx").on(table.expiresAt),
+  ],
+);
 
 export const tunnelStatusValues = [
   "connecting",
@@ -595,11 +757,10 @@ export const tunnelStatusValues = [
 
 export const tunnelProtocolValues = ["https", "tcp"] as const;
 
-/** Public tunnels: machine port exposed via a relay subdomain. */
 export const tunnels = pgTable(
   "tunnels",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id(),
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
@@ -619,13 +780,8 @@ export const tunnels = pgTable(
     /** Full public hostname, e.g. app.myorg.tuntun.pub */
     publicHostname: text("public_hostname").notNull(),
     status: text("status").notNull().default("connecting"),
-    /** Auth token the agent presents to the relay (hashed at rest). */
+    /** Hash of the relay auth token (verification only - plaintext lives in tunnel_secrets). */
     relayAuthHash: text("relay_auth_hash"),
-    /**
-     * Plaintext relay auth for AuthStore sync via heartbeat.
-     * Server-side only — never serialize in dashboard list APIs.
-     */
-    relayAuthToken: text("relay_auth_token"),
     /** Optional HTTP basic auth on the public tunnel. */
     basicAuthUser: text("basic_auth_user"),
     basicAuthPasswordHash: text("basic_auth_password_hash"),
@@ -661,20 +817,33 @@ export const tunnels = pgTable(
   ],
 );
 
-/** Path-based redirect rules for HTTPS tunnels (first match wins by priority). */
-export const tunnelRedirectRules = pgTable(
-  "tunnel_redirect_rules",
+export const tunnelSecrets = pgTable("tunnel_secrets", {
+  tunnelId: uuid("tunnel_id")
+    .primaryKey()
+    .references(() => tunnels.id, { onDelete: "cascade" }),
+  relayAuthToken: text("relay_auth_token").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+/** Path or port routing rules for a tunnel (HTTPS → path, TCP → port). */
+export const tunnelRoutingRules = pgTable(
+  "tunnel_routing_rules",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id(),
     tunnelId: uuid("tunnel_id")
       .notNull()
       .references(() => tunnels.id, { onDelete: "cascade" }),
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
     priority: integer("priority").notNull().default(0),
-    /** e.g. /api/* */
-    pathPattern: text("path_pattern").notNull(),
+    /** HTTPS path pattern, e.g. /api/* - set when kind=path. */
+    pathPattern: text("path_pattern"),
+    /** TCP external port - set when kind=port. */
+    externalPort: integer("external_port"),
     /** null = same tunnel machine / localhost */
     targetEndpointId: text("target_endpoint_id"),
     targetPort: integer("target_port").notNull(),
@@ -687,63 +856,40 @@ export const tunnelRedirectRules = pgTable(
   },
   (table) => [
     check(
-      "tunnel_redirect_rules_target_port_check",
+      "tunnel_routing_rules_kind_check",
+      sql`${table.kind} IN ('path', 'port')`,
+    ),
+    check(
+      "tunnel_routing_rules_kind_fields_check",
+      sql`(${table.kind} = 'path' AND ${table.pathPattern} IS NOT NULL AND ${table.externalPort} IS NULL)
+          OR (${table.kind} = 'port' AND ${table.externalPort} IS NOT NULL AND ${table.pathPattern} IS NULL)`,
+    ),
+    check(
+      "tunnel_routing_rules_target_port_check",
       sql`${table.targetPort} > 0 AND ${table.targetPort} <= 65535`,
     ),
-    index("tunnel_redirect_rules_by_tunnel_idx").on(table.tunnelId),
-    index("tunnel_redirect_rules_by_tunnel_priority_idx").on(
+    check(
+      "tunnel_routing_rules_external_port_check",
+      sql`${table.externalPort} IS NULL OR (${table.externalPort} > 0 AND ${table.externalPort} <= 65535)`,
+    ),
+    uniqueIndex("tunnel_routing_rules_tunnel_path_unique")
+      .on(table.tunnelId, table.pathPattern)
+      .where(sql`${table.kind} = 'path'`),
+    uniqueIndex("tunnel_routing_rules_tunnel_port_unique")
+      .on(table.tunnelId, table.externalPort)
+      .where(sql`${table.kind} = 'port'`),
+    index("tunnel_routing_rules_by_tunnel_priority_idx").on(
       table.tunnelId,
       table.priority,
     ),
-    index("tunnel_redirect_rules_by_organization_idx").on(table.organizationId),
+    index("tunnel_routing_rules_by_organization_idx").on(table.organizationId),
   ],
 );
 
-/** External port → target mappings for TCP tunnels. */
-export const tunnelPortMappings = pgTable(
-  "tunnel_port_mappings",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    tunnelId: uuid("tunnel_id")
-      .notNull()
-      .references(() => tunnels.id, { onDelete: "cascade" }),
-    organizationId: text("organization_id")
-      .notNull()
-      .references(() => organization.id, { onDelete: "cascade" }),
-    externalPort: integer("external_port").notNull(),
-    /** null = same tunnel machine / localhost */
-    targetEndpointId: text("target_endpoint_id"),
-    targetPort: integer("target_port").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    unique("tunnel_port_mappings_tunnel_external_port_unique").on(
-      table.tunnelId,
-      table.externalPort,
-    ),
-    check(
-      "tunnel_port_mappings_external_port_check",
-      sql`${table.externalPort} > 0 AND ${table.externalPort} <= 65535`,
-    ),
-    check(
-      "tunnel_port_mappings_target_port_check",
-      sql`${table.targetPort} > 0 AND ${table.targetPort} <= 65535`,
-    ),
-    index("tunnel_port_mappings_by_tunnel_idx").on(table.tunnelId),
-    index("tunnel_port_mappings_by_organization_idx").on(table.organizationId),
-  ],
-);
-
-/** Soft-retained request logs for tunnel traffic (UI lists last N). */
 export const tunnelRequestLogs = pgTable(
   "tunnel_request_logs",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id(),
     tunnelId: uuid("tunnel_id")
       .notNull()
       .references(() => tunnels.id, { onDelete: "cascade" }),
@@ -800,7 +946,7 @@ export const organizationTunnelSettings = pgTable(
 export const relayHeartbeats = pgTable(
   "relay_heartbeats",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id(),
     relayId: uuid("relay_id")
       .notNull()
       .references(() => relays.id, { onDelete: "cascade" }),
@@ -828,29 +974,44 @@ export const serveProtocolValues = ["https", "tcp"] as const;
 
 export const serveAccessModeValues = ["all_peers", "tags", "machines"] as const;
 
-/** Per-organization internal root CA (encrypted private key at rest). */
-export const organizationCas = pgTable("organization_cas", {
-  organizationId: text("organization_id")
-    .primaryKey()
-    .references(() => organization.id, { onDelete: "cascade" }),
-  /** PEM-encoded certificate. */
-  certificatePem: text("certificate_pem").notNull(),
-  /** Encrypted PEM private key (app-level encryption). */
-  encryptedPrivateKey: text("encrypted_private_key").notNull(),
-  fingerprintSha256: text("fingerprint_sha256").notNull(),
-  notBefore: timestamp("not_before", { withTimezone: true }).notNull(),
-  notAfter: timestamp("not_after", { withTimezone: true }).notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-  rotatedAt: timestamp("rotated_at", { withTimezone: true }),
-});
+/** Per-organization internal root CA(s). One active; rotated/revoked retained for leaf validation. */
+export const organizationCas = pgTable(
+  "organization_cas",
+  {
+    id: id(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("active"),
+    /** PEM-encoded certificate. */
+    certificatePem: text("certificate_pem").notNull(),
+    /** Encrypted PEM private key (app-level encryption). */
+    encryptedPrivateKey: text("encrypted_private_key").notNull(),
+    fingerprintSha256: text("fingerprint_sha256").notNull(),
+    notBefore: timestamp("not_before", { withTimezone: true }).notNull(),
+    notAfter: timestamp("not_after", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    rotatedAt: timestamp("rotated_at", { withTimezone: true }),
+  },
+  (table) => [
+    check(
+      "organization_cas_status_check",
+      sql`${table.status} IN ('active', 'rotated', 'revoked')`,
+    ),
+    uniqueIndex("organization_cas_one_active_per_org")
+      .on(table.organizationId)
+      .where(sql`${table.status} = 'active'`),
+    index("organization_cas_by_organization_idx").on(table.organizationId),
+  ],
+);
 
 /** Per-machine leaf certs signed by the org internal CA. */
 export const internalCertificates = pgTable(
   "internal_certificates",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id(),
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
@@ -884,7 +1045,7 @@ export const internalCertificates = pgTable(
 export const serves = pgTable(
   "serves",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id(),
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
@@ -935,7 +1096,6 @@ export const serves = pgTable(
       sql`${table.localPort} > 0 AND ${table.localPort} <= 65535`,
     ),
     index("serves_by_organization_idx").on(table.organizationId),
-    index("serves_by_network_idx").on(table.networkId),
     index("serves_by_endpoint_idx").on(table.endpointId),
     index("serves_by_network_status_idx").on(table.networkId, table.status),
   ],
@@ -945,7 +1105,7 @@ export const serves = pgTable(
 export const serveSessions = pgTable(
   "serve_sessions",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: id(),
     serveId: uuid("serve_id")
       .notNull()
       .references(() => serves.id, { onDelete: "cascade" }),
@@ -980,6 +1140,10 @@ export const networksRelations = relations(networks, ({ one, many }) => ({
   }),
   memberships: many(networkMemberships),
   policies: many(policies),
+  sshPolicies: many(sshPolicies),
+  sshSessions: many(sshSessions),
+  sshRecordings: many(sshRecordings),
+  sshAuthChallenges: many(sshAuthChallenges),
   enrollmentTokens: many(enrollmentTokens),
   subnetRoutes: many(subnetRoutes),
   hostnameRoutes: many(hostnameRoutes),
@@ -1058,34 +1222,30 @@ export const tunnelsRelations = relations(tunnels, ({ one, many }) => ({
     fields: [tunnels.relayId],
     references: [relays.id],
   }),
-  redirectRules: many(tunnelRedirectRules),
-  portMappings: many(tunnelPortMappings),
+  secrets: one(tunnelSecrets, {
+    fields: [tunnels.id],
+    references: [tunnelSecrets.tunnelId],
+  }),
+  routingRules: many(tunnelRoutingRules),
   requestLogs: many(tunnelRequestLogs),
 }));
 
-export const tunnelRedirectRulesRelations = relations(
-  tunnelRedirectRules,
-  ({ one }) => ({
-    tunnel: one(tunnels, {
-      fields: [tunnelRedirectRules.tunnelId],
-      references: [tunnels.id],
-    }),
-    organization: one(organization, {
-      fields: [tunnelRedirectRules.organizationId],
-      references: [organization.id],
-    }),
+export const tunnelSecretsRelations = relations(tunnelSecrets, ({ one }) => ({
+  tunnel: one(tunnels, {
+    fields: [tunnelSecrets.tunnelId],
+    references: [tunnels.id],
   }),
-);
+}));
 
-export const tunnelPortMappingsRelations = relations(
-  tunnelPortMappings,
+export const tunnelRoutingRulesRelations = relations(
+  tunnelRoutingRules,
   ({ one }) => ({
     tunnel: one(tunnels, {
-      fields: [tunnelPortMappings.tunnelId],
+      fields: [tunnelRoutingRules.tunnelId],
       references: [tunnels.id],
     }),
     organization: one(organization, {
-      fields: [tunnelPortMappings.organizationId],
+      fields: [tunnelRoutingRules.organizationId],
       references: [organization.id],
     }),
   }),
@@ -1297,18 +1457,67 @@ export const deviceTagsRelations = relations(deviceTags, ({ one }) => ({
 }));
 
 export const policiesRelations = relations(policies, ({ one }) => ({
+  organization: one(organization, {
+    fields: [policies.organizationId],
+    references: [organization.id],
+  }),
   network: one(networks, {
     fields: [policies.networkId],
     references: [networks.id],
   }),
 }));
 
-export const organizationPoliciesRelations = relations(
-  organizationPolicies,
+export const sshPoliciesRelations = relations(sshPolicies, ({ one }) => ({
+  network: one(networks, {
+    fields: [sshPolicies.networkId],
+    references: [networks.id],
+  }),
+}));
+
+export const sshSessionsRelations = relations(sshSessions, ({ one, many }) => ({
+  organization: one(organization, {
+    fields: [sshSessions.organizationId],
+    references: [organization.id],
+  }),
+  network: one(networks, {
+    fields: [sshSessions.networkId],
+    references: [networks.id],
+  }),
+  recordings: many(sshRecordings),
+}));
+
+export const sshRecordingsRelations = relations(sshRecordings, ({ one }) => ({
+  session: one(sshSessions, {
+    fields: [sshRecordings.sessionId],
+    references: [sshSessions.id],
+  }),
+  organization: one(organization, {
+    fields: [sshRecordings.organizationId],
+    references: [organization.id],
+  }),
+  network: one(networks, {
+    fields: [sshRecordings.networkId],
+    references: [networks.id],
+  }),
+}));
+
+export const sshAuthChecksRelations = relations(sshAuthChecks, ({ one }) => ({
+  organization: one(organization, {
+    fields: [sshAuthChecks.organizationId],
+    references: [organization.id],
+  }),
+}));
+
+export const sshAuthChallengesRelations = relations(
+  sshAuthChallenges,
   ({ one }) => ({
     organization: one(organization, {
-      fields: [organizationPolicies.organizationId],
+      fields: [sshAuthChallenges.organizationId],
       references: [organization.id],
+    }),
+    network: one(networks, {
+      fields: [sshAuthChallenges.networkId],
+      references: [networks.id],
     }),
   }),
 );

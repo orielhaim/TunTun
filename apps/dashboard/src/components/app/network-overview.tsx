@@ -153,7 +153,7 @@ export function NetworkOverviewPage() {
         header: "OS",
         cell: ({ row }) => (
           <span className="text-muted-foreground text-[13px]">
-            {row.original.os ?? "—"}
+            {row.original.os ?? "-"}
           </span>
         ),
       },
@@ -173,7 +173,7 @@ export function NetworkOverviewPage() {
       <PageHeader
         dense
         title={network.name}
-        description="Private mesh between your machines — route LAN, hostnames, and exits without bastions."
+        description="Private mesh between your machines - route LAN, hostnames, and exits without bastions."
         actions={
           isAdmin ? (
             <Button size="sm" onClick={() => setEnrollOpen(true)}>
@@ -303,9 +303,6 @@ export function NetworkOverviewPage() {
 
         <aside className="space-y-4">
           <section className="space-y-2">
-            <h2 className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
-              Usage
-            </h2>
             <div className="grid grid-cols-3 gap-2 lg:grid-cols-1">
               <StatTile label="Online" value={onlineCount} />
               <StatTile label="Mesh nodes" value={devices?.length ?? 0} />

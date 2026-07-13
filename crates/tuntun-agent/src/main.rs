@@ -1,5 +1,8 @@
+mod accept;
 mod cli;
 mod cmds;
+mod cmds_login;
+mod cmds_ssh;
 mod forward;
 mod gossip_presence;
 mod ip;
@@ -7,7 +10,9 @@ mod metrics;
 #[cfg(target_os = "linux")]
 mod offload;
 mod output;
+mod recorder;
 mod runtime;
+mod ssh;
 mod stream_proxy;
 mod system_dns;
 mod system_info;
@@ -35,6 +40,9 @@ async fn main() -> anyhow::Result<()> {
             | crate::cli::Command::Netcheck(_)
             | crate::cli::Command::Serve(_)
             | crate::cli::Command::Tunnel(_)
+            | crate::cli::Command::Ssh(_)
+            | crate::cli::Command::Login(_)
+            | crate::cli::Command::Logout(_)
     );
     if !quiet || std::env::var_os("RUST_LOG").is_some() {
         crate::cli::init_logging(&cli);
@@ -59,5 +67,8 @@ async fn main() -> anyhow::Result<()> {
         crate::cli::Command::Netcheck(a) => crate::cmds::run_netcheck(a).await,
         crate::cli::Command::Serve(a) => crate::cmds::run_serve(a).await,
         crate::cli::Command::Tunnel(a) => crate::cmds::run_tunnel(a).await,
+        crate::cli::Command::Ssh(a) => crate::cmds_ssh::run_ssh(a).await,
+        crate::cli::Command::Login(a) => crate::cmds_login::run_login(a).await,
+        crate::cli::Command::Logout(a) => crate::cmds_login::run_logout(a).await,
     }
 }

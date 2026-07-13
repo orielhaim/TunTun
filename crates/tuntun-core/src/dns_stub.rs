@@ -1,4 +1,4 @@
-//! PeerDNS stub resolver — answers A queries for mesh names and hostname routes,
+//! PeerDNS stub resolver - answers A queries for mesh names and hostname routes,
 //! forwards everything else to upstream resolvers.
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -53,8 +53,8 @@ async fn bind_udp_with_retry(bind: SocketAddr) -> anyhow::Result<UdpSocket> {
 
 async fn run(bind: SocketAddr, routes: RoutingTable, dns: DnsConfig) -> anyhow::Result<()> {
     // On Windows the TUN IP is often not bindable for a few hundred ms after
-    // adapter create. Prefer 0.0.0.0:53 first — it still receives packets to
-    // the overlay IP — then fall back to the TUN address with retries.
+    // adapter create. Prefer 0.0.0.0:53 first - it still receives packets to
+    // the overlay IP - then fall back to the TUN address with retries.
     let any = SocketAddr::from((Ipv4Addr::UNSPECIFIED, bind.port()));
     let sock = match UdpSocket::bind(any).await {
         Ok(s) => {
@@ -128,7 +128,7 @@ async fn handle_query(
                 response.metadata.response_code = ResponseCode::NXDomain;
             }
         } else {
-            // No AAAA yet — NODATA (NOERROR, empty answer) for our zone.
+            // No AAAA yet - NODATA (NOERROR, empty answer) for our zone.
             response.metadata.response_code = ResponseCode::NoError;
         }
 

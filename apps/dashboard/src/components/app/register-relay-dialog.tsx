@@ -75,7 +75,7 @@ export function RegisterRelayDialog({
       });
       setRegistrationToken(result.registrationToken);
       setCreatedRelayId(result.relay.id);
-      toast.success("Relay registered — copy the token before closing");
+      toast.success("Relay registered - copy the token before closing");
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Failed to register relay",
@@ -104,7 +104,7 @@ export function RegisterRelayDialog({
               <CopyField label="Register command" value={command} />
               {isHealthy ? (
                 <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-600 dark:text-emerald-400">
-                  ✓ Connected — relay is healthy
+                  ✓ Connected - relay is healthy
                 </p>
               ) : (
                 <p className="text-muted-foreground text-xs">

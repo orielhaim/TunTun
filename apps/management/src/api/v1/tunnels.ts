@@ -1,11 +1,9 @@
 import { randomBytes } from "node:crypto";
 import {
   createTunnelBody,
-  createTunnelPortMappingBody,
-  createTunnelRedirectRuleBody,
+  createTunnelRoutingRuleBody,
   patchTunnelBody,
-  patchTunnelPortMappingBody,
-  patchTunnelRedirectRuleBody,
+  patchTunnelRoutingRuleBody,
 } from "@tuntun/api/management";
 import { schema } from "@tuntun/db";
 import { formatIp } from "@tuntun/ip";
@@ -82,34 +80,32 @@ function suggestSubdomain(base: string): string {
   return `${cleaned || "app"}-${suffix}`;
 }
 
-function serializeRedirectRule(
-  row: typeof schema.tunnelRedirectRules.$inferSelect,
+function serializeRoutingRule(
+  row: typeof schema.tunnelRoutingRules.$inferSelect,
 ) {
-  return {
+  const base = {
     id: row.id,
     tunnelId: row.tunnelId,
     organizationId: row.organizationId,
     priority: row.priority,
-    pathPattern: row.pathPattern,
     targetEndpointId: row.targetEndpointId,
     targetPort: row.targetPort,
     createdAt: toIso(row.createdAt)!,
     updatedAt: toIso(row.updatedAt)!,
   };
-}
-
-function serializePortMapping(
-  row: typeof schema.tunnelPortMappings.$inferSelect,
-) {
+  if (row.kind === "path") {
+    return {
+      ...base,
+      kind: "path" as const,
+      pathPattern: row.pathPattern!,
+      externalPort: null,
+    };
+  }
   return {
-    id: row.id,
-    tunnelId: row.tunnelId,
-    organizationId: row.organizationId,
-    externalPort: row.externalPort,
-    targetEndpointId: row.targetEndpointId,
-    targetPort: row.targetPort,
-    createdAt: toIso(row.createdAt)!,
-    updatedAt: toIso(row.updatedAt)!,
+    ...base,
+    kind: "port" as const,
+    pathPattern: null,
+    externalPort: row.externalPort!,
   };
 }
 
@@ -221,7 +217,7 @@ export const tunnelsRoutes = new Elysia()
     },
   )
   .get(
-    "/organizations/:orgId/networks/:networkId/tunnels/:tunnelId/redirect-rules",
+    "/organizations/:orgId/networks/:networkId/tunnels/:tunnelId/routing-rules",
     async ({ authContext, params }) => {
       const auth = getAuth({ authContext });
       const tunnel = await getTunnelInNetwork(
@@ -231,29 +227,11 @@ export const tunnelsRoutes = new Elysia()
       );
       if (!tunnel) return notFound("Tunnel not found");
 
-      const rows = await db.query.tunnelRedirectRules.findMany({
-        where: eq(schema.tunnelRedirectRules.tunnelId, params.tunnelId),
-        orderBy: [desc(schema.tunnelRedirectRules.priority)],
+      const rows = await db.query.tunnelRoutingRules.findMany({
+        where: eq(schema.tunnelRoutingRules.tunnelId, params.tunnelId),
+        orderBy: [desc(schema.tunnelRoutingRules.priority)],
       });
-      return { redirectRules: rows.map(serializeRedirectRule) };
-    },
-  )
-  .get(
-    "/organizations/:orgId/networks/:networkId/tunnels/:tunnelId/port-mappings",
-    async ({ authContext, params }) => {
-      const auth = getAuth({ authContext });
-      const tunnel = await getTunnelInNetwork(
-        params.tunnelId,
-        params.networkId,
-        auth.organizationId,
-      );
-      if (!tunnel) return notFound("Tunnel not found");
-
-      const rows = await db.query.tunnelPortMappings.findMany({
-        where: eq(schema.tunnelPortMappings.tunnelId, params.tunnelId),
-        orderBy: [desc(schema.tunnelPortMappings.externalPort)],
-      });
-      return { portMappings: rows.map(serializePortMapping) };
+      return { routingRules: rows.map(serializeRoutingRule) };
     },
   )
   .get(
@@ -424,12 +402,16 @@ export const tunnelsRoutes = new Elysia()
                   publicHostname,
                   status: "connecting",
                   relayAuthHash,
-                  relayAuthToken: authToken,
                   expiresAt,
                   basicAuthUser,
                   basicAuthPasswordHash,
                 })
                 .returning();
+
+              await tx.insert(schema.tunnelSecrets).values({
+                tunnelId: created?.id,
+                relayAuthToken: authToken,
+              });
 
               await bumpNetworkAndNotify(
                 tx,
@@ -440,7 +422,7 @@ export const tunnelsRoutes = new Elysia()
               await notifyEntityChanged(tx, {
                 organizationId: auth.organizationId,
                 kind: "tunnel",
-                entityId: created!.id,
+                entityId: created?.id,
                 networkId: params.networkId,
               });
 
@@ -448,7 +430,7 @@ export const tunnelsRoutes = new Elysia()
                 organizationId: auth.organizationId,
                 actor: auth.user.id,
                 action: "tunnel.create",
-                target: created!.id,
+                target: created?.id,
                 metadata: {
                   publicHostname,
                   endpointId: parsed.endpointId,
@@ -475,14 +457,19 @@ export const tunnelsRoutes = new Elysia()
           }
 
           try {
-            const redirectRows = await db
+            const routingRows = await db
               .select()
-              .from(schema.tunnelRedirectRules)
-              .where(eq(schema.tunnelRedirectRules.tunnelId, tunnel.id))
-              .orderBy(desc(schema.tunnelRedirectRules.priority));
+              .from(schema.tunnelRoutingRules)
+              .where(
+                and(
+                  eq(schema.tunnelRoutingRules.tunnelId, tunnel.id),
+                  eq(schema.tunnelRoutingRules.kind, "path"),
+                ),
+              )
+              .orderBy(desc(schema.tunnelRoutingRules.priority));
             const redirectRules = await Promise.all(
-              redirectRows.map(async (r) => ({
-                pathPattern: r.pathPattern,
+              routingRows.map(async (r) => ({
+                pathPattern: r.pathPattern!,
                 targetPort: r.targetPort,
                 targetIp:
                   (await resolveTargetIpv4(
@@ -742,186 +729,153 @@ export const tunnelsRoutes = new Elysia()
         },
       )
       .post(
-        "/organizations/:orgId/networks/:networkId/tunnels/:tunnelId/redirect-rules",
-        async ({ authContext, params, body }) => {
-          const auth = getAuth({ authContext });
-          const parsed = createTunnelRedirectRuleBody.parse(body);
-          const tunnel = await getTunnelInNetwork(
-            params.tunnelId,
-            params.networkId,
-            auth.organizationId,
-          );
-          if (!tunnel) return notFound("Tunnel not found");
-
-          const [created] = await db
-            .insert(schema.tunnelRedirectRules)
-            .values({
-              tunnelId: params.tunnelId,
-              organizationId: auth.organizationId,
-              pathPattern: parsed.pathPattern,
-              targetPort: parsed.targetPort,
-              targetEndpointId: parsed.targetEndpointId ?? null,
-              priority: parsed.priority,
-            })
-            .returning();
-
-          await writeAudit(db, {
-            organizationId: auth.organizationId,
-            actor: auth.user.id,
-            action: "tunnel.redirect_rule.create",
-            target: created!.id,
-            metadata: { tunnelId: params.tunnelId, ...parsed },
-          });
-
-          return { redirectRule: serializeRedirectRule(created!) };
-        },
-      )
-      .patch(
-        "/organizations/:orgId/networks/:networkId/tunnels/:tunnelId/redirect-rules/:ruleId",
-        async ({ authContext, params, body }) => {
-          const auth = getAuth({ authContext });
-          const parsed = patchTunnelRedirectRuleBody.parse(body);
-          const existing = await db.query.tunnelRedirectRules.findFirst({
-            where: and(
-              eq(schema.tunnelRedirectRules.id, params.ruleId),
-              eq(schema.tunnelRedirectRules.tunnelId, params.tunnelId),
-              eq(
-                schema.tunnelRedirectRules.organizationId,
-                auth.organizationId,
-              ),
-            ),
-          });
-          if (!existing) return notFound("Redirect rule not found");
-
-          const [updated] = await db
-            .update(schema.tunnelRedirectRules)
-            .set({
-              ...parsed,
-              updatedAt: new Date(),
-            })
-            .where(eq(schema.tunnelRedirectRules.id, params.ruleId))
-            .returning();
-
-          return { redirectRule: serializeRedirectRule(updated!) };
-        },
-      )
-      .delete(
-        "/organizations/:orgId/networks/:networkId/tunnels/:tunnelId/redirect-rules/:ruleId",
-        async ({ authContext, params }) => {
-          const auth = getAuth({ authContext });
-          const existing = await db.query.tunnelRedirectRules.findFirst({
-            where: and(
-              eq(schema.tunnelRedirectRules.id, params.ruleId),
-              eq(schema.tunnelRedirectRules.tunnelId, params.tunnelId),
-              eq(
-                schema.tunnelRedirectRules.organizationId,
-                auth.organizationId,
-              ),
-            ),
-          });
-          if (!existing) return notFound("Redirect rule not found");
-
-          await db
-            .delete(schema.tunnelRedirectRules)
-            .where(eq(schema.tunnelRedirectRules.id, params.ruleId));
-
-          return { ok: true };
-        },
-      )
-      .post(
-        "/organizations/:orgId/networks/:networkId/tunnels/:tunnelId/port-mappings",
+        "/organizations/:orgId/networks/:networkId/tunnels/:tunnelId/routing-rules",
         async ({ authContext, params, body, set }) => {
           const auth = getAuth({ authContext });
-          const parsed = createTunnelPortMappingBody.parse(body);
+          const parsed = createTunnelRoutingRuleBody.parse(body);
           const tunnel = await getTunnelInNetwork(
             params.tunnelId,
             params.networkId,
             auth.organizationId,
           );
           if (!tunnel) return notFound("Tunnel not found");
+
+          if (
+            (tunnel.protocol === "https" && parsed.kind !== "path") ||
+            (tunnel.protocol === "tcp" && parsed.kind !== "port")
+          ) {
+            set.status = 400;
+            return {
+              error:
+                tunnel.protocol === "https"
+                  ? "HTTPS tunnels only support path routing rules"
+                  : "TCP tunnels only support port routing rules",
+            };
+          }
 
           try {
             const [created] = await db
-              .insert(schema.tunnelPortMappings)
-              .values({
-                tunnelId: params.tunnelId,
-                organizationId: auth.organizationId,
-                externalPort: parsed.externalPort,
-                targetPort: parsed.targetPort,
-                targetEndpointId: parsed.targetEndpointId ?? null,
-              })
+              .insert(schema.tunnelRoutingRules)
+              .values(
+                parsed.kind === "path"
+                  ? {
+                      tunnelId: params.tunnelId,
+                      organizationId: auth.organizationId,
+                      kind: "path" as const,
+                      pathPattern: parsed.pathPattern,
+                      externalPort: null,
+                      targetPort: parsed.targetPort,
+                      targetEndpointId: parsed.targetEndpointId ?? null,
+                      priority: parsed.priority,
+                    }
+                  : {
+                      tunnelId: params.tunnelId,
+                      organizationId: auth.organizationId,
+                      kind: "port" as const,
+                      pathPattern: null,
+                      externalPort: parsed.externalPort,
+                      targetPort: parsed.targetPort,
+                      targetEndpointId: parsed.targetEndpointId ?? null,
+                      priority: parsed.priority,
+                    },
+              )
               .returning();
 
             await writeAudit(db, {
               organizationId: auth.organizationId,
               actor: auth.user.id,
-              action: "tunnel.port_mapping.create",
-              target: created!.id,
+              action: "tunnel.routing_rule.create",
+              target: created?.id,
               metadata: { tunnelId: params.tunnelId, ...parsed },
             });
 
-            return { portMapping: serializePortMapping(created!) };
+            return { routingRule: serializeRoutingRule(created!) };
           } catch (e) {
             const msg = e instanceof Error ? e.message : "";
-            if (msg.includes("tunnel_port_mappings_tunnel_external_port")) {
+            if (
+              msg.includes("tunnel_routing_rules_tunnel_path_unique") ||
+              msg.includes("tunnel_routing_rules_tunnel_port_unique")
+            ) {
               set.status = 409;
-              return { error: "External port already mapped on this tunnel" };
+              return {
+                error:
+                  parsed.kind === "path"
+                    ? "Path pattern already exists on this tunnel"
+                    : "External port already mapped on this tunnel",
+              };
             }
             throw e;
           }
         },
       )
       .patch(
-        "/organizations/:orgId/networks/:networkId/tunnels/:tunnelId/port-mappings/:mappingId",
+        "/organizations/:orgId/networks/:networkId/tunnels/:tunnelId/routing-rules/:ruleId",
         async ({ authContext, params, body, set }) => {
           const auth = getAuth({ authContext });
-          const parsed = patchTunnelPortMappingBody.parse(body);
-          const existing = await db.query.tunnelPortMappings.findFirst({
+          const parsed = patchTunnelRoutingRuleBody.parse(body);
+          const existing = await db.query.tunnelRoutingRules.findFirst({
             where: and(
-              eq(schema.tunnelPortMappings.id, params.mappingId),
-              eq(schema.tunnelPortMappings.tunnelId, params.tunnelId),
-              eq(schema.tunnelPortMappings.organizationId, auth.organizationId),
+              eq(schema.tunnelRoutingRules.id, params.ruleId),
+              eq(schema.tunnelRoutingRules.tunnelId, params.tunnelId),
+              eq(schema.tunnelRoutingRules.organizationId, auth.organizationId),
             ),
           });
-          if (!existing) return notFound("Port mapping not found");
+          if (!existing) return notFound("Routing rule not found");
 
           try {
             const [updated] = await db
-              .update(schema.tunnelPortMappings)
+              .update(schema.tunnelRoutingRules)
               .set({
-                ...parsed,
+                ...(parsed.pathPattern !== undefined
+                  ? { pathPattern: parsed.pathPattern }
+                  : {}),
+                ...(parsed.externalPort !== undefined
+                  ? { externalPort: parsed.externalPort }
+                  : {}),
+                ...(parsed.targetPort !== undefined
+                  ? { targetPort: parsed.targetPort }
+                  : {}),
+                ...(parsed.targetEndpointId !== undefined
+                  ? { targetEndpointId: parsed.targetEndpointId }
+                  : {}),
+                ...(parsed.priority !== undefined
+                  ? { priority: parsed.priority }
+                  : {}),
                 updatedAt: new Date(),
               })
-              .where(eq(schema.tunnelPortMappings.id, params.mappingId))
+              .where(eq(schema.tunnelRoutingRules.id, params.ruleId))
               .returning();
 
-            return { portMapping: serializePortMapping(updated!) };
+            return { routingRule: serializeRoutingRule(updated!) };
           } catch (e) {
             const msg = e instanceof Error ? e.message : "";
-            if (msg.includes("tunnel_port_mappings_tunnel_external_port")) {
+            if (
+              msg.includes("tunnel_routing_rules_tunnel_path_unique") ||
+              msg.includes("tunnel_routing_rules_tunnel_port_unique")
+            ) {
               set.status = 409;
-              return { error: "External port already mapped on this tunnel" };
+              return { error: "Routing rule conflict on this tunnel" };
             }
             throw e;
           }
         },
       )
       .delete(
-        "/organizations/:orgId/networks/:networkId/tunnels/:tunnelId/port-mappings/:mappingId",
+        "/organizations/:orgId/networks/:networkId/tunnels/:tunnelId/routing-rules/:ruleId",
         async ({ authContext, params }) => {
           const auth = getAuth({ authContext });
-          const existing = await db.query.tunnelPortMappings.findFirst({
+          const existing = await db.query.tunnelRoutingRules.findFirst({
             where: and(
-              eq(schema.tunnelPortMappings.id, params.mappingId),
-              eq(schema.tunnelPortMappings.tunnelId, params.tunnelId),
-              eq(schema.tunnelPortMappings.organizationId, auth.organizationId),
+              eq(schema.tunnelRoutingRules.id, params.ruleId),
+              eq(schema.tunnelRoutingRules.tunnelId, params.tunnelId),
+              eq(schema.tunnelRoutingRules.organizationId, auth.organizationId),
             ),
           });
-          if (!existing) return notFound("Port mapping not found");
+          if (!existing) return notFound("Routing rule not found");
 
           await db
-            .delete(schema.tunnelPortMappings)
-            .where(eq(schema.tunnelPortMappings.id, params.mappingId));
+            .delete(schema.tunnelRoutingRules)
+            .where(eq(schema.tunnelRoutingRules.id, params.ruleId));
 
           return { ok: true };
         },

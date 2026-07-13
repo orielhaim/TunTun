@@ -1,5 +1,5 @@
 import { schema } from "@tuntun/db";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
 
 import { writeAudit } from "../../lib/audit";
@@ -26,7 +26,10 @@ export const internalCaRoutes = new Elysia()
   .get("/organizations/:orgId/internal-ca", async ({ authContext }) => {
     const auth = getAuth({ authContext });
     const row = await db.query.organizationCas.findFirst({
-      where: eq(schema.organizationCas.organizationId, auth.organizationId),
+      where: and(
+        eq(schema.organizationCas.organizationId, auth.organizationId),
+        eq(schema.organizationCas.status, "active"),
+      ),
     });
     const status = caStatus(row);
     return {

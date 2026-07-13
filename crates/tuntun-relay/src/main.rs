@@ -56,7 +56,7 @@ struct RunArgs {
     /// Let's Encrypt contact email (optional but recommended)
     #[arg(long, env = "TUNTUN_RELAY_ACME_EMAIL")]
     acme_email: Option<String>,
-    /// Comma-separated hostnames for ACME HTTP-01 (not wildcards — use --cert/--key for those)
+    /// Comma-separated hostnames for ACME HTTP-01 (not wildcards - use --cert/--key for those)
     #[arg(long, env = "TUNTUN_RELAY_ACME_DOMAIN")]
     acme_domain: Option<String>,
     /// Directory for ACME account + cert cache (default: <state_dir>/acme)
@@ -83,7 +83,7 @@ struct RegisterArgs {
     state_dir: Option<PathBuf>,
     #[arg(long, env = "TUNTUN_RELAY_ACME_EMAIL")]
     acme_email: Option<String>,
-    /// Comma-separated hostnames for ACME HTTP-01 (not wildcards — use --cert/--key for those)
+    /// Comma-separated hostnames for ACME HTTP-01 (not wildcards - use --cert/--key for those)
     #[arg(long, env = "TUNTUN_RELAY_ACME_DOMAIN")]
     acme_domain: Option<String>,
     #[arg(long, env = "TUNTUN_RELAY_ACME_DIR")]
@@ -187,7 +187,7 @@ async fn run(cfg: RunConfig) -> anyhow::Result<()> {
     let auth = AuthStore::default();
     let tcp_mgr = TcpMappingManager::new();
     if cfg.open_auth {
-        tracing::warn!("open-auth enabled — accepting first-seen tokens (dev only)");
+        tracing::warn!("open-auth enabled - accepting first-seen tokens (dev only)");
     }
 
     agent_accept::spawn_acceptor(endpoint.clone(), registry.clone(), auth.clone());
@@ -212,7 +212,7 @@ async fn run(cfg: RunConfig) -> anyhow::Result<()> {
                 );
             }
             Err(e) => {
-                tracing::warn!(?e, "control plane register failed — continuing offline");
+                tracing::warn!(?e, "control plane register failed - continuing offline");
             }
         }
         control::spawn_heartbeat_loop(
@@ -225,7 +225,7 @@ async fn run(cfg: RunConfig) -> anyhow::Result<()> {
         );
         Some(client)
     } else {
-        tracing::info!("no control URL/token — running without CP registration");
+        tracing::info!("no control URL/token - running without CP registration");
         None
     };
 
@@ -297,7 +297,7 @@ async fn load_tls_material(
         }
         (None, None, None) => {
             tracing::warn!(
-                "no --cert/--key or --acme-domain — generating ephemeral self-signed cert"
+                "no --cert/--key or --acme-domain - generating ephemeral self-signed cert"
             );
             https::generate_dev_cert("tuntun-relay.local")
         }

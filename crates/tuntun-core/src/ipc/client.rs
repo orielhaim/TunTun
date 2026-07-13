@@ -32,7 +32,7 @@ impl IpcClient {
     pub async fn request(&self, req: IpcRequest) -> anyhow::Result<IpcResponse> {
         let stream = transport::connect(&self.path).await.with_context(|| {
             format!(
-                "cannot connect to agent IPC at {} — is the agent running?",
+                "cannot connect to agent IPC at {} - is the agent running?",
                 self.path.display()
             )
         })?;
@@ -65,7 +65,7 @@ impl IpcClient {
     ) -> anyhow::Result<()> {
         let stream = transport::connect(&self.path).await.with_context(|| {
             format!(
-                "cannot connect to agent IPC at {} — is the agent running?",
+                "cannot connect to agent IPC at {} - is the agent running?",
                 self.path.display()
             )
         })?;
@@ -101,7 +101,7 @@ pub fn discover_network_id(
     let paths = crate::state::StatePaths::resolve(state_dir);
     let persisted = crate::state::PersistedState::load(&paths).with_context(|| {
         format!(
-            "no agent state in {} — run `tuntun enroll` first",
+            "no agent state in {} - run `tuntun enroll` first",
             paths.dir.display()
         )
     })?;

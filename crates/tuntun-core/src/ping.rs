@@ -1,4 +1,4 @@
-//! Mesh ping — QUIC RTT over the existing stream ALPN.
+//! Mesh ping - QUIC RTT over the existing stream ALPN.
 //!
 //! Not ICMP. Dials `TUNNEL_STREAM_ALPN` with host `__tuntun_ping__`, writes
 //! `PING <seq>\n`, waits for `PONG <seq>\n`. Measures true mesh latency.

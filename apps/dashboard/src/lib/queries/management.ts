@@ -75,6 +75,95 @@ export function usePolicies(orgId: string | undefined, networkId: string) {
   });
 }
 
+export function useOrganizationPolicies(orgId: string | undefined) {
+  return useQuery({
+    queryKey: orgId
+      ? queryKeys.organizationPolicies(orgId)
+      : ["organization-policies"],
+    enabled: Boolean(orgId),
+    queryFn: async () => {
+      const { policies } = await createManagementClient(
+        orgId!,
+      ).listOrganizationPolicies();
+      return policies;
+    },
+  });
+}
+
+export function useSshPolicies(orgId: string | undefined, networkId: string) {
+  return useQuery({
+    queryKey: orgId
+      ? queryKeys.sshPolicies(orgId, networkId)
+      : ["ssh-policies"],
+    enabled: Boolean(orgId && networkId),
+    queryFn: async () => {
+      const client = createManagementClient(orgId!);
+      const { policies } = await client.listSshPolicies(networkId);
+      return policies;
+    },
+  });
+}
+
+export function useDeviceSshAuth(
+  orgId: string | undefined,
+  endpointId: string,
+) {
+  return useQuery({
+    queryKey: orgId
+      ? queryKeys.deviceSshAuth(orgId, endpointId)
+      : ["device-ssh-auth"],
+    enabled: Boolean(orgId && endpointId),
+    queryFn: async () => {
+      const client = createManagementClient(orgId!);
+      return client.getDeviceSshAuth(endpointId);
+    },
+  });
+}
+
+export function useSsoSettings(orgId: string | undefined) {
+  return useQuery({
+    queryKey: orgId ? queryKeys.ssoSettings(orgId) : ["sso-settings"],
+    enabled: Boolean(orgId),
+    queryFn: async () => {
+      const { provider } = await createManagementClient(
+        orgId!,
+      ).getSsoSettings();
+      return provider;
+    },
+  });
+}
+
+export function useSsoSettingsMutations(orgId: string | undefined) {
+  const queryClient = useQueryClient();
+  const invalidate = () => {
+    if (orgId) {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.ssoSettings(orgId),
+      });
+    }
+  };
+  return {
+    upsert: useMutation({
+      mutationFn: async (
+        body: Parameters<
+          ReturnType<typeof createManagementClient>["upsertSsoSettings"]
+        >[0],
+      ) => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).upsertSsoSettings(body);
+      },
+      onSuccess: invalidate,
+    }),
+    remove: useMutation({
+      mutationFn: async () => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).deleteSsoSettings();
+      },
+      onSuccess: invalidate,
+    }),
+  };
+}
+
 export function useSubnetRoutes(orgId: string | undefined, networkId: string) {
   return useQuery({
     queryKey: orgId
@@ -385,7 +474,7 @@ export function useTunnels(orgId: string | undefined) {
   });
 }
 
-export function useTunnelRedirectRules(
+export function useTunnelRoutingRules(
   orgId: string | undefined,
   networkId: string,
   tunnelId: string,
@@ -393,34 +482,14 @@ export function useTunnelRedirectRules(
   return useQuery({
     queryKey:
       orgId && networkId && tunnelId
-        ? queryKeys.tunnelRedirectRules(orgId, networkId, tunnelId)
-        : ["tunnel-redirect-rules"],
+        ? queryKeys.tunnelRoutingRules(orgId, networkId, tunnelId)
+        : ["tunnel-routing-rules"],
     enabled: Boolean(orgId && networkId && tunnelId),
     queryFn: async () => {
-      const { redirectRules } = await createManagementClient(
+      const { routingRules } = await createManagementClient(
         orgId!,
-      ).listTunnelRedirectRules(networkId, tunnelId);
-      return redirectRules;
-    },
-  });
-}
-
-export function useTunnelPortMappings(
-  orgId: string | undefined,
-  networkId: string,
-  tunnelId: string,
-) {
-  return useQuery({
-    queryKey:
-      orgId && networkId && tunnelId
-        ? queryKeys.tunnelPortMappings(orgId, networkId, tunnelId)
-        : ["tunnel-port-mappings"],
-    enabled: Boolean(orgId && networkId && tunnelId),
-    queryFn: async () => {
-      const { portMappings } = await createManagementClient(
-        orgId!,
-      ).listTunnelPortMappings(networkId, tunnelId);
-      return portMappings;
+      ).listTunnelRoutingRules(networkId, tunnelId);
+      return routingRules;
     },
   });
 }
@@ -467,6 +536,67 @@ export function useServes(orgId: string | undefined) {
     },
     refetchInterval: 10_000,
   });
+}
+
+export function useSshSessions(orgId: string | undefined, status?: string) {
+  return useQuery({
+    queryKey: orgId ? queryKeys.sshSessions(orgId, status) : ["ssh-sessions"],
+    enabled: Boolean(orgId),
+    refetchInterval: 5_000,
+    queryFn: async () => {
+      const { sessions } = await createManagementClient(orgId!).listSshSessions(
+        { status, limit: 100 },
+      );
+      return sessions;
+    },
+  });
+}
+
+export function useSshRecordings(orgId: string | undefined) {
+  return useQuery({
+    queryKey: orgId ? queryKeys.sshRecordings(orgId) : ["ssh-recordings"],
+    enabled: Boolean(orgId),
+    queryFn: async () => {
+      const { recordings } = await createManagementClient(
+        orgId!,
+      ).listSshRecordings(100);
+      return recordings;
+    },
+  });
+}
+
+export function useSshRecording(
+  orgId: string | undefined,
+  sessionId: string | undefined,
+) {
+  return useQuery({
+    queryKey:
+      orgId && sessionId
+        ? queryKeys.sshRecording(orgId, sessionId)
+        : ["ssh-recording"],
+    enabled: Boolean(orgId && sessionId),
+    queryFn: async () =>
+      createManagementClient(orgId!).getSshRecording(sessionId!),
+  });
+}
+
+export function useSshSessionMutations(orgId: string | undefined) {
+  const queryClient = useQueryClient();
+  return {
+    kill: useMutation({
+      mutationFn: async (sessionId: string) => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).killSshSession(sessionId);
+      },
+      onSuccess: () => {
+        if (orgId) {
+          void queryClient.invalidateQueries({
+            queryKey: [...queryKeys.org(orgId), "ssh-sessions"],
+          });
+        }
+      },
+    }),
+  };
 }
 
 export function useServePeers(
@@ -568,10 +698,7 @@ export function useTunnelMutations(orgId: string | undefined) {
   const invalidateTunnelExtras = (networkId: string, tunnelId: string) => {
     if (!orgId) return;
     void queryClient.invalidateQueries({
-      queryKey: queryKeys.tunnelRedirectRules(orgId, networkId, tunnelId),
-    });
-    void queryClient.invalidateQueries({
-      queryKey: queryKeys.tunnelPortMappings(orgId, networkId, tunnelId),
+      queryKey: queryKeys.tunnelRoutingRules(orgId, networkId, tunnelId),
     });
     void queryClient.invalidateQueries({
       queryKey: queryKeys.tunnelTraffic(orgId, networkId, tunnelId),
@@ -627,7 +754,7 @@ export function useTunnelMutations(orgId: string | undefined) {
       },
       onSuccess: invalidate,
     }),
-    createRedirectRule: useMutation({
+    createRoutingRule: useMutation({
       mutationFn: async ({
         networkId,
         tunnelId,
@@ -636,11 +763,11 @@ export function useTunnelMutations(orgId: string | undefined) {
         networkId: string;
         tunnelId: string;
         body: Parameters<
-          ReturnType<typeof createManagementClient>["createTunnelRedirectRule"]
+          ReturnType<typeof createManagementClient>["createTunnelRoutingRule"]
         >[2];
       }) => {
         if (!orgId) throw new Error("No organization");
-        return createManagementClient(orgId).createTunnelRedirectRule(
+        return createManagementClient(orgId).createTunnelRoutingRule(
           networkId,
           tunnelId,
           body,
@@ -649,7 +776,7 @@ export function useTunnelMutations(orgId: string | undefined) {
       onSuccess: (_data, { networkId, tunnelId }) =>
         invalidateTunnelExtras(networkId, tunnelId),
     }),
-    updateRedirectRule: useMutation({
+    updateRoutingRule: useMutation({
       mutationFn: async ({
         networkId,
         tunnelId,
@@ -660,11 +787,11 @@ export function useTunnelMutations(orgId: string | undefined) {
         tunnelId: string;
         ruleId: string;
         body: Parameters<
-          ReturnType<typeof createManagementClient>["updateTunnelRedirectRule"]
+          ReturnType<typeof createManagementClient>["updateTunnelRoutingRule"]
         >[3];
       }) => {
         if (!orgId) throw new Error("No organization");
-        return createManagementClient(orgId).updateTunnelRedirectRule(
+        return createManagementClient(orgId).updateTunnelRoutingRule(
           networkId,
           tunnelId,
           ruleId,
@@ -674,7 +801,7 @@ export function useTunnelMutations(orgId: string | undefined) {
       onSuccess: (_data, { networkId, tunnelId }) =>
         invalidateTunnelExtras(networkId, tunnelId),
     }),
-    removeRedirectRule: useMutation({
+    removeRoutingRule: useMutation({
       mutationFn: async ({
         networkId,
         tunnelId,
@@ -685,52 +812,10 @@ export function useTunnelMutations(orgId: string | undefined) {
         ruleId: string;
       }) => {
         if (!orgId) throw new Error("No organization");
-        return createManagementClient(orgId).deleteTunnelRedirectRule(
+        return createManagementClient(orgId).deleteTunnelRoutingRule(
           networkId,
           tunnelId,
           ruleId,
-        );
-      },
-      onSuccess: (_data, { networkId, tunnelId }) =>
-        invalidateTunnelExtras(networkId, tunnelId),
-    }),
-    createPortMapping: useMutation({
-      mutationFn: async ({
-        networkId,
-        tunnelId,
-        body,
-      }: {
-        networkId: string;
-        tunnelId: string;
-        body: Parameters<
-          ReturnType<typeof createManagementClient>["createTunnelPortMapping"]
-        >[2];
-      }) => {
-        if (!orgId) throw new Error("No organization");
-        return createManagementClient(orgId).createTunnelPortMapping(
-          networkId,
-          tunnelId,
-          body,
-        );
-      },
-      onSuccess: (_data, { networkId, tunnelId }) =>
-        invalidateTunnelExtras(networkId, tunnelId),
-    }),
-    removePortMapping: useMutation({
-      mutationFn: async ({
-        networkId,
-        tunnelId,
-        mappingId,
-      }: {
-        networkId: string;
-        tunnelId: string;
-        mappingId: string;
-      }) => {
-        if (!orgId) throw new Error("No organization");
-        return createManagementClient(orgId).deleteTunnelPortMapping(
-          networkId,
-          tunnelId,
-          mappingId,
         );
       },
       onSuccess: (_data, { networkId, tunnelId }) =>

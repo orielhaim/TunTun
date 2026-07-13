@@ -1,7 +1,8 @@
 //! Re-issue OpenTunnel / StartServe when an agent WebSocket reconnects.
 //!
 //! Snapshot deliberately omits `relay_auth_token`; TunnelManager only starts
-//! connections when it receives `ServerMsg::OpenTunnel` with the real token.
+//! connections when it receives `ServerMsg::OpenTunnel` with the real token
+//! loaded from `tunnel_secrets`.
 
 use sqlx::PgPool;
 use tuntun_common::ws::ServerMsg;
@@ -33,8 +34,9 @@ async fn replay_tunnels(pool: &PgPool, hub: &WsHub, endpoint_id: &str) -> anyhow
         Option<String>,
     )> = sqlx::query_as(
         "SELECT t.id, t.local_port, t.protocol, t.subdomain, t.public_hostname, \
-                t.relay_auth_token, r.public_key \
+                s.relay_auth_token, r.public_key \
          FROM tunnels t \
+         LEFT JOIN tunnel_secrets s ON s.tunnel_id = t.id \
          LEFT JOIN relays r ON r.id = t.relay_id \
          WHERE t.endpoint_id = $1 AND t.status IN ('active', 'connecting')",
     )
@@ -57,7 +59,7 @@ async fn replay_tunnels(pool: &PgPool, hub: &WsHub, endpoint_id: &str) -> anyhow
                  WHERE id = $1",
             )
             .bind(tunnel_id)
-            .bind("Relay has no public key — cannot re-open tunnel on reconnect")
+            .bind("Relay has no public key - cannot re-open tunnel on reconnect")
             .execute(pool)
             .await;
             continue;
@@ -94,13 +96,13 @@ async fn replay_tunnels(pool: &PgPool, hub: &WsHub, endpoint_id: &str) -> anyhow
 async fn load_redirect_rules(pool: &PgPool, tunnel_id: Uuid) -> Vec<tuntun_common::RedirectRule> {
     let rows: Vec<(String, i32, Option<ipnetwork::IpNetwork>)> = match sqlx::query_as(
         "SELECT r.path_pattern, r.target_port, m.assigned_ip \
-         FROM tunnel_redirect_rules r \
+         FROM tunnel_routing_rules r \
          JOIN tunnels t ON t.id = r.tunnel_id \
          LEFT JOIN network_memberships m \
            ON m.endpoint_id = r.target_endpoint_id \
           AND m.network_id = t.network_id \
           AND m.status = 'active' \
-         WHERE r.tunnel_id = $1 \
+         WHERE r.tunnel_id = $1 AND r.kind = 'path' \
          ORDER BY r.priority DESC, r.created_at ASC",
     )
     .bind(tunnel_id)

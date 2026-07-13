@@ -118,6 +118,17 @@ pub struct SignedClient {
     pub signing_key: SigningKey,
 }
 
+impl Clone for SignedClient {
+    fn clone(&self) -> Self {
+        Self {
+            base: self.base.clone(),
+            http: self.http.clone(),
+            endpoint_id: self.endpoint_id.clone(),
+            signing_key: self.signing_key.clone(),
+        }
+    }
+}
+
 impl SignedClient {
     pub fn new(base: String, endpoint_id: String, signing_key: SigningKey) -> anyhow::Result<Self> {
         let http = reqwest::Client::builder()
@@ -135,6 +146,25 @@ impl SignedClient {
         let ts = Utc::now().timestamp();
         let sig = signing::sign(&self.signing_key, method, path, ts, body);
         (ts, sig)
+    }
+
+    async fn do_get<T: serde::de::DeserializeOwned>(&self, path: &str) -> anyhow::Result<T> {
+        let url = format!("{}{}", self.base, path);
+        let (ts, sig) = self.sign("GET", path, b"");
+        let resp = self
+            .http
+            .request(Method::GET, &url)
+            .header(HDR_ENDPOINT_ID, HeaderValue::from_str(&self.endpoint_id)?)
+            .header(HDR_TIMESTAMP, HeaderValue::from_str(&ts.to_string())?)
+            .header(HDR_SIGNATURE, HeaderValue::from_str(&sig)?)
+            .send()
+            .await?;
+        let status = resp.status();
+        let text = resp.text().await?;
+        if !status.is_success() {
+            anyhow::bail!("GET {} => {status}: {text}", path);
+        }
+        Ok(serde_json::from_str(&text)?)
     }
 
     async fn do_post<T: serde::de::DeserializeOwned>(
@@ -236,6 +266,130 @@ impl SignedClient {
         }
         let resp: Resp = self.do_post("/v1/subnet-routes", &body).await?;
         Ok(resp.cidr)
+    }
+
+    pub async fn upload_ssh_recording(
+        &self,
+        session_id: &str,
+        cast_text: &str,
+        content_sha256: &str,
+    ) -> anyhow::Result<()> {
+        if cast_text.len() > 16 * 1024 * 1024 {
+            anyhow::bail!("recording too large to upload ({} bytes)", cast_text.len());
+        }
+        let body = serde_json::json!({
+            "sessionId": session_id,
+            "castText": cast_text,
+            "contentSha256": content_sha256,
+        });
+        // Large casts need a longer timeout than the default SignedClient.
+        let url = format!("{}/v1/ssh-recordings", self.base);
+        let json = serde_json::to_vec(&body)?;
+        let (ts, sig) = self.sign("POST", "/v1/ssh-recordings", &json);
+        let http = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(120))
+            .build()?;
+        let resp = http
+            .request(Method::POST, &url)
+            .header(HDR_ENDPOINT_ID, HeaderValue::from_str(&self.endpoint_id)?)
+            .header(HDR_TIMESTAMP, HeaderValue::from_str(&ts.to_string())?)
+            .header(HDR_SIGNATURE, HeaderValue::from_str(&sig)?)
+            .header("content-type", "application/json")
+            .body(json)
+            .send()
+            .await?;
+        let status = resp.status();
+        let text = resp.text().await?;
+        if !status.is_success() {
+            anyhow::bail!("POST /v1/ssh-recordings => {status}: {text}");
+        }
+        Ok(())
+    }
+
+    pub async fn list_ssh_sessions(
+        &self,
+        limit: u32,
+        status: Option<&str>,
+    ) -> anyhow::Result<serde_json::Value> {
+        let mut path = format!("/v1/ssh-sessions?limit={limit}");
+        if let Some(s) = status {
+            path.push_str(&format!("&status={s}"));
+        }
+        // Sign without query string (server uses uri.path()).
+        let url = format!("{}{}", self.base, path);
+        let (ts, sig) = self.sign("GET", "/v1/ssh-sessions", b"");
+        let resp = self
+            .http
+            .request(Method::GET, &url)
+            .header(HDR_ENDPOINT_ID, HeaderValue::from_str(&self.endpoint_id)?)
+            .header(HDR_TIMESTAMP, HeaderValue::from_str(&ts.to_string())?)
+            .header(HDR_SIGNATURE, HeaderValue::from_str(&sig)?)
+            .send()
+            .await?;
+        let status_code = resp.status();
+        let text = resp.text().await?;
+        if !status_code.is_success() {
+            anyhow::bail!("GET /v1/ssh-sessions => {status_code}: {text}");
+        }
+        Ok(serde_json::from_str(&text)?)
+    }
+
+    pub async fn list_ssh_recordings(&self, limit: u32) -> anyhow::Result<serde_json::Value> {
+        let url = format!("{}/v1/ssh-recordings/list?limit={limit}", self.base);
+        let (ts, sig) = self.sign("GET", "/v1/ssh-recordings/list", b"");
+        let resp = self
+            .http
+            .request(Method::GET, &url)
+            .header(HDR_ENDPOINT_ID, HeaderValue::from_str(&self.endpoint_id)?)
+            .header(HDR_TIMESTAMP, HeaderValue::from_str(&ts.to_string())?)
+            .header(HDR_SIGNATURE, HeaderValue::from_str(&sig)?)
+            .send()
+            .await?;
+        let status = resp.status();
+        let text = resp.text().await?;
+        if !status.is_success() {
+            anyhow::bail!("GET /v1/ssh-recordings/list => {status}: {text}");
+        }
+        Ok(serde_json::from_str(&text)?)
+    }
+
+    pub async fn get_ssh_recording_cast(
+        &self,
+        session_id: &str,
+    ) -> anyhow::Result<serde_json::Value> {
+        let path = format!("/v1/ssh-recordings/{session_id}/cast");
+        self.do_get(&path).await
+    }
+
+    pub async fn evaluate_ssh_auth(
+        &self,
+        peer_endpoint_id: &str,
+        check_period_secs: u64,
+    ) -> anyhow::Result<serde_json::Value> {
+        let body = serde_json::json!({
+            "peerEndpointId": peer_endpoint_id,
+            "checkPeriodSecs": check_period_secs,
+        });
+        self.do_post("/v1/ssh/auth/evaluate", &body).await
+    }
+
+    pub async fn poll_ssh_auth(&self, challenge_token: &str) -> anyhow::Result<serde_json::Value> {
+        let body = serde_json::json!({ "challengeToken": challenge_token });
+        self.do_post("/v1/ssh/auth/poll", &body).await
+    }
+
+    pub async fn verify_ssh_auth(
+        &self,
+        peer_endpoint_id: &str,
+        check_period_secs: u64,
+        auth_token: Option<&str>,
+    ) -> anyhow::Result<serde_json::Value> {
+        let body = serde_json::json!({
+            "peerEndpointId": peer_endpoint_id,
+            "checkPeriodSecs": check_period_secs,
+            "authToken": auth_token,
+        });
+        self.do_post("/v1/ssh/auth/verify", &body).await
     }
 }
 

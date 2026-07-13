@@ -124,7 +124,7 @@ function TunnelsPage() {
               {row.original.relayName ?? "Relay"}
             </Link>
           ) : (
-            "—"
+            "-"
           ),
       },
       {
@@ -216,7 +216,7 @@ function TunnelsPage() {
           steps={[
             "Pick an online machine and the local port your app listens on.",
             "Choose a relay (or Auto) and an optional subdomain.",
-            "Share the https://… URL — or run tuntun tunnel <port> from the CLI.",
+            "Share the https://… URL - or run tuntun tunnel <port> from the CLI.",
           ]}
           action={
             isAdmin ? (

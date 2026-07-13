@@ -19,13 +19,20 @@ use crate::sync::{
 };
 use crate::tunnel::TunnelManager;
 
+/// Callback when CP requests killing an SSH session (`session_id`).
+pub type KillSshHook = Arc<dyn Fn(&str) + Send + Sync>;
+
 #[derive(Clone)]
 pub struct CoreNodeConfig {
     pub hostname: String,
     pub agent_version: &'static str,
     pub poll_secs: u64,
     pub advertise_datagram_alpn: bool,
+    /// Advertise `tuntun/recording/1` (this node can receive session recordings).
+    pub advertise_recording_alpn: bool,
     pub kind: &'static str, // "agent" | "sdk"
+    /// Optional hook when CP requests killing an SSH session (session_id string).
+    pub on_kill_ssh: Option<KillSshHook>,
 }
 
 impl Default for CoreNodeConfig {
@@ -35,7 +42,9 @@ impl Default for CoreNodeConfig {
             agent_version: env!("CARGO_PKG_VERSION"),
             poll_secs: 30,
             advertise_datagram_alpn: false,
+            advertise_recording_alpn: false,
             kind: "sdk",
+            on_kill_ssh: None,
         }
     }
 }
@@ -53,6 +62,7 @@ pub struct CoreNode {
     pub paths: StatePaths,
     pub serves: ServeManager,
     pub tunnels: TunnelManager,
+    pub signed: SignedClient,
 }
 
 impl CoreNode {
@@ -65,6 +75,10 @@ impl CoreNode {
         let mut alpns: Vec<Vec<u8>> = vec![TUNNEL_STREAM_ALPN.to_vec()];
         if cfg.advertise_datagram_alpn {
             alpns.push(TUNNEL_ALPN.to_vec());
+            alpns.push(tuntun_common::SSH_ALPN.to_vec());
+        }
+        if cfg.advertise_recording_alpn {
+            alpns.push(tuntun_common::RECORDING_ALPN.to_vec());
         }
 
         let secret = SecretKey::from_bytes(&identity.secret_bytes);
@@ -111,7 +125,7 @@ impl CoreNode {
             SelfIdentity {
                 endpoint_hex: my_id_hex.clone(),
                 ip: membership.assigned_ipv4,
-                tags: vec![],
+                tags: membership.self_tags.clone(),
                 network: persisted.network_name.clone(),
             },
             routes.clone(),
@@ -148,9 +162,10 @@ impl CoreNode {
             cfg.agent_version,
             Some(serves.clone()),
             Some(tunnels.clone()),
+            cfg.on_kill_ssh.clone(),
         );
         spawn_poll_fallback(
-            signed,
+            signed.clone(),
             version.clone(),
             cfg.poll_secs,
             routes.clone(),
@@ -171,6 +186,7 @@ impl CoreNode {
             paths,
             serves,
             tunnels,
+            signed,
         })
     }
 

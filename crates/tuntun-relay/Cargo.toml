@@ -3,7 +3,7 @@ name = "tuntun-relay"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "TunTun public edge relay — TLS termination + reverse tunnels"
+description = "TunTun public edge relay - TLS termination + reverse tunnels"
 
 [[bin]]
 name = "tuntun-relay"

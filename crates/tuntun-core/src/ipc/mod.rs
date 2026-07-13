@@ -1,4 +1,4 @@
-//! Agent IPC v2 — local request/response protocol for the TunTun CLI.
+//! Agent IPC v2 - local request/response protocol for the TunTun CLI.
 //!
 //! See [`protocol`] for wire types, [`server`] for the agent-side listener,
 //! and [`client`] for CLI usage.

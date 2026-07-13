@@ -139,7 +139,7 @@ export const relaysRoutes = new Elysia()
           await tx.insert(schema.relayRegistrationTokens).values({
             tokenHash,
             organizationId: auth.organizationId,
-            relayId: relay!.id,
+            relayId: relay?.id,
             createdBy: auth.user.id,
             expiresAt,
           });
@@ -148,14 +148,14 @@ export const relaysRoutes = new Elysia()
             organizationId: auth.organizationId,
             actor: auth.user.id,
             action: "relay.create",
-            target: relay!.id,
+            target: relay?.id,
             metadata: { name: parsed.name, domain: parsed.domain },
           });
 
           await notifyEntityChanged(tx, {
             organizationId: auth.organizationId,
             kind: "relay",
-            entityId: relay!.id,
+            entityId: relay?.id,
           });
 
           return relay!;

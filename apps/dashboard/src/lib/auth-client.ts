@@ -1,4 +1,9 @@
-import { organizationClient } from "better-auth/client/plugins";
+import { oauthProviderClient } from "@better-auth/oauth-provider/client";
+import { ssoClient } from "@better-auth/sso/client";
+import {
+  deviceAuthorizationClient,
+  organizationClient,
+} from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 
 import { getManagementApiUrl } from "@/lib/env";
@@ -8,7 +13,12 @@ export const authClient = createAuthClient({
   fetchOptions: {
     credentials: "include",
   },
-  plugins: [organizationClient()],
+  plugins: [
+    organizationClient(),
+    ssoClient(),
+    oauthProviderClient(),
+    deviceAuthorizationClient(),
+  ],
 });
 
 export const {

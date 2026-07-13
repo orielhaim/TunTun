@@ -82,6 +82,10 @@ pub async fn serve(bind: &str, state: AdminState) -> anyhow::Result<()> {
         .route("/internal/v1/tunnels/stop", post(stop_tunnel_handler))
         .route("/internal/v1/serves/start", post(start_serve_handler))
         .route("/internal/v1/serves/stop", post(stop_serve_handler))
+        .route(
+            "/internal/v1/ssh/kill-session",
+            post(kill_ssh_session_handler),
+        )
         .with_state(Arc::new(state));
 
     let listener = tokio::net::TcpListener::bind(bind).await?;
@@ -422,6 +426,47 @@ async fn stop_serve_handler(
             &parsed.endpoint_id,
             tuntun_common::ws::ServerMsg::StopServe {
                 serve_id: parsed.serve_id,
+            },
+        )
+        .await;
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response()
+}
+
+#[derive(serde::Deserialize)]
+struct KillSshSessionPush {
+    endpoint_id: String,
+    session_id: String,
+}
+
+async fn kill_ssh_session_handler(
+    State(state): State<Arc<AdminState>>,
+    req: Request<axum::body::Body>,
+) -> Response {
+    let method = req.method().to_string();
+    let path = req.uri().path().to_string();
+    let headers = req.headers().clone();
+    let body = match axum::body::to_bytes(req.into_body(), 1024 * 1024).await {
+        Ok(b) => b,
+        Err(_) => return StatusCode::BAD_REQUEST.into_response(),
+    };
+    if let Err(resp) = state
+        .service_auth
+        .verify(&method, &path, &headers, &body)
+        .await
+        .map_err(|e: ServiceAuthError| e.into_response())
+    {
+        return resp;
+    }
+    let parsed: KillSshSessionPush = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(_) => return (StatusCode::BAD_REQUEST, "invalid json").into_response(),
+    };
+    state
+        .ws_hub
+        .push_to(
+            &parsed.endpoint_id,
+            tuntun_common::ws::ServerMsg::KillSshSession {
+                session_id: parsed.session_id,
             },
         )
         .await;

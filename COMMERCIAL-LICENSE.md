@@ -1,6 +1,6 @@
 # TunTun Commercial License Agreement
 
-Version 1.0 — Effective [DATE]
+Version 1.0 - Effective [DATE]
 
 This Commercial License Agreement ("Agreement") is between
 TunTun Ltd., [address] ("TunTun") and the entity or individual
@@ -34,12 +34,12 @@ Order Form.
 2.2 The license applies to one of the following tiers, as
 indicated in the Order Form:
 
-  (a) INTERNAL USE LICENSE — Licensee may use and modify the
+  (a) INTERNAL USE LICENSE - Licensee may use and modify the
       Software for Internal Use with no obligation to disclose
       source code under the AGPL. Licensee may not distribute
       the Software or offer it as a service to third parties.
 
-  (b) OEM / RESALE LICENSE — Licensee may incorporate the
+  (b) OEM / RESALE LICENSE - Licensee may incorporate the
       Software into Licensee's own products or services and
       distribute or offer those products or services to third
       parties, with no obligation to disclose source code

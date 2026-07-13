@@ -14,6 +14,9 @@ import { presenceRoutes } from "./presence";
 import { relaysRoutes } from "./relays";
 import { sdkNodesRoutes } from "./sdk-nodes";
 import { servesRoutes } from "./serves";
+import { sshPoliciesRoutes } from "./ssh-policies";
+import { sshSessionsRoutes } from "./ssh-sessions";
+import { ssoSettingsRoutes } from "./sso-settings";
 import { subnetRoutesRoutes } from "./subnet-routes";
 import { topologyRoutes } from "./topology";
 import { tunnelSettingsRoutes } from "./tunnel-settings";
@@ -24,6 +27,8 @@ export const apiV1 = new Elysia({ prefix: "/api/v1" })
   .use(devicesRoutes)
   .use(presenceRoutes)
   .use(policiesRoutes)
+  .use(sshPoliciesRoutes)
+  .use(sshSessionsRoutes)
   .use(subnetRoutesRoutes)
   .use(hostnameRoutesRoutes)
   .use(deviceProfilesRoutes)
@@ -36,5 +41,6 @@ export const apiV1 = new Elysia({ prefix: "/api/v1" })
   .use(relaysRoutes)
   .use(tunnelsRoutes)
   .use(tunnelSettingsRoutes)
+  .use(ssoSettingsRoutes)
   .use(internalCaRoutes)
   .use(servesRoutes);

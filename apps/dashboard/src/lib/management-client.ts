@@ -8,10 +8,10 @@ import {
   type CreatePolicyBody,
   type CreateRelayBody,
   type CreateServeBody,
+  type CreateSshPolicyBody,
   type CreateSubnetRouteBody,
   type CreateTunnelBody,
-  type CreateTunnelPortMappingBody,
-  type CreateTunnelRedirectRuleBody,
+  type CreateTunnelRoutingRuleBody,
   createApiKeyBody,
   createApiKeyResponse,
   createEnrollmentTokenBody,
@@ -23,17 +23,18 @@ import {
   createRelayResponse,
   createServeBody,
   createServeResponse,
+  createSshPolicyBody,
   createSubnetRouteBody,
   createTunnelBody,
-  createTunnelPortMappingBody,
-  createTunnelRedirectRuleBody,
   createTunnelResponse,
+  createTunnelRoutingRuleBody,
   type DeleteDeviceItem,
   deleteDevicesBody,
   deleteDevicesResponse,
   deviceAddressesResponse,
   deviceDetailSchema,
   deviceListResponse,
+  deviceSshAuthSchema,
   enrollmentTokenListResponse,
   hostnameRouteListResponse,
   hostnameRouteSchema,
@@ -41,6 +42,7 @@ import {
   networkListResponse,
   networkMetricsResponse,
   networkSchema,
+  organizationSsoProviderSchema,
   organizationTunnelSettingsSchema,
   type PatchDeviceBody,
   type PatchDeviceMembershipBody,
@@ -50,10 +52,10 @@ import {
   type PatchPolicyBody,
   type PatchRelayBody,
   type PatchServeBody,
+  type PatchSshPolicyBody,
   type PatchSubnetRouteBody,
   type PatchTunnelBody,
-  type PatchTunnelPortMappingBody,
-  type PatchTunnelRedirectRuleBody,
+  type PatchTunnelRoutingRuleBody,
   patchDeviceBody,
   patchDeviceMembershipBody,
   patchHostnameRouteBody,
@@ -62,10 +64,10 @@ import {
   patchPolicyBody,
   patchRelayBody,
   patchServeBody,
+  patchSshPolicyBody,
   patchSubnetRouteBody,
   patchTunnelBody,
-  patchTunnelPortMappingBody,
-  patchTunnelRedirectRuleBody,
+  patchTunnelRoutingRuleBody,
   policyListResponse,
   policySchema,
   relayHealthResponse,
@@ -75,16 +77,19 @@ import {
   serveListResponse,
   servePeersResponse,
   serveSchema,
+  sshPolicyListResponse,
+  sshPolicySchema,
+  sshRecordingCastResponse,
   subnetRouteListResponse,
   subnetRouteSchema,
   topologyResponse,
   tunnelListResponse,
-  tunnelPortMappingListResponse,
-  tunnelPortMappingSchema,
-  tunnelRedirectRuleListResponse,
-  tunnelRedirectRuleSchema,
+  tunnelRoutingRuleListResponse,
+  tunnelRoutingRuleSchema,
   tunnelSchema,
   tunnelTrafficListResponse,
+  type UpsertOrganizationSsoProviderBody,
+  upsertOrganizationSsoProviderBody,
 } from "@tuntun/api/management";
 import type { z } from "zod";
 import { z as zod } from "zod";
@@ -97,11 +102,11 @@ const serveDetailResponse = zod.object({ serve: serveSchema });
 const tunnelSettingsResponse = zod.object({
   settings: organizationTunnelSettingsSchema,
 });
-const redirectRuleDetailResponse = zod.object({
-  redirectRule: tunnelRedirectRuleSchema,
+const ssoSettingsResponse = zod.object({
+  provider: organizationSsoProviderSchema.nullable(),
 });
-const portMappingDetailResponse = zod.object({
-  portMapping: tunnelPortMappingSchema,
+const routingRuleDetailResponse = zod.object({
+  routingRule: tunnelRoutingRuleSchema,
 });
 
 class ManagementApiError extends Error {
@@ -256,10 +261,24 @@ export function createManagementClient(orgId: string) {
         policyListResponse,
       ),
 
+    listOrganizationPolicies: () =>
+      request(orgId, org(`/policies`), {}, policyListResponse),
+
     createPolicy: (networkId: string, body: CreatePolicyBody) =>
       request(
         orgId,
         org(`/networks/${networkId}/policies`),
+        {
+          method: "POST",
+          body: JSON.stringify(createPolicyBody.parse(body)),
+        },
+        policySchema,
+      ),
+
+    createOrganizationPolicy: (body: CreatePolicyBody) =>
+      request(
+        orgId,
+        org(`/policies`),
         {
           method: "POST",
           body: JSON.stringify(createPolicyBody.parse(body)),
@@ -282,12 +301,96 @@ export function createManagementClient(orgId: string) {
         policySchema,
       ),
 
+    updateOrganizationPolicy: (policyId: string, body: PatchPolicyBody) =>
+      request(
+        orgId,
+        org(`/policies/${policyId}`),
+        {
+          method: "PATCH",
+          body: JSON.stringify(patchPolicyBody.parse(body)),
+        },
+        policySchema,
+      ),
+
     deletePolicy: (networkId: string, policyId: string) =>
       request<{ ok: boolean }>(
         orgId,
         org(`/networks/${networkId}/policies/${policyId}`),
         { method: "DELETE" },
       ),
+
+    deleteOrganizationPolicy: (policyId: string) =>
+      request<{ ok: boolean }>(orgId, org(`/policies/${policyId}`), {
+        method: "DELETE",
+      }),
+
+    listSshPolicies: (networkId: string) =>
+      request(
+        orgId,
+        org(`/networks/${networkId}/ssh-policies`),
+        {},
+        sshPolicyListResponse,
+      ),
+
+    createSshPolicy: (networkId: string, body: CreateSshPolicyBody) =>
+      request(
+        orgId,
+        org(`/networks/${networkId}/ssh-policies`),
+        {
+          method: "POST",
+          body: JSON.stringify(createSshPolicyBody.parse(body)),
+        },
+        sshPolicySchema,
+      ),
+
+    updateSshPolicy: (
+      networkId: string,
+      policyId: string,
+      body: PatchSshPolicyBody,
+    ) =>
+      request(
+        orgId,
+        org(`/networks/${networkId}/ssh-policies/${policyId}`),
+        {
+          method: "PATCH",
+          body: JSON.stringify(patchSshPolicyBody.parse(body)),
+        },
+        sshPolicySchema,
+      ),
+
+    deleteSshPolicy: (networkId: string, policyId: string) =>
+      request<{ ok: boolean }>(
+        orgId,
+        org(`/networks/${networkId}/ssh-policies/${policyId}`),
+        { method: "DELETE" },
+      ),
+
+    getDeviceSshAuth: (endpointId: string) =>
+      request(
+        orgId,
+        org(`/devices/${endpointId}/ssh-auth`),
+        {},
+        deviceSshAuthSchema,
+      ),
+
+    getSsoSettings: () =>
+      request(orgId, org("/sso-settings"), {}, ssoSettingsResponse),
+
+    upsertSsoSettings: (body: UpsertOrganizationSsoProviderBody) =>
+      request(
+        orgId,
+        org("/sso-settings"),
+        {
+          method: "PUT",
+          body: JSON.stringify(upsertOrganizationSsoProviderBody.parse(body)),
+        },
+        ssoSettingsResponse,
+      ),
+
+    deleteSsoSettings: () =>
+      request<{ ok: boolean }>(orgId, org("/sso-settings"), {
+        method: "DELETE",
+      }),
 
     listSubnetRoutes: (networkId: string) =>
       request(
@@ -531,48 +634,48 @@ export function createManagementClient(orgId: string) {
         { method: "DELETE" },
       ),
 
-    listTunnelRedirectRules: (networkId: string, tunnelId: string) =>
+    listTunnelRoutingRules: (networkId: string, tunnelId: string) =>
       request(
         orgId,
-        org(`/networks/${networkId}/tunnels/${tunnelId}/redirect-rules`),
+        org(`/networks/${networkId}/tunnels/${tunnelId}/routing-rules`),
         {},
-        tunnelRedirectRuleListResponse,
+        tunnelRoutingRuleListResponse,
       ),
 
-    createTunnelRedirectRule: (
+    createTunnelRoutingRule: (
       networkId: string,
       tunnelId: string,
-      body: CreateTunnelRedirectRuleBody,
+      body: CreateTunnelRoutingRuleBody,
     ) =>
       request(
         orgId,
-        org(`/networks/${networkId}/tunnels/${tunnelId}/redirect-rules`),
+        org(`/networks/${networkId}/tunnels/${tunnelId}/routing-rules`),
         {
           method: "POST",
-          body: JSON.stringify(createTunnelRedirectRuleBody.parse(body)),
+          body: JSON.stringify(createTunnelRoutingRuleBody.parse(body)),
         },
-        redirectRuleDetailResponse,
+        routingRuleDetailResponse,
       ),
 
-    updateTunnelRedirectRule: (
+    updateTunnelRoutingRule: (
       networkId: string,
       tunnelId: string,
       ruleId: string,
-      body: PatchTunnelRedirectRuleBody,
+      body: PatchTunnelRoutingRuleBody,
     ) =>
       request(
         orgId,
         org(
-          `/networks/${networkId}/tunnels/${tunnelId}/redirect-rules/${ruleId}`,
+          `/networks/${networkId}/tunnels/${tunnelId}/routing-rules/${ruleId}`,
         ),
         {
           method: "PATCH",
-          body: JSON.stringify(patchTunnelRedirectRuleBody.parse(body)),
+          body: JSON.stringify(patchTunnelRoutingRuleBody.parse(body)),
         },
-        redirectRuleDetailResponse,
+        routingRuleDetailResponse,
       ),
 
-    deleteTunnelRedirectRule: (
+    deleteTunnelRoutingRule: (
       networkId: string,
       tunnelId: string,
       ruleId: string,
@@ -580,61 +683,7 @@ export function createManagementClient(orgId: string) {
       request<{ ok: boolean }>(
         orgId,
         org(
-          `/networks/${networkId}/tunnels/${tunnelId}/redirect-rules/${ruleId}`,
-        ),
-        { method: "DELETE" },
-      ),
-
-    listTunnelPortMappings: (networkId: string, tunnelId: string) =>
-      request(
-        orgId,
-        org(`/networks/${networkId}/tunnels/${tunnelId}/port-mappings`),
-        {},
-        tunnelPortMappingListResponse,
-      ),
-
-    createTunnelPortMapping: (
-      networkId: string,
-      tunnelId: string,
-      body: CreateTunnelPortMappingBody,
-    ) =>
-      request(
-        orgId,
-        org(`/networks/${networkId}/tunnels/${tunnelId}/port-mappings`),
-        {
-          method: "POST",
-          body: JSON.stringify(createTunnelPortMappingBody.parse(body)),
-        },
-        portMappingDetailResponse,
-      ),
-
-    updateTunnelPortMapping: (
-      networkId: string,
-      tunnelId: string,
-      mappingId: string,
-      body: PatchTunnelPortMappingBody,
-    ) =>
-      request(
-        orgId,
-        org(
-          `/networks/${networkId}/tunnels/${tunnelId}/port-mappings/${mappingId}`,
-        ),
-        {
-          method: "PATCH",
-          body: JSON.stringify(patchTunnelPortMappingBody.parse(body)),
-        },
-        portMappingDetailResponse,
-      ),
-
-    deleteTunnelPortMapping: (
-      networkId: string,
-      tunnelId: string,
-      mappingId: string,
-    ) =>
-      request<{ ok: boolean }>(
-        orgId,
-        org(
-          `/networks/${networkId}/tunnels/${tunnelId}/port-mappings/${mappingId}`,
+          `/networks/${networkId}/tunnels/${tunnelId}/routing-rules/${ruleId}`,
         ),
         { method: "DELETE" },
       ),
@@ -734,6 +783,40 @@ export function createManagementClient(orgId: string) {
         },
         tunnelSettingsResponse,
       ),
+
+    listSshSessions: (opts?: { status?: string; limit?: number }) => {
+      const params = new URLSearchParams();
+      if (opts?.status) params.set("status", opts.status);
+      if (opts?.limit) params.set("limit", String(opts.limit));
+      const qs = params.toString();
+      return request(
+        orgId,
+        org(`/ssh-sessions${qs ? `?${qs}` : ""}`),
+        {},
+        sshSessionListResponse,
+      );
+    },
+
+    listSshRecordings: (limit = 50) =>
+      request(
+        orgId,
+        org(`/ssh-recordings?limit=${limit}`),
+        {},
+        sshRecordingListResponse,
+      ),
+
+    getSshRecording: (sessionId: string) =>
+      request(
+        orgId,
+        org(`/ssh-sessions/${sessionId}/recording`),
+        {},
+        sshRecordingCastResponse,
+      ),
+
+    killSshSession: (sessionId: string) =>
+      request(orgId, org(`/ssh-sessions/${sessionId}/kill`), {
+        method: "POST",
+      }),
   };
 }
 

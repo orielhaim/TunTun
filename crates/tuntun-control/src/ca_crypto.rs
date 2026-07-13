@@ -24,9 +24,9 @@ pub fn resolve_ca_key(raw: Option<&str>) -> [u8; 32] {
             out.copy_from_slice(&bytes);
             return out;
         }
-        tracing::warn!("TUNTUN_CA_ENCRYPTION_KEY invalid — using insecure local-dev CA key");
+        tracing::warn!("TUNTUN_CA_ENCRYPTION_KEY invalid - using insecure local-dev CA key");
     } else {
-        tracing::warn!("TUNTUN_CA_ENCRYPTION_KEY unset — using insecure local-dev CA key");
+        tracing::warn!("TUNTUN_CA_ENCRYPTION_KEY unset - using insecure local-dev CA key");
     }
     let mut out = [0u8; 32];
     out.copy_from_slice(&Sha256::digest(b"tuntun-dev-ca-key"));

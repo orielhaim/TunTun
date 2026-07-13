@@ -186,7 +186,7 @@ function ServeDetailPage() {
             Connected peers
             {(peers?.length ?? 0) > 0 ? (
               <Badge variant="secondary" className="ml-1.5">
-                {peers!.length}
+                {peers?.length}
               </Badge>
             ) : null}
           </TabsTrigger>

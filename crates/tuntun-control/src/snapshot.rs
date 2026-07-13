@@ -56,6 +56,7 @@ pub async fn build_endpoint_snapshot(
         let tunnel_config = load_tunnel_config(pool, endpoint_id, network_id)
             .await
             .unwrap_or_default();
+        let self_tags = load_device_tags(pool, endpoint_id).await?;
         let policy = crate::policy_store::load_network_bundle(
             pool,
             policy_key,
@@ -83,6 +84,7 @@ pub async fn build_endpoint_snapshot(
             device_profile,
             active_serves,
             tunnel_config,
+            self_tags,
             policy,
             gossip_bootstrap: bootstrap,
             gossip_topic_hex,
@@ -118,11 +120,13 @@ pub async fn build_endpoint_snapshot(
 }
 
 async fn load_org_ca_pem(pool: &PgPool, organization_id: &str) -> anyhow::Result<Option<String>> {
-    let row: Option<(String,)> =
-        sqlx::query_as("SELECT certificate_pem FROM organization_cas WHERE organization_id = $1")
-            .bind(organization_id)
-            .fetch_optional(pool)
-            .await?;
+    let row: Option<(String,)> = sqlx::query_as(
+        "SELECT certificate_pem FROM organization_cas \
+         WHERE organization_id = $1 AND status = 'active'",
+    )
+    .bind(organization_id)
+    .fetch_optional(pool)
+    .await?;
     Ok(row.map(|(pem,)| pem))
 }
 
@@ -205,7 +209,7 @@ async fn load_tunnel_config(
                 relay_addr: relay_endpoint.unwrap_or_default(),
                 // Deliberately blank: TunnelManager starts only on OpenTunnel.
                 // On agent WS reconnect, control plane re-pushes OpenTunnel with
-                // the real token from tunnels.relay_auth_token (see reconnect.rs).
+                // Snapshot never carries secrets; reconnect loads from tunnel_secrets.
                 relay_auth_token: String::new(),
                 status,
             },
@@ -450,4 +454,13 @@ async fn load_ipv6_peers(
         });
     }
     Ok(peers)
+}
+
+async fn load_device_tags(pool: &PgPool, endpoint_id: &str) -> anyhow::Result<Vec<String>> {
+    let tag_rows: Vec<(String,)> =
+        sqlx::query_as("SELECT tag FROM device_tags WHERE endpoint_id = $1")
+            .bind(endpoint_id)
+            .fetch_all(pool)
+            .await?;
+    Ok(tag_rows.into_iter().map(|(t,)| t).collect())
 }

@@ -30,7 +30,6 @@ type CreateServeDialogProps = {
   orgId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** When set with defaultNetworkId, create for this machine only — no picker. */
   defaultEndpointId?: string;
   defaultNetworkId?: string;
   defaultHostname?: string;

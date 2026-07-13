@@ -133,7 +133,7 @@ fn print_status(out: &Output, info: &StatusInfo) {
             let lat = p
                 .latency_ms
                 .map(|ms| format!("{ms:.1} ms"))
-                .unwrap_or_else(|| out.dim("—"));
+                .unwrap_or_else(|| out.dim("-"));
             out.writeln(format!(
                 "  {online:<4} {:<20} {:<15} {:<14} {lat}",
                 truncate(&p.hostname, 20),

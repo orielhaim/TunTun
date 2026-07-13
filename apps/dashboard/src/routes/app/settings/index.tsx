@@ -24,6 +24,8 @@ import {
   useInternalCa,
   useInternalCaMutations,
   useRelays,
+  useSsoSettings,
+  useSsoSettingsMutations,
   useTunnelSettings,
   useTunnelSettingsMutations,
 } from "@/lib/queries/management";
@@ -47,15 +49,25 @@ function OrganizationSettingsPage() {
   const { data: ca, isPending: caPending } = useInternalCa(orgId);
   const { data: tunnelSettings, isPending: settingsPending } =
     useTunnelSettings(orgId);
+  const { data: ssoProvider, isPending: ssoPending } = useSsoSettings(orgId);
   const { data: relays } = useRelays(orgId);
   const caMutations = useInternalCaMutations(orgId);
   const settingsMutations = useTunnelSettingsMutations(orgId);
+  const ssoMutations = useSsoSettingsMutations(orgId);
 
   const [defaultRelayId, setDefaultRelayId] = useState("auto");
   const [defaultTtl, setDefaultTtl] = useState("");
   const [maxTunnels, setMaxTunnels] = useState("10");
   const [customDomain, setCustomDomain] = useState("");
   const [peerDnsSuffix, setPeerDnsSuffix] = useState("");
+
+  const [ssoDomain, setSsoDomain] = useState("");
+  const [issuerUrl, setIssuerUrl] = useState("");
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [discoveryUrl, setDiscoveryUrl] = useState("");
+  const [scopes, setScopes] = useState("openid profile email");
+  const [removeSsoOpen, setRemoveSsoOpen] = useState(false);
 
   useEffect(() => {
     if (!tunnelSettings) return;
@@ -69,6 +81,24 @@ function OrganizationSettingsPage() {
     setCustomDomain(tunnelSettings.customTunnelDomain ?? "");
     setPeerDnsSuffix(tunnelSettings.peerDnsSuffix ?? "");
   }, [tunnelSettings]);
+
+  useEffect(() => {
+    if (!ssoProvider) {
+      setSsoDomain("");
+      setIssuerUrl("");
+      setClientId("");
+      setDiscoveryUrl("");
+      setScopes("openid profile email");
+      setClientSecret("");
+      return;
+    }
+    setSsoDomain(ssoProvider.domain);
+    setIssuerUrl(ssoProvider.issuer);
+    setClientId(ssoProvider.clientId ?? "");
+    setDiscoveryUrl(ssoProvider.discoveryEndpoint ?? "");
+    setScopes(ssoProvider.scopes.join(" ") || "openid profile email");
+    setClientSecret("");
+  }, [ssoProvider]);
 
   async function saveName(e: React.FormEvent) {
     e.preventDefault();
@@ -112,6 +142,34 @@ function OrganizationSettingsPage() {
       toast.success("Tunnel settings saved");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save");
+    }
+  }
+
+  async function saveSsoSettings(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      await ssoMutations.upsert.mutateAsync({
+        issuer: issuerUrl.trim(),
+        domain: ssoDomain.trim(),
+        clientId: clientId.trim(),
+        ...(clientSecret.trim() ? { clientSecret: clientSecret.trim() } : {}),
+        discoveryEndpoint: discoveryUrl.trim() || null,
+        scopes: scopes.trim().split(/\s+/).filter(Boolean),
+      });
+      toast.success("SSO settings saved");
+      setClientSecret("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save");
+    }
+  }
+
+  async function removeSsoSettings() {
+    try {
+      await ssoMutations.remove.mutateAsync();
+      toast.success("SSO provider removed");
+      setRemoveSsoOpen(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to remove");
     }
   }
 
@@ -328,6 +386,128 @@ function OrganizationSettingsPage() {
 
       <Card>
         <CardHeader>
+          <CardTitle className="text-base">SSO / SSH check-mode</CardTitle>
+        </CardHeader>
+        <CardContent className="max-w-2xl">
+          {ssoPending ? (
+            <Skeleton className="h-40 w-full" />
+          ) : (
+            <form
+              className="space-y-4"
+              onSubmit={(e) => void saveSsoSettings(e)}
+            >
+              <p className="text-muted-foreground text-sm leading-relaxed">
+                Register an external OIDC identity provider for this
+                organization. Dashboard login and SSH check-mode re-auth use
+                Better Auth SSO. Without a provider, SSH check-mode falls back
+                to the TunTun session.
+              </p>
+              {ssoProvider ? (
+                <p className="text-muted-foreground text-xs">
+                  Provider ID: <code>{ssoProvider.providerId}</code>
+                </p>
+              ) : null}
+              <div className="space-y-2">
+                <Label htmlFor="sso-domain">Email domain</Label>
+                <Input
+                  id="sso-domain"
+                  value={ssoDomain}
+                  onChange={(e) => setSsoDomain(e.target.value)}
+                  placeholder="company.com"
+                  disabled={!isAdmin}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="issuer-url">Issuer URL</Label>
+                <Input
+                  id="issuer-url"
+                  value={issuerUrl}
+                  onChange={(e) => setIssuerUrl(e.target.value)}
+                  placeholder="https://accounts.example.com"
+                  disabled={!isAdmin}
+                  required
+                />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="client-id">Client ID</Label>
+                  <Input
+                    id="client-id"
+                    value={clientId}
+                    onChange={(e) => setClientId(e.target.value)}
+                    disabled={!isAdmin}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="client-secret">Client secret</Label>
+                  <Input
+                    id="client-secret"
+                    type="password"
+                    value={clientSecret}
+                    onChange={(e) => setClientSecret(e.target.value)}
+                    placeholder={
+                      ssoProvider?.clientSecretSet
+                        ? "Leave blank to keep current"
+                        : "Secret"
+                    }
+                    disabled={!isAdmin}
+                    autoComplete="new-password"
+                    required={!ssoProvider?.clientSecretSet}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="discovery-url">Discovery URL (optional)</Label>
+                <Input
+                  id="discovery-url"
+                  value={discoveryUrl}
+                  onChange={(e) => setDiscoveryUrl(e.target.value)}
+                  placeholder="Defaults to /.well-known/openid-configuration"
+                  disabled={!isAdmin}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="sso-scopes">Scopes</Label>
+                <Input
+                  id="sso-scopes"
+                  value={scopes}
+                  onChange={(e) => setScopes(e.target.value)}
+                  disabled={!isAdmin}
+                />
+              </div>
+              {isAdmin ? (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="submit"
+                    disabled={ssoMutations.upsert.isPending}
+                  >
+                    {ssoMutations.upsert.isPending
+                      ? "Saving..."
+                      : ssoProvider
+                        ? "Update SSO provider"
+                        : "Register SSO provider"}
+                  </Button>
+                  {ssoProvider ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setRemoveSsoOpen(true)}
+                      disabled={ssoMutations.remove.isPending}
+                    >
+                      Remove
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+            </form>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle className="text-base">DNS / Tunnel domains</CardTitle>
         </CardHeader>
         <CardContent className="max-w-2xl space-y-3 text-sm leading-relaxed">
@@ -435,6 +615,17 @@ function OrganizationSettingsPage() {
             );
           }
         }}
+      />
+
+      <ConfirmDialog
+        open={removeSsoOpen}
+        onOpenChange={setRemoveSsoOpen}
+        title="Remove SSO provider"
+        description="SSH check-mode will fall back to TunTun session authentication. Dashboard SSO login for this org domain will stop working."
+        confirmLabel="Remove SSO"
+        destructive
+        loading={ssoMutations.remove.isPending}
+        onConfirm={() => void removeSsoSettings()}
       />
     </>
   );

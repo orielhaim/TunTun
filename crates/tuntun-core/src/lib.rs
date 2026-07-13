@@ -7,8 +7,10 @@ pub mod ipc;
 pub mod iroh_pool;
 pub mod node;
 pub mod ping;
+pub mod recording;
 pub mod routing;
 pub mod serve;
+pub mod ssh;
 pub mod state;
 pub mod stream;
 pub mod sync;
@@ -19,10 +21,12 @@ pub use acl::{AclEngine, SelfIdentity};
 pub use control::{SignedClient, UnauthedClient};
 pub use identity::AgentIdentity;
 pub use iroh_pool::ConnPool;
-pub use node::{CoreNode, CoreNodeConfig};
+pub use node::{CoreNode, CoreNodeConfig, KillSshHook};
 pub use routing::{PeerInfo, RoutingTable};
 pub use serve::{ServeAcl, ServeManager};
-pub use state::{PersistedState, StatePaths};
-pub use stream::{StreamHandler, TUNNEL_STREAM_ALPN, dial_stream, serve_stream_acceptor};
+pub use state::{CliAuthTokens, PersistedState, StatePaths};
+pub use stream::{
+    StreamHandler, TUNNEL_STREAM_ALPN, dial_stream, serve_stream_acceptor, serve_stream_connection,
+};
 pub use tunnel::TunnelManager;
 pub use tuntun_common as common;

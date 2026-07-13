@@ -1,10 +1,10 @@
 /**
- * Organization Internal CA — issues short-lived leaf certs for TunTun Serve.
+ * Organization Internal CA - issues short-lived leaf certs for TunTun Serve.
  *
  * Root CA PEM is public (distributed in snapshots). Private keys are encrypted
  * at rest with AES-256-GCM using TUNTUN_CA_ENCRYPTION_KEY (32-byte hex or
  * base64). Without that env var, a derived key from a warning-level fallback
- * is used so local dev still works — never use that in production.
+ * is used so local dev still works - never use that in production.
  */
 
 import "reflect-metadata";
@@ -41,7 +41,7 @@ function encryptionKey(): Buffer {
     );
   }
   console.warn(
-    "TUNTUN_CA_ENCRYPTION_KEY unset — using insecure local-dev CA key",
+    "TUNTUN_CA_ENCRYPTION_KEY unset - using insecure local-dev CA key",
   );
   return createHash("sha256").update("tuntun-dev-ca-key").digest();
 }
@@ -130,13 +130,20 @@ function pemToArrayBuffer(pem: string): ArrayBuffer {
   );
 }
 
+function activeCaWhere(organizationId: string) {
+  return and(
+    eq(schema.organizationCas.organizationId, organizationId),
+    eq(schema.organizationCas.status, "active"),
+  );
+}
+
 /** Ensure org has a root CA; create one if missing. Returns public PEM. */
 export async function ensureOrganizationCa(
   organizationId: string,
   orgName = "organization",
 ): Promise<{ certificatePem: string; fingerprintSha256: string }> {
   const existing = await db.query.organizationCas.findFirst({
-    where: eq(schema.organizationCas.organizationId, organizationId),
+    where: activeCaWhere(organizationId),
   });
   if (existing) {
     return {
@@ -148,6 +155,7 @@ export async function ensureOrganizationCa(
   const ca = await generateCa(organizationId, orgName);
   await db.insert(schema.organizationCas).values({
     organizationId,
+    status: "active",
     certificatePem: ca.certificatePem,
     encryptedPrivateKey: encryptPem(ca.privateKeyPem),
     fingerprintSha256: ca.fingerprintSha256,
@@ -161,7 +169,7 @@ export async function ensureOrganizationCa(
   };
 }
 
-/** Generate a new org CA, replace the old one, and stamp rotatedAt. */
+/** Mark the active CA as rotated and insert a new active CA. */
 export async function rotateOrganizationCa(
   organizationId: string,
   orgName = "organization",
@@ -175,38 +183,32 @@ export async function rotateOrganizationCa(
   const rotatedAt = new Date();
   const encryptedPrivateKey = encryptPem(ca.privateKeyPem);
 
-  await db
-    .insert(schema.organizationCas)
-    .values({
+  await db.transaction(async (tx) => {
+    await tx
+      .update(schema.organizationCas)
+      .set({ status: "rotated", rotatedAt })
+      .where(activeCaWhere(organizationId));
+
+    await tx.insert(schema.organizationCas).values({
       organizationId,
+      status: "active",
       certificatePem: ca.certificatePem,
       encryptedPrivateKey,
       fingerprintSha256: ca.fingerprintSha256,
       notBefore: ca.notBefore,
       notAfter: ca.notAfter,
-      rotatedAt,
-    })
-    .onConflictDoUpdate({
-      target: schema.organizationCas.organizationId,
-      set: {
-        certificatePem: ca.certificatePem,
-        encryptedPrivateKey,
-        fingerprintSha256: ca.fingerprintSha256,
-        notBefore: ca.notBefore,
-        notAfter: ca.notAfter,
-        rotatedAt,
-      },
     });
 
-  await db
-    .update(schema.internalCertificates)
-    .set({ revokedAt: rotatedAt })
-    .where(
-      and(
-        eq(schema.internalCertificates.organizationId, organizationId),
-        isNull(schema.internalCertificates.revokedAt),
-      ),
-    );
+    await tx
+      .update(schema.internalCertificates)
+      .set({ revokedAt: rotatedAt })
+      .where(
+        and(
+          eq(schema.internalCertificates.organizationId, organizationId),
+          isNull(schema.internalCertificates.revokedAt),
+        ),
+      );
+  });
 
   return {
     fingerprintSha256: ca.fingerprintSha256,
@@ -220,7 +222,7 @@ export type IssuedLeaf = {
   id: string;
   hostname: string;
   certificatePem: string;
-  /** Plaintext private key — deliver to agent once, never store plaintext. */
+  /** Plaintext private key - deliver to agent once, never store plaintext. */
   privateKeyPem: string;
   fingerprintSha256: string;
   notBefore: Date;
@@ -259,7 +261,7 @@ export async function issueLeafCertificate(input: {
   }
 
   const caRow = await db.query.organizationCas.findFirst({
-    where: eq(schema.organizationCas.organizationId, input.organizationId),
+    where: activeCaWhere(input.organizationId),
   });
   if (!caRow) throw new Error("Organization CA missing after ensure");
 
@@ -327,7 +329,7 @@ export async function issueLeafCertificate(input: {
     .returning();
 
   return {
-    id: row!.id,
+    id: row?.id,
     hostname: input.hostname,
     certificatePem,
     privateKeyPem,

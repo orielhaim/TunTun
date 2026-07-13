@@ -40,7 +40,9 @@ import { useActiveOrganization } from "@/lib/auth-client";
 import {
   useDevice,
   useDeviceMutations,
+  useDeviceSshAuth,
   useServes,
+  useSshSessions,
   useTunnels,
 } from "@/lib/queries/management";
 
@@ -71,7 +73,7 @@ function formatBytes(bytes: number) {
 }
 
 function formatMetadataValue(key: string, value: unknown) {
-  if (value === null || value === undefined || value === "") return "—";
+  if (value === null || value === undefined || value === "") return "-";
   if (key === "totalMemoryBytes" && typeof value === "number") {
     return formatBytes(value);
   }
@@ -141,6 +143,121 @@ function SystemTab({ metadata }: { metadata: DeviceMetadata }) {
         ))}
       </CardContent>
     </Card>
+  );
+}
+
+function MachineSshTab({
+  orgId,
+  endpointId,
+  hostname,
+}: {
+  orgId: string | undefined;
+  endpointId: string;
+  hostname: string;
+}) {
+  const { data: auth, isPending: authPending } = useDeviceSshAuth(
+    orgId,
+    endpointId,
+  );
+  const { data: sessions, isPending: sessionsPending } = useSshSessions(
+    orgId,
+    "active",
+  );
+  const related = (sessions ?? []).filter(
+    (s) => s.srcEndpointId === endpointId || s.dstEndpointId === endpointId,
+  );
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Connect</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-muted-foreground text-sm">
+            From another mesh machine with SSH rules allowing access:
+          </p>
+          <CopyField label="CLI" value={`tuntun ssh ${hostname}`} />
+          <p className="text-muted-foreground text-xs leading-relaxed">
+            Check-mode rules open a browser for IdP re-auth when the last
+            authentication is older than the rule&apos;s check period.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Last check-mode auth</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {authPending ? (
+            <Skeleton className="h-20 w-full" />
+          ) : !auth?.authenticatedAt ? (
+            <p className="text-muted-foreground text-sm">
+              No IdP re-auth recorded for this machine yet.
+            </p>
+          ) : (
+            <>
+              <DetailRow label="Authenticated">
+                {formatDistanceToNow(new Date(auth.authenticatedAt), {
+                  addSuffix: true,
+                })}
+              </DetailRow>
+              <DetailRow label="Method">{auth.method ?? "-"}</DetailRow>
+              <DetailRow label="Identity">
+                {auth.identityEmail ?? "-"}
+              </DetailRow>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="lg:col-span-2">
+        <CardHeader>
+          <CardTitle className="text-base">Active SSH sessions</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {sessionsPending ? (
+            <Skeleton className="h-24 w-full" />
+          ) : related.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              No active sessions involving this machine.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {related.map((session) => (
+                <div
+                  key={session.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-border/60 px-3 py-2.5"
+                >
+                  <div className="min-w-0 text-sm">
+                    <p className="font-mono text-xs">
+                      {session.srcHostname ?? session.srcEndpointId.slice(0, 8)}{" "}
+                      →{" "}
+                      {session.dstHostname ?? session.dstEndpointId.slice(0, 8)}{" "}
+                      as {session.targetUser}
+                    </p>
+                    <p className="text-muted-foreground text-xs">
+                      started{" "}
+                      {formatDistanceToNow(new Date(session.startedAt), {
+                        addSuffix: true,
+                      })}
+                      {session.recorded ? " · recorded" : ""}
+                    </p>
+                  </div>
+                  <Link
+                    to="/app/ssh-sessions"
+                    className="text-muted-foreground text-xs hover:underline"
+                  >
+                    View
+                  </Link>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -274,6 +391,7 @@ function MachineDetailPage() {
           <TabsTrigger value="routes">Routes</TabsTrigger>
           <TabsTrigger value="tunnels">Tunnels</TabsTrigger>
           <TabsTrigger value="serves">Serves</TabsTrigger>
+          <TabsTrigger value="ssh">SSH</TabsTrigger>
           <TabsTrigger value="system">System</TabsTrigger>
           {isAdmin ? (
             <TabsTrigger value="settings">Settings</TabsTrigger>
@@ -335,7 +453,7 @@ function MachineDetailPage() {
                   })}
                 </DetailRow>
                 <DetailRow label="Agent version">
-                  {device.metadata.agentVersion ?? "—"}
+                  {device.metadata.agentVersion ?? "-"}
                 </DetailRow>
                 <DetailRow label="Operating system">
                   {device.metadata.os}
@@ -518,6 +636,14 @@ function MachineDetailPage() {
               ))}
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="ssh">
+          <MachineSshTab
+            orgId={orgId}
+            endpointId={endpointId}
+            hostname={device.name}
+          />
         </TabsContent>
 
         <TabsContent value="system">

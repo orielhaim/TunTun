@@ -52,15 +52,104 @@ impl PortRange {
     }
 }
 
-/// Signed policy bundle — everything the agent needs to enforce ACLs
-/// even when the control plane is offline.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PolicyBundle {
     pub rules: Vec<PolicyRule>,
+    /// Application-level SSH access rules (separate from L3/L4 ACL).
+    #[serde(default)]
+    pub ssh_rules: Vec<SshPolicyRule>,
     pub version: u64,
     /// base64 Ed25519 signature by the control plane's policy key.
     #[serde(default)]
     pub signature: String,
+}
+
+pub const AUTOGROUP_NONROOT: &str = "autogroup:nonroot";
+pub const AUTOGROUP_LOCAL: &str = "autogroup:local";
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum SshAction {
+    Accept,
+    Check,
+    Deny,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SshPolicyRule {
+    pub src: Selector,
+    pub dst: Selector,
+    pub action: SshAction,
+    /// POSIX users the src may connect as (literals or autogroups).
+    #[serde(default)]
+    pub users: Vec<String>,
+    #[serde(default)]
+    pub record: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recorder: Option<Selector>,
+    #[serde(default)]
+    pub enforce_recorder: bool,
+    /// For `action=check`: how long an IdP re-auth remains valid (seconds).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub check_period_secs: Option<u64>,
+    pub priority: i32,
+}
+
+#[derive(Debug, Clone)]
+pub struct SshEvalCtx<'a> {
+    pub src_endpoint_hex: &'a str,
+    pub src_tags: &'a [String],
+    pub src_network: &'a str,
+    pub dst_endpoint_hex: &'a str,
+    pub dst_tags: &'a [String],
+    pub dst_network: &'a str,
+    pub requested_user: &'a str,
+    pub local_user: &'a str,
+}
+
+/// First matching SSH rule by priority (desc). `None` means implicit deny.
+pub fn evaluate_ssh<'a>(
+    rules: &'a [SshPolicyRule],
+    ctx: &SshEvalCtx<'_>,
+) -> Option<&'a SshPolicyRule> {
+    let mut sorted: Vec<&SshPolicyRule> = rules.iter().collect();
+    sorted.sort_by_key(|rule| std::cmp::Reverse(rule.priority));
+
+    for rule in sorted {
+        if !ssh_rule_matches(rule, ctx) {
+            continue;
+        }
+        return Some(rule);
+    }
+    None
+}
+
+fn ssh_rule_matches(rule: &SshPolicyRule, ctx: &SshEvalCtx<'_>) -> bool {
+    let src_ok =
+        rule.src
+            .matches_endpoint(ctx.src_endpoint_hex, ctx.src_tags, ctx.src_network, None);
+    let dst_ok =
+        rule.dst
+            .matches_endpoint(ctx.dst_endpoint_hex, ctx.dst_tags, ctx.dst_network, None);
+    if !src_ok || !dst_ok {
+        return false;
+    }
+    ssh_user_allowed(&rule.users, ctx.requested_user, ctx.local_user)
+}
+
+fn ssh_user_allowed(users: &[String], requested: &str, local_user: &str) -> bool {
+    if users.is_empty() {
+        return false;
+    }
+    users.iter().any(|u| {
+        if u == AUTOGROUP_NONROOT {
+            requested != "root"
+        } else if u == AUTOGROUP_LOCAL {
+            requested == local_user
+        } else {
+            u == requested
+        }
+    })
 }
 
 /// Runtime facts needed to evaluate a rule against a packet or connection.
@@ -284,5 +373,58 @@ mod tests {
         };
         let action = evaluate_ipv6(&PolicyBundle::default(), &[], &ctx, Direction::Outbound);
         assert_eq!(action, Action::Deny);
+    }
+
+    #[test]
+    fn ssh_tag_rule_accepts_matching_user() {
+        let rules = vec![SshPolicyRule {
+            src: Selector::Tag("admin".into()),
+            dst: Selector::Tag("server".into()),
+            action: SshAction::Accept,
+            users: vec!["root".into()],
+            record: false,
+            recorder: None,
+            enforce_recorder: false,
+            check_period_secs: None,
+            priority: 10,
+        }];
+        let ctx = SshEvalCtx {
+            src_endpoint_hex: "aa",
+            src_tags: &["admin".into()],
+            src_network: "prod",
+            dst_endpoint_hex: "bb",
+            dst_tags: &["server".into()],
+            dst_network: "prod",
+            requested_user: "root",
+            local_user: "oriel",
+        };
+        let matched = evaluate_ssh(&rules, &ctx).unwrap();
+        assert_eq!(matched.action, SshAction::Accept);
+    }
+
+    #[test]
+    fn ssh_autogroup_nonroot_rejects_root() {
+        let rules = vec![SshPolicyRule {
+            src: Selector::Any,
+            dst: Selector::Any,
+            action: SshAction::Accept,
+            users: vec![AUTOGROUP_NONROOT.into()],
+            record: false,
+            recorder: None,
+            enforce_recorder: false,
+            check_period_secs: None,
+            priority: 1,
+        }];
+        let ctx = SshEvalCtx {
+            src_endpoint_hex: "aa",
+            src_tags: &[],
+            src_network: "prod",
+            dst_endpoint_hex: "bb",
+            dst_tags: &[],
+            dst_network: "prod",
+            requested_user: "root",
+            local_user: "oriel",
+        };
+        assert!(evaluate_ssh(&rules, &ctx).is_none());
     }
 }

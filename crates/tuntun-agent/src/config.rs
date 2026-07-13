@@ -3,7 +3,7 @@ use clap::Parser;
 #[derive(Parser, Debug, Clone)]
 #[command(
     name = "tuntun-agent",
-    about = "TunTun agent — binds a TUN device and an iroh endpoint"
+    about = "TunTun agent - binds a TUN device and an iroh endpoint"
 )]
 pub struct Config {
     #[arg(

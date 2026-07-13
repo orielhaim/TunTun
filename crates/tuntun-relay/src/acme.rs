@@ -103,14 +103,14 @@ fn load_cached_if_fresh(cfg: &AcmeConfig) -> anyhow::Result<Option<(String, Stri
             .filter(|s| !s.is_empty())
             .collect();
         if stored_domains != cfg.domains {
-            tracing::info!("ACME domain list changed — re-issuing certificate");
+            tracing::info!("ACME domain list changed - re-issuing certificate");
             return Ok(None);
         }
     }
     let cert = std::fs::read_to_string(&cert_path)?;
     let key = std::fs::read_to_string(&key_path)?;
     if needs_renewal(&cert) {
-        tracing::info!("cached ACME certificate expiring soon — renewing");
+        tracing::info!("cached ACME certificate expiring soon - renewing");
         return Ok(None);
     }
     Ok(Some((cert, key)))
@@ -229,7 +229,7 @@ async fn load_or_create_account(cfg: &AcmeConfig, directory: &str) -> anyhow::Re
                 return Ok(account);
             }
             Err(e) => {
-                tracing::warn!(?e, "failed to restore ACME account — creating new one");
+                tracing::warn!(?e, "failed to restore ACME account - creating new one");
             }
         }
     }

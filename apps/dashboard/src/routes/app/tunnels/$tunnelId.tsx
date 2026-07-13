@@ -43,8 +43,7 @@ import { useActiveOrganization } from "@/lib/auth-client";
 import {
   useMachines,
   useTunnelMutations,
-  useTunnelPortMappings,
-  useTunnelRedirectRules,
+  useTunnelRoutingRules,
   useTunnels,
   useTunnelTraffic,
 } from "@/lib/queries/management";
@@ -85,12 +84,7 @@ function TunnelDetailPage() {
   );
 
   const networkId = tunnel?.networkId ?? "";
-  const { data: redirectRules } = useTunnelRedirectRules(
-    orgId,
-    networkId,
-    tunnelId,
-  );
-  const { data: portMappings } = useTunnelPortMappings(
+  const { data: routingRules } = useTunnelRoutingRules(
     orgId,
     networkId,
     tunnelId,
@@ -125,9 +119,19 @@ function TunnelDetailPage() {
     setClearBasicAuth(false);
   }, [tunnel]);
 
-  const sortedRules = useMemo(
-    () => [...(redirectRules ?? [])].sort((a, b) => b.priority - a.priority),
-    [redirectRules],
+  const pathRules = useMemo(
+    () =>
+      [...(routingRules ?? [])]
+        .filter((r) => r.kind === "path")
+        .sort((a, b) => b.priority - a.priority),
+    [routingRules],
+  );
+  const portRules = useMemo(
+    () =>
+      [...(routingRules ?? [])]
+        .filter((r) => r.kind === "port")
+        .sort((a, b) => (b.externalPort ?? 0) - (a.externalPort ?? 0)),
+    [routingRules],
   );
 
   const trafficColumns = useMemo<ColumnDef<TunnelTrafficLog>[]>(
@@ -278,7 +282,7 @@ function TunnelDetailPage() {
         ? currentPriority + 1
         : Math.max(0, currentPriority - 1);
     try {
-      await mutations.updateRedirectRule.mutateAsync({
+      await mutations.updateRoutingRule.mutateAsync({
         networkId: tunnel.networkId,
         tunnelId: tunnel.id,
         ruleId,
@@ -580,14 +584,14 @@ function TunnelDetailPage() {
               <p className="text-muted-foreground text-sm">
                 Path patterns are evaluated top to bottom. First match wins.
               </p>
-              {sortedRules.length === 0 ? (
+              {pathRules.length === 0 ? (
                 <EmptyState
                   title="No redirect rules"
                   description="Add a path pattern to route subsets of traffic to another port."
                 />
               ) : (
                 <ul className="divide-y divide-border/60 rounded-lg border border-border/60">
-                  {sortedRules.map((rule, index) => (
+                  {pathRules.map((rule, index) => (
                     <li
                       key={rule.id}
                       className="flex flex-wrap items-center gap-3 px-4 py-3"
@@ -608,9 +612,7 @@ function TunnelDetailPage() {
                           variant="ghost"
                           size="icon"
                           className="size-7"
-                          disabled={
-                            !isAdmin || index === sortedRules.length - 1
-                          }
+                          disabled={!isAdmin || index === pathRules.length - 1}
                           onClick={() =>
                             void moveRule(rule.id, rule.priority, "down")
                           }
@@ -636,7 +638,7 @@ function TunnelDetailPage() {
                           size="icon"
                           className="size-8 text-destructive"
                           onClick={() =>
-                            void mutations.removeRedirectRule
+                            void mutations.removeRoutingRule
                               .mutateAsync({
                                 networkId: tunnel.networkId,
                                 tunnelId: tunnel.id,
@@ -658,18 +660,19 @@ function TunnelDetailPage() {
                   className="flex flex-wrap items-end gap-3 rounded-lg border border-dashed border-border/60 p-4"
                   onSubmit={(e) => {
                     e.preventDefault();
-                    void mutations.createRedirectRule
+                    void mutations.createRoutingRule
                       .mutateAsync({
                         networkId: tunnel.networkId,
                         tunnelId: tunnel.id,
                         body: {
+                          kind: "path",
                           pathPattern: pathPattern.trim(),
                           targetPort: Number(targetPort),
                           targetEndpointId:
                             targetEndpointId === "localhost"
                               ? null
                               : targetEndpointId,
-                          priority: (sortedRules[0]?.priority ?? 0) + 1,
+                          priority: (pathRules[0]?.priority ?? 0) + 1,
                         },
                       })
                       .then(() => {
@@ -730,7 +733,7 @@ function TunnelDetailPage() {
                   </div>
                   <Button
                     type="submit"
-                    disabled={mutations.createRedirectRule.isPending}
+                    disabled={mutations.createRoutingRule.isPending}
                   >
                     Add rule
                   </Button>
@@ -745,14 +748,14 @@ function TunnelDetailPage() {
                 Map public TCP ports on the tunnel hostname to local target
                 ports.
               </p>
-              {(portMappings ?? []).length === 0 ? (
+              {portRules.length === 0 ? (
                 <EmptyState
                   title="No port mappings"
                   description="Add an external → target port mapping for TCP traffic."
                 />
               ) : (
                 <ul className="divide-y divide-border/60 rounded-lg border border-border/60">
-                  {(portMappings ?? []).map((mapping) => (
+                  {portRules.map((mapping) => (
                     <li
                       key={mapping.id}
                       className="flex items-center gap-3 px-4 py-3"
@@ -776,11 +779,11 @@ function TunnelDetailPage() {
                           size="icon"
                           className="ml-auto size-8 text-destructive"
                           onClick={() =>
-                            void mutations.removePortMapping
+                            void mutations.removeRoutingRule
                               .mutateAsync({
                                 networkId: tunnel.networkId,
                                 tunnelId: tunnel.id,
-                                mappingId: mapping.id,
+                                ruleId: mapping.id,
                               })
                               .then(() => toast.success("Mapping removed"))
                               .catch((err: Error) => toast.error(err.message))
@@ -798,11 +801,12 @@ function TunnelDetailPage() {
                   className="flex flex-wrap items-end gap-3 rounded-lg border border-dashed border-border/60 p-4"
                   onSubmit={(e) => {
                     e.preventDefault();
-                    void mutations.createPortMapping
+                    void mutations.createRoutingRule
                       .mutateAsync({
                         networkId: tunnel.networkId,
                         tunnelId: tunnel.id,
                         body: {
+                          kind: "port",
                           externalPort: Number(externalPort),
                           targetPort: Number(mappingTargetPort),
                           targetEndpointId:
@@ -871,7 +875,7 @@ function TunnelDetailPage() {
                   </div>
                   <Button
                     type="submit"
-                    disabled={mutations.createPortMapping.isPending}
+                    disabled={mutations.createRoutingRule.isPending}
                   >
                     Add mapping
                   </Button>

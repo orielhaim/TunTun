@@ -71,7 +71,7 @@ export async function resolveTestEnv(): Promise<TestEnv | null> {
 
   let network = networks.find((n) => n.id === networkOverride);
   if (!network && verified.networkIds?.length) {
-    network = networks.find((n) => verified.networkIds!.includes(n.id));
+    network = networks.find((n) => verified.networkIds?.includes(n.id));
   }
   network ??= networks[0]!;
 

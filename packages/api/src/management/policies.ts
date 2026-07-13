@@ -19,9 +19,13 @@ export const portRangeSchema = z.object({
   end: z.number().int().min(0).max(65535),
 });
 
+export const policyScopeSchema = z.enum(["network", "organization"]);
+
 export const policySchema = z.object({
   id: z.string().uuid(),
-  networkId: z.string().uuid(),
+  organizationId: z.string(),
+  networkId: z.string().uuid().nullable(),
+  scope: policyScopeSchema,
   srcSelector: selectorSchema,
   dstSelector: selectorSchema,
   action: z.enum(["allow", "deny"]),
@@ -50,3 +54,4 @@ export type Policy = z.infer<typeof policySchema>;
 export type CreatePolicyBody = z.infer<typeof createPolicyBody>;
 export type PatchPolicyBody = z.infer<typeof patchPolicyBody>;
 export type Selector = z.infer<typeof selectorSchema>;
+export type PolicyScope = z.infer<typeof policyScopeSchema>;

@@ -190,7 +190,7 @@ function MachinesPage() {
         header: "Version",
         cell: ({ row }) => (
           <>
-            <div className="text-sm">{row.original.agentVersion ?? "—"}</div>
+            <div className="text-sm">{row.original.agentVersion ?? "-"}</div>
             <div className="text-muted-foreground text-xs">
               {row.original.os ?? "Unknown OS"}
             </div>

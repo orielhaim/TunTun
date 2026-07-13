@@ -57,6 +57,34 @@ pub async fn serve(state: SharedState) -> anyhow::Result<()> {
             "/v1/subnet-routes",
             post(crate::tunnels::create_subnet_route_handler),
         )
+        .route(
+            "/v1/ssh-recordings",
+            post(crate::ssh::upload_ssh_recording_handler),
+        )
+        .route(
+            "/v1/ssh-sessions",
+            get(crate::ssh::list_ssh_sessions_handler),
+        )
+        .route(
+            "/v1/ssh-recordings/list",
+            get(crate::ssh::list_ssh_recordings_handler),
+        )
+        .route(
+            "/v1/ssh-recordings/{session_id}/cast",
+            get(crate::ssh::get_ssh_recording_cast_handler),
+        )
+        .route(
+            "/v1/ssh/auth/evaluate",
+            post(crate::ssh_auth::evaluate_ssh_auth_handler),
+        )
+        .route(
+            "/v1/ssh/auth/poll",
+            post(crate::ssh_auth::poll_ssh_auth_handler),
+        )
+        .route(
+            "/v1/ssh/auth/verify",
+            post(crate::ssh_auth::verify_ssh_auth_handler),
+        )
         .with_state(state.clone())
         .layer(TraceLayer::new_for_http());
 
@@ -631,6 +659,88 @@ async fn run_ws(
                                         .await
                                 {
                                     tracing::warn!(?e, %tunnel_id, "tunnel entity notify failed");
+                                }
+                            }
+                            ClientMsg::SshSessionStarted {
+                                session_id,
+                                src_endpoint_id,
+                                target_user,
+                                src_hostname,
+                                recorded,
+                            } => {
+                                if let Err(e) = sqlx::query(
+                                    "INSERT INTO ssh_sessions \
+                                       (id, organization_id, network_id, src_endpoint_id, dst_endpoint_id, \
+                                        src_hostname, dst_hostname, target_user, status, recorded, started_at) \
+                                     SELECT $1::uuid, d.organization_id, nm.network_id, $2, $3, \
+                                            $4, COALESCE(NULLIF(d.metadata->>'hostname', ''), left(d.endpoint_id, 8)), \
+                                            $5, 'active', $6, now() \
+                                     FROM devices d \
+                                     JOIN network_memberships nm ON nm.endpoint_id = d.endpoint_id \
+                                       AND nm.status = 'active' \
+                                     WHERE d.endpoint_id = $3 \
+                                     LIMIT 1 \
+                                     ON CONFLICT (id) DO NOTHING",
+                                )
+                                .bind(&session_id)
+                                .bind(&src_endpoint_id)
+                                .bind(&ep)
+                                .bind(&src_hostname)
+                                .bind(&target_user)
+                                .bind(recorded)
+                                .execute(&pool)
+                                .await
+                                {
+                                    tracing::warn!(?e, %session_id, "SshSessionStarted insert failed");
+                                }
+                            }
+                            ClientMsg::SshSessionEnded {
+                                session_id,
+                                status,
+                                duration_ms,
+                            } => {
+                                let status = if status.is_empty() {
+                                    "ended".to_string()
+                                } else {
+                                    status
+                                };
+                                if let Err(e) = sqlx::query(
+                                    "UPDATE ssh_sessions \
+                                     SET status = $2, ended_at = now(), duration_ms = $3 \
+                                     WHERE id = $1::uuid AND dst_endpoint_id = $4",
+                                )
+                                .bind(&session_id)
+                                .bind(&status)
+                                .bind(duration_ms.map(|v| v as i32))
+                                .bind(&ep)
+                                .execute(&pool)
+                                .await
+                                {
+                                    tracing::warn!(?e, %session_id, "SshSessionEnded update failed");
+                                }
+                            }
+                            ClientMsg::SshRecordingSaved {
+                                session_id,
+                                recorder_endpoint_id: _,
+                                duration_ms,
+                                byte_size: _,
+                                content_sha256: _,
+                            } => {
+                                if let Err(e) = sqlx::query(
+                                    "UPDATE ssh_sessions SET recorded = true, \
+                                     duration_ms = COALESCE($2, duration_ms) \
+                                     WHERE id = $1::uuid",
+                                )
+                                .bind(&session_id)
+                                .bind(duration_ms.map(|v| v as i32))
+                                .execute(&pool)
+                                .await
+                                {
+                                    tracing::warn!(
+                                        ?e,
+                                        %session_id,
+                                        "SshRecordingSaved update failed"
+                                    );
                                 }
                             }
                             ClientMsg::Hello { .. } | ClientMsg::Pong { .. } => {}

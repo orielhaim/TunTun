@@ -13,7 +13,11 @@ export const Route = createFileRoute("/app")({
     const result = await bootstrapAppSession();
 
     if (!result.authenticated) {
-      throw redirect({ to: "/login" });
+      const redirectTo = `${location.pathname}${location.searchStr}`;
+      throw redirect({
+        to: "/login",
+        search: { redirect: redirectTo },
+      });
     }
 
     if (result.needsOnboarding && location.pathname !== "/app/onboarding") {

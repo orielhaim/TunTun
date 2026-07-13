@@ -180,12 +180,12 @@ export const deviceProfilesRoutes = new Elysia()
           });
 
           return {
-            endpointId: row!.endpointId,
-            networkId: row!.networkId,
-            enabled: row!.enabled,
-            allowedCidrs: row!.allowedCidrs,
-            createdAt: toIso(row!.createdAt)!,
-            updatedAt: toIso(row!.updatedAt)!,
+            endpointId: row?.endpointId,
+            networkId: row?.networkId,
+            enabled: row?.enabled,
+            allowedCidrs: row?.allowedCidrs,
+            createdAt: toIso(row?.createdAt)!,
+            updatedAt: toIso(row?.updatedAt)!,
             viaIp: membership.assignedIp,
           };
         },
@@ -321,12 +321,12 @@ export const deviceProfilesRoutes = new Elysia()
           });
 
           return {
-            endpointId: row!.endpointId,
-            networkId: row!.networkId,
-            exitNodeEndpointId: row!.exitNodeEndpointId,
-            splitTunnelMode: row!.splitTunnelMode as "include" | "exclude",
-            splitTunnelCidrs: row!.splitTunnelCidrs,
-            updatedAt: toIso(row!.updatedAt)!,
+            endpointId: row?.endpointId,
+            networkId: row?.networkId,
+            exitNodeEndpointId: row?.exitNodeEndpointId,
+            splitTunnelMode: row?.splitTunnelMode as "include" | "exclude",
+            splitTunnelCidrs: row?.splitTunnelCidrs,
+            updatedAt: toIso(row?.updatedAt)!,
           };
         },
       ),

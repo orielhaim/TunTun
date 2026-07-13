@@ -32,10 +32,8 @@ type CreateTunnelDialogProps = {
   orgId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** When set, create for this machine only — no picker. */
   defaultEndpointId?: string;
   defaultNetworkId?: string;
-  /** Display name when locked to a machine (optional). */
   defaultHostname?: string;
 };
 

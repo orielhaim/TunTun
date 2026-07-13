@@ -30,6 +30,16 @@ pub async fn authenticate(
     method: &str,
     path: &str,
 ) -> Result<AuthedRequest, AuthError> {
+    authenticate_with_limit(state, req, method, path, 64 * 1024).await
+}
+
+pub async fn authenticate_with_limit(
+    state: &SharedState,
+    req: Request<Body>,
+    method: &str,
+    path: &str,
+    max_body: usize,
+) -> Result<AuthedRequest, AuthError> {
     let (parts, body) = req.into_parts();
 
     let endpoint_id = parts
@@ -92,7 +102,7 @@ pub async fn authenticate(
         })?
         .to_string();
 
-    let body = to_bytes(body, 64 * 1024)
+    let body = to_bytes(body, max_body)
         .await
         .map_err(|_| AuthError(StatusCode::PAYLOAD_TOO_LARGE, "body too large"))?;
 

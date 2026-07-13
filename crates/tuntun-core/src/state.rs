@@ -52,6 +52,9 @@ impl StatePaths {
     pub fn cache_file(&self) -> PathBuf {
         self.dir.join("routing_cache.json")
     }
+    pub fn auth_file(&self) -> PathBuf {
+        self.dir.join("auth.json")
+    }
 
     pub fn ensure(&self) -> anyhow::Result<()> {
         std::fs::create_dir_all(&self.dir)
@@ -81,6 +84,48 @@ impl PersistedState {
         let s = std::fs::read(paths.state_file())
             .with_context(|| format!("read {}", paths.state_file().display()))?;
         Ok(serde_json::from_slice(&s)?)
+    }
+}
+
+/// Tokens from `tuntun login` (OAuth PKCE against management).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CliAuthTokens {
+    pub management_url: String,
+    pub access_token: String,
+    pub refresh_token: Option<String>,
+    pub token_type: String,
+    pub scope: Option<String>,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub obtained_at: DateTime<Utc>,
+}
+
+impl CliAuthTokens {
+    pub fn save(&self, paths: &StatePaths) -> anyhow::Result<()> {
+        paths.ensure()?;
+        let json = serde_json::to_vec_pretty(self)?;
+        std::fs::write(paths.auth_file(), json)?;
+        Ok(())
+    }
+
+    pub fn load(paths: &StatePaths) -> anyhow::Result<Self> {
+        let s = std::fs::read(paths.auth_file())
+            .with_context(|| format!("read {}", paths.auth_file().display()))?;
+        Ok(serde_json::from_slice(&s)?)
+    }
+
+    pub fn clear(paths: &StatePaths) -> anyhow::Result<()> {
+        let path = paths.auth_file();
+        if path.exists() {
+            std::fs::remove_file(&path).with_context(|| format!("remove {}", path.display()))?;
+        }
+        Ok(())
+    }
+
+    pub fn access_token_valid(&self) -> bool {
+        match self.expires_at {
+            Some(exp) => exp > Utc::now() + chrono::Duration::seconds(30),
+            None => true,
+        }
     }
 }
 

@@ -247,6 +247,7 @@ impl TunTunNode {
                     kind: "sdk",
                     agent_version: env!("CARGO_PKG_VERSION"),
                     advertise_datagram_alpn: false,
+                    ..Default::default()
                 },
             )
             .await
@@ -293,6 +294,7 @@ impl TunTunNode {
                             kind: "sdk",
                             agent_version: env!("CARGO_PKG_VERSION"),
                             advertise_datagram_alpn: false,
+                            ..Default::default()
                         },
                     )
                     .await
@@ -325,6 +327,7 @@ impl TunTunNode {
                     kind: "sdk",
                     agent_version: env!("CARGO_PKG_VERSION"),
                     advertise_datagram_alpn: false,
+                    ..Default::default()
                 },
             )
             .await
@@ -480,12 +483,12 @@ fn spawn_stream_acceptor(node: Arc<CoreNode>) {
     let handler: tuntun_core::stream::StreamHandler = Arc::new(|accepted| {
         Box::pin(async move {
             // Default: log and drop. Applications register their own handler
-            // via `TunTunNode.serve()` — see below.
+            // via `TunTunNode.serve()` - see below.
             tracing::info!(
                 peer = %accepted.peer_hex,
                 host = %accepted.header.host,
                 port = accepted.header.dst_port,
-                "inbound stream (no handler registered — dropping)"
+                "inbound stream (no handler registered - dropping)"
             );
             drop(accepted);
         })

@@ -1,6 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
+
+import { AuthorizeCliDialog } from "@/components/app/device-authorize";
 import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,14 +11,40 @@ import { Label } from "@/components/ui/label";
 import { authClient, signOut, useSession } from "@/lib/auth-client";
 
 export const Route = createFileRoute("/app/settings/account")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    user_code:
+      typeof search.user_code === "string" ? search.user_code : undefined,
+  }),
   component: AccountSettingsPage,
 });
 
 function AccountSettingsPage() {
+  const navigate = useNavigate();
+  const { user_code: userCodeFromUrl } = Route.useSearch();
   const { data: session } = useSession();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [cliOpen, setCliOpen] = useState(Boolean(userCodeFromUrl));
+  const [cliInitialCode, setCliInitialCode] = useState(userCodeFromUrl);
+
+  useEffect(() => {
+    if (!userCodeFromUrl) return;
+    setCliInitialCode(userCodeFromUrl);
+    setCliOpen(true);
+  }, [userCodeFromUrl]);
+
+  function handleCliOpenChange(open: boolean) {
+    setCliOpen(open);
+    if (!open && userCodeFromUrl) {
+      setCliInitialCode(undefined);
+      void navigate({
+        to: "/app/settings/account",
+        search: {},
+        replace: true,
+      });
+    }
+  }
 
   async function changePassword(e: React.FormEvent) {
     e.preventDefault();
@@ -71,6 +99,27 @@ function AccountSettingsPage() {
 
       <Card>
         <CardHeader>
+          <CardTitle className="text-base">CLI access</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-muted-foreground text-sm">
+            Link the TunTun CLI to this account with a device code from{" "}
+            <code className="text-foreground">tuntun login</code>.
+          </p>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setCliInitialCode(undefined);
+              setCliOpen(true);
+            }}
+          >
+            Authorize CLI
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle className="text-base">Change password</CardTitle>
         </CardHeader>
         <CardContent>
@@ -116,6 +165,12 @@ function AccountSettingsPage() {
           </Button>
         </CardContent>
       </Card>
+
+      <AuthorizeCliDialog
+        open={cliOpen}
+        onOpenChange={handleCliOpenChange}
+        initialCode={cliInitialCode}
+      />
     </>
   );
 }

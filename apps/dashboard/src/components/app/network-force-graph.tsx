@@ -316,7 +316,7 @@ export function NetworkForceGraph({
       if (node.kind === "machine") {
         const online = Boolean(node.online);
         const name = node.label || "machine";
-        const ip = node.secondary ?? node.assignedIp ?? "—";
+        const ip = node.secondary ?? node.assignedIp ?? "-";
         const nameSize = Math.max(12 / scale, 3.6);
         const ipSize = Math.max(10 / scale, 3);
         ctx.font = `600 ${nameSize}px Geist Variable, ui-sans-serif, system-ui`;

@@ -95,6 +95,8 @@ rcgen = "0.14"
 iroh = { version = "1.0.2" }
 iroh-gossip = "0.101"
 tun-rs = { version = "2", features = ["async_tokio"] }
+portable-pty = "0.9"
+rusqlite = { version = "0.37", features = ["bundled"] }
 
 # napi-rs v3
 napi = { version = "3", features = [

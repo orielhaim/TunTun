@@ -1,4 +1,4 @@
-//! Agent IPC v2 — newline-delimited JSON request/response over a local socket.
+//! Agent IPC v2 - newline-delimited JSON request/response over a local socket.
 //!
 //! Every `tuntun <subcommand>` that is not bootstrap (`enroll` / `reset`) talks
 //! to the running agent through this protocol. The agent owns CoreNode; the CLI
@@ -8,7 +8,7 @@ use std::net::Ipv4Addr;
 
 use serde::{Deserialize, Serialize};
 
-/// Wire protocol version — bump when breaking request/response shapes.
+/// Wire protocol version - bump when breaking request/response shapes.
 pub const IPC_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -75,6 +75,49 @@ pub enum IpcRequest {
     TunnelOff {
         port: u16,
     },
+
+    /// Open a mesh SSH session. After `Ready`, the connection becomes a raw
+    /// bidirectional byte pipe (with in-band resize frames).
+    Ssh {
+        target: String,
+        user: String,
+        local_user: String,
+        term_type: String,
+        width: u16,
+        height: u16,
+        #[serde(default)]
+        env_vars: Vec<(String, String)>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        auth_token: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        command: Option<String>,
+    },
+
+    /// List SSH sessions from the control plane.
+    SshSessions {
+        #[serde(default = "default_ssh_list_limit")]
+        limit: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        status: Option<String>,
+    },
+    /// List SSH recordings from the control plane.
+    SshRecordings {
+        #[serde(default = "default_ssh_list_limit")]
+        limit: u32,
+    },
+    /// Fetch a recording cast by session id.
+    SshPlay {
+        session_id: String,
+    },
+
+    /// Poll a check-mode re-auth challenge for a proof token.
+    SshAuthPoll {
+        challenge_token: String,
+    },
+}
+
+fn default_ssh_list_limit() -> u32 {
+    50
 }
 
 fn default_ping_count() -> u32 {
@@ -114,12 +157,65 @@ pub enum IpcResponse {
     Tunnels {
         tunnels: Vec<TunnelInfo>,
     },
+    SshSessions {
+        sessions: Vec<SshSessionInfo>,
+    },
+    SshRecordings {
+        recordings: Vec<SshRecordingInfo>,
+    },
+    SshCast {
+        session_id: String,
+        cast_text: String,
+        content_sha256: String,
+    },
+    SshReauthRequired {
+        reauth_url: String,
+        challenge_token: String,
+        message: String,
+    },
+    SshAuthPoll {
+        status: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        proof_token: Option<String>,
+    },
     Ok {
         message: String,
     },
     Error {
         message: String,
     },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SshSessionInfo {
+    pub id: String,
+    pub src_endpoint_id: String,
+    pub dst_endpoint_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub src_hostname: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dst_hostname: Option<String>,
+    pub target_user: String,
+    pub status: String,
+    pub recorded: bool,
+    pub started_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SshRecordingInfo {
+    pub session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub src_hostname: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dst_hostname: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_user: Option<String>,
+    pub byte_size: u64,
+    pub created_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_sha256: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

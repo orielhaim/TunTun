@@ -35,7 +35,14 @@ rand.workspace = true
 ed25519-dalek.workspace = true
 prometheus.workspace = true
 ipnet.workspace = true
+sha2.workspace = true
+reqwest.workspace = true
 
 iroh.workspace = true
 iroh-gossip.workspace = true
 tun-rs.workspace = true
+portable-pty.workspace = true
+rusqlite.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

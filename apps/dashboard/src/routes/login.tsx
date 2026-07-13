@@ -14,21 +14,36 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getSession } from "@/lib/auth.functions";
-import { signIn, signUp } from "@/lib/auth-client";
+import { authClient, signIn, signUp } from "@/lib/auth-client";
 
 export const Route = createFileRoute("/login")({
-  beforeLoad: async () => {
+  validateSearch: (search: Record<string, unknown>) => ({
+    redirect: typeof search.redirect === "string" ? search.redirect : undefined,
+  }),
+  beforeLoad: async ({ search }) => {
     const session = await getSession();
-    if (session) {
-      throw redirect({ to: "/app" });
+    if (!session) return;
+    if (search.redirect?.startsWith("/")) {
+      throw redirect({ href: search.redirect });
     }
+    throw redirect({ to: "/app" });
   },
   component: LoginPage,
 });
 
 function LoginPage() {
   const navigate = useNavigate();
+  const { redirect: redirectTo } = Route.useSearch();
   const [loading, setLoading] = useState(false);
+  const [ssoLoading, setSsoLoading] = useState(false);
+
+  async function afterAuth() {
+    if (redirectTo) {
+      window.location.href = redirectTo;
+      return;
+    }
+    void navigate({ to: "/app" });
+  }
 
   async function handleSignIn(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -43,7 +58,7 @@ function LoginPage() {
       toast.error(error.message ?? "Sign in failed");
       return;
     }
-    void navigate({ to: "/app" });
+    await afterAuth();
   }
 
   async function handleSignUp(e: React.FormEvent<HTMLFormElement>) {
@@ -60,7 +75,32 @@ function LoginPage() {
       toast.error(error.message ?? "Registration failed");
       return;
     }
-    void navigate({ to: "/app" });
+    await afterAuth();
+  }
+
+  async function handleSso(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    const email = String(form.get("sso-email") ?? "").trim();
+    const domain = String(form.get("sso-domain") ?? "").trim();
+    if (!email && !domain) {
+      toast.error("Enter an email or domain for SSO");
+      return;
+    }
+    setSsoLoading(true);
+    const { error, data } = await authClient.signIn.sso({
+      ...(email ? { email } : {}),
+      ...(domain ? { domain } : {}),
+      callbackURL: redirectTo || `${window.location.origin}/app`,
+    });
+    setSsoLoading(false);
+    if (error) {
+      toast.error(error.message ?? "SSO sign-in failed");
+      return;
+    }
+    if (data && typeof data === "object" && "url" in data && data.url) {
+      window.location.href = String(data.url);
+    }
   }
 
   return (
@@ -74,9 +114,10 @@ function LoginPage() {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="signin">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="signin">Sign in</TabsTrigger>
-              <TabsTrigger value="signup">Create account</TabsTrigger>
+              <TabsTrigger value="sso">SSO</TabsTrigger>
+              <TabsTrigger value="signup">Create</TabsTrigger>
             </TabsList>
             <TabsContent value="signin">
               <form
@@ -105,6 +146,37 @@ function LoginPage() {
                 </div>
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? "Signing in..." : "Sign in"}
+                </Button>
+              </form>
+            </TabsContent>
+            <TabsContent value="sso">
+              <form
+                className="space-y-4 pt-2"
+                onSubmit={(e) => void handleSso(e)}
+              >
+                <p className="text-muted-foreground text-sm">
+                  Sign in with your organization&apos;s identity provider.
+                </p>
+                <div className="space-y-2">
+                  <Label htmlFor="sso-email">Work email</Label>
+                  <Input
+                    id="sso-email"
+                    name="sso-email"
+                    type="email"
+                    autoComplete="email"
+                    placeholder="you@company.com"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sso-domain">Or domain</Label>
+                  <Input
+                    id="sso-domain"
+                    name="sso-domain"
+                    placeholder="company.com"
+                  />
+                </div>
+                <Button type="submit" className="w-full" disabled={ssoLoading}>
+                  {ssoLoading ? "Redirecting..." : "Continue with SSO"}
                 </Button>
               </form>
             </TabsContent>

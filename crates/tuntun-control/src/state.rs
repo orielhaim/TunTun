@@ -58,6 +58,46 @@ impl AppState {
         }
         Ok(())
     }
+
+    /// Delete expired / consumed short-lived auth material.
+    pub async fn purge_expired_ephemera(self: &Arc<Self>) -> anyhow::Result<()> {
+        let challenges = sqlx::query(
+            "DELETE FROM ssh_auth_challenges \
+             WHERE expires_at < now() \
+                OR (status <> 'pending' AND created_at < now() - interval '7 days') \
+                OR (proof_expires_at IS NOT NULL AND proof_expires_at < now() \
+                    AND proof_consumed_at IS NOT NULL)",
+        )
+        .execute(&self.pool)
+        .await?
+        .rows_affected();
+
+        let enrollment = sqlx::query(
+            "DELETE FROM enrollment_tokens \
+             WHERE expires_at < now() OR used_at IS NOT NULL",
+        )
+        .execute(&self.pool)
+        .await?
+        .rows_affected();
+
+        let relay_tokens = sqlx::query(
+            "DELETE FROM relay_registration_tokens \
+             WHERE expires_at < now() OR used_at IS NOT NULL",
+        )
+        .execute(&self.pool)
+        .await?
+        .rows_affected();
+
+        if challenges + enrollment + relay_tokens > 0 {
+            tracing::info!(
+                challenges,
+                enrollment,
+                relay_tokens,
+                "purged expired ephemeral tokens"
+            );
+        }
+        Ok(())
+    }
 }
 
 pub type SharedState = Arc<AppState>;

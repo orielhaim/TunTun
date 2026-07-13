@@ -6,6 +6,7 @@ use tuntun_common::policy::{Action, Direction, EvalCtx, PolicyBundle, Protocol, 
 
 use crate::routing::{PeerInfo, RoutingTable};
 
+#[derive(Debug, Clone)]
 pub struct SelfIdentity {
     pub endpoint_hex: String,
     pub ip: Ipv4Addr,
@@ -15,7 +16,7 @@ pub struct SelfIdentity {
 
 #[derive(Clone)]
 pub struct AclEngine {
-    pub self_id: Arc<SelfIdentity>,
+    pub self_id: Arc<ArcSwap<SelfIdentity>>,
     pub routes: RoutingTable,
     pub bundle: Arc<ArcSwap<PolicyBundle>>,
     pub stale: Arc<ArcSwap<bool>>,
@@ -24,7 +25,7 @@ pub struct AclEngine {
 impl AclEngine {
     pub fn new(self_id: SelfIdentity, routes: RoutingTable, bundle: PolicyBundle) -> Self {
         Self {
-            self_id: Arc::new(self_id),
+            self_id: Arc::new(ArcSwap::from_pointee(self_id)),
             routes,
             bundle: Arc::new(ArcSwap::from_pointee(bundle)),
             stale: Arc::new(ArcSwap::from_pointee(false)),
@@ -34,6 +35,19 @@ impl AclEngine {
     pub fn replace_bundle(&self, b: PolicyBundle) {
         self.bundle.store(Arc::new(b));
         self.stale.store(Arc::new(false));
+    }
+
+    pub fn replace_self_tags(&self, tags: Vec<String>) {
+        let current = self.self_id.load();
+        if current.tags == tags {
+            return;
+        }
+        self.self_id.store(Arc::new(SelfIdentity {
+            endpoint_hex: current.endpoint_hex.clone(),
+            ip: current.ip,
+            tags,
+            network: current.network.clone(),
+        }));
     }
 
     pub fn mark_stale(&self) {
@@ -81,15 +95,16 @@ impl AclEngine {
         direction: Direction,
     ) -> bool {
         let empty_tags: Vec<String> = Vec::new();
+        let self_id = self.self_id.load();
         let ctx = EvalCtx {
-            self_endpoint_hex: &self.self_id.endpoint_hex,
-            self_ip: self.self_id.ip,
-            self_tags: &self.self_id.tags,
-            self_network: &self.self_id.network,
+            self_endpoint_hex: &self_id.endpoint_hex,
+            self_ip: self_id.ip,
+            self_tags: &self_id.tags,
+            self_network: &self_id.network,
             peer_endpoint_hex: peer_hex,
             peer_ip: peer_ip.or_else(|| peer.map(|p| p.ip)),
             peer_tags: peer.map(|p| p.tags.as_slice()).unwrap_or(&empty_tags),
-            peer_network: &self.self_id.network,
+            peer_network: &self_id.network,
             dst_port,
             protocol: proto,
         };

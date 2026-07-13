@@ -10,9 +10,13 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as ConsentRouteImport } from './routes/consent'
 import { Route as AppRouteRouteImport } from './routes/app/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DeviceIndexRouteImport } from './routes/device/index'
 import { Route as AppIndexRouteImport } from './routes/app/index'
+import { Route as DeviceApproveRouteImport } from './routes/device/approve'
+import { Route as AuthSshRouteImport } from './routes/auth/ssh'
 import { Route as AppUsersRouteImport } from './routes/app/users'
 import { Route as AppOnboardingRouteImport } from './routes/app/onboarding'
 import { Route as AppLogsRouteImport } from './routes/app/logs'
@@ -20,6 +24,7 @@ import { Route as AppAccessRouteImport } from './routes/app/access'
 import { Route as AcceptInvitationInvitationIdRouteImport } from './routes/accept-invitation.$invitationId'
 import { Route as AppSettingsRouteRouteImport } from './routes/app/settings/route'
 import { Route as AppTunnelsIndexRouteImport } from './routes/app/tunnels/index'
+import { Route as AppSshSessionsIndexRouteImport } from './routes/app/ssh-sessions/index'
 import { Route as AppSettingsIndexRouteImport } from './routes/app/settings/index'
 import { Route as AppServesIndexRouteImport } from './routes/app/serves/index'
 import { Route as AppRelaysIndexRouteImport } from './routes/app/relays/index'
@@ -44,6 +49,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ConsentRoute = ConsentRouteImport.update({
+  id: '/consent',
+  path: '/consent',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppRouteRoute = AppRouteRouteImport.update({
   id: '/app',
   path: '/app',
@@ -54,10 +64,25 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DeviceIndexRoute = DeviceIndexRouteImport.update({
+  id: '/device/',
+  path: '/device/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AppRouteRoute,
+} as any)
+const DeviceApproveRoute = DeviceApproveRouteImport.update({
+  id: '/device/approve',
+  path: '/device/approve',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthSshRoute = AuthSshRouteImport.update({
+  id: '/auth/ssh',
+  path: '/auth/ssh',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AppUsersRoute = AppUsersRouteImport.update({
   id: '/users',
@@ -93,6 +118,11 @@ const AppSettingsRouteRoute = AppSettingsRouteRouteImport.update({
 const AppTunnelsIndexRoute = AppTunnelsIndexRouteImport.update({
   id: '/tunnels/',
   path: '/tunnels/',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppSshSessionsIndexRoute = AppSshSessionsIndexRouteImport.update({
+  id: '/ssh-sessions/',
+  path: '/ssh-sessions/',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppSettingsIndexRoute = AppSettingsIndexRouteImport.update({
@@ -195,6 +225,7 @@ const AppNetworksNetworkIdAccessRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteRouteWithChildren
+  '/consent': typeof ConsentRoute
   '/login': typeof LoginRoute
   '/app/settings': typeof AppSettingsRouteRouteWithChildren
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
@@ -202,7 +233,10 @@ export interface FileRoutesByFullPath {
   '/app/logs': typeof AppLogsRoute
   '/app/onboarding': typeof AppOnboardingRoute
   '/app/users': typeof AppUsersRoute
+  '/auth/ssh': typeof AuthSshRoute
+  '/device/approve': typeof DeviceApproveRoute
   '/app/': typeof AppIndexRoute
+  '/device/': typeof DeviceIndexRoute
   '/app/networks/$networkId': typeof AppNetworksNetworkIdRouteRouteWithChildren
   '/app/machines/$endpointId': typeof AppMachinesEndpointIdRoute
   '/app/relays/$relayId': typeof AppRelaysRelayIdRoute
@@ -215,6 +249,7 @@ export interface FileRoutesByFullPath {
   '/app/relays/': typeof AppRelaysIndexRoute
   '/app/serves/': typeof AppServesIndexRoute
   '/app/settings/': typeof AppSettingsIndexRoute
+  '/app/ssh-sessions/': typeof AppSshSessionsIndexRoute
   '/app/tunnels/': typeof AppTunnelsIndexRoute
   '/app/networks/$networkId/access': typeof AppNetworksNetworkIdAccessRoute
   '/app/networks/$networkId/enrollment': typeof AppNetworksNetworkIdEnrollmentRoute
@@ -225,13 +260,17 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/consent': typeof ConsentRoute
   '/login': typeof LoginRoute
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
   '/app/access': typeof AppAccessRoute
   '/app/logs': typeof AppLogsRoute
   '/app/onboarding': typeof AppOnboardingRoute
   '/app/users': typeof AppUsersRoute
+  '/auth/ssh': typeof AuthSshRoute
+  '/device/approve': typeof DeviceApproveRoute
   '/app': typeof AppIndexRoute
+  '/device': typeof DeviceIndexRoute
   '/app/machines/$endpointId': typeof AppMachinesEndpointIdRoute
   '/app/relays/$relayId': typeof AppRelaysRelayIdRoute
   '/app/serves/$serveId': typeof AppServesServeIdRoute
@@ -243,6 +282,7 @@ export interface FileRoutesByTo {
   '/app/relays': typeof AppRelaysIndexRoute
   '/app/serves': typeof AppServesIndexRoute
   '/app/settings': typeof AppSettingsIndexRoute
+  '/app/ssh-sessions': typeof AppSshSessionsIndexRoute
   '/app/tunnels': typeof AppTunnelsIndexRoute
   '/app/networks/$networkId/access': typeof AppNetworksNetworkIdAccessRoute
   '/app/networks/$networkId/enrollment': typeof AppNetworksNetworkIdEnrollmentRoute
@@ -255,6 +295,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/app': typeof AppRouteRouteWithChildren
+  '/consent': typeof ConsentRoute
   '/login': typeof LoginRoute
   '/app/settings': typeof AppSettingsRouteRouteWithChildren
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
@@ -262,7 +303,10 @@ export interface FileRoutesById {
   '/app/logs': typeof AppLogsRoute
   '/app/onboarding': typeof AppOnboardingRoute
   '/app/users': typeof AppUsersRoute
+  '/auth/ssh': typeof AuthSshRoute
+  '/device/approve': typeof DeviceApproveRoute
   '/app/': typeof AppIndexRoute
+  '/device/': typeof DeviceIndexRoute
   '/app/networks/$networkId': typeof AppNetworksNetworkIdRouteRouteWithChildren
   '/app/machines/$endpointId': typeof AppMachinesEndpointIdRoute
   '/app/relays/$relayId': typeof AppRelaysRelayIdRoute
@@ -275,6 +319,7 @@ export interface FileRoutesById {
   '/app/relays/': typeof AppRelaysIndexRoute
   '/app/serves/': typeof AppServesIndexRoute
   '/app/settings/': typeof AppSettingsIndexRoute
+  '/app/ssh-sessions/': typeof AppSshSessionsIndexRoute
   '/app/tunnels/': typeof AppTunnelsIndexRoute
   '/app/networks/$networkId/access': typeof AppNetworksNetworkIdAccessRoute
   '/app/networks/$networkId/enrollment': typeof AppNetworksNetworkIdEnrollmentRoute
@@ -288,6 +333,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/app'
+    | '/consent'
     | '/login'
     | '/app/settings'
     | '/accept-invitation/$invitationId'
@@ -295,7 +341,10 @@ export interface FileRouteTypes {
     | '/app/logs'
     | '/app/onboarding'
     | '/app/users'
+    | '/auth/ssh'
+    | '/device/approve'
     | '/app/'
+    | '/device/'
     | '/app/networks/$networkId'
     | '/app/machines/$endpointId'
     | '/app/relays/$relayId'
@@ -308,6 +357,7 @@ export interface FileRouteTypes {
     | '/app/relays/'
     | '/app/serves/'
     | '/app/settings/'
+    | '/app/ssh-sessions/'
     | '/app/tunnels/'
     | '/app/networks/$networkId/access'
     | '/app/networks/$networkId/enrollment'
@@ -318,13 +368,17 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/consent'
     | '/login'
     | '/accept-invitation/$invitationId'
     | '/app/access'
     | '/app/logs'
     | '/app/onboarding'
     | '/app/users'
+    | '/auth/ssh'
+    | '/device/approve'
     | '/app'
+    | '/device'
     | '/app/machines/$endpointId'
     | '/app/relays/$relayId'
     | '/app/serves/$serveId'
@@ -336,6 +390,7 @@ export interface FileRouteTypes {
     | '/app/relays'
     | '/app/serves'
     | '/app/settings'
+    | '/app/ssh-sessions'
     | '/app/tunnels'
     | '/app/networks/$networkId/access'
     | '/app/networks/$networkId/enrollment'
@@ -347,6 +402,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/app'
+    | '/consent'
     | '/login'
     | '/app/settings'
     | '/accept-invitation/$invitationId'
@@ -354,7 +410,10 @@ export interface FileRouteTypes {
     | '/app/logs'
     | '/app/onboarding'
     | '/app/users'
+    | '/auth/ssh'
+    | '/device/approve'
     | '/app/'
+    | '/device/'
     | '/app/networks/$networkId'
     | '/app/machines/$endpointId'
     | '/app/relays/$relayId'
@@ -367,6 +426,7 @@ export interface FileRouteTypes {
     | '/app/relays/'
     | '/app/serves/'
     | '/app/settings/'
+    | '/app/ssh-sessions/'
     | '/app/tunnels/'
     | '/app/networks/$networkId/access'
     | '/app/networks/$networkId/enrollment'
@@ -379,8 +439,12 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRouteRoute: typeof AppRouteRouteWithChildren
+  ConsentRoute: typeof ConsentRoute
   LoginRoute: typeof LoginRoute
   AcceptInvitationInvitationIdRoute: typeof AcceptInvitationInvitationIdRoute
+  AuthSshRoute: typeof AuthSshRoute
+  DeviceApproveRoute: typeof DeviceApproveRoute
+  DeviceIndexRoute: typeof DeviceIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -390,6 +454,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/consent': {
+      id: '/consent'
+      path: '/consent'
+      fullPath: '/consent'
+      preLoaderRoute: typeof ConsentRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/app': {
@@ -406,12 +477,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/device/': {
+      id: '/device/'
+      path: '/device'
+      fullPath: '/device/'
+      preLoaderRoute: typeof DeviceIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/app/': {
       id: '/app/'
       path: '/'
       fullPath: '/app/'
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRouteRoute
+    }
+    '/device/approve': {
+      id: '/device/approve'
+      path: '/device/approve'
+      fullPath: '/device/approve'
+      preLoaderRoute: typeof DeviceApproveRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/ssh': {
+      id: '/auth/ssh'
+      path: '/auth/ssh'
+      fullPath: '/auth/ssh'
+      preLoaderRoute: typeof AuthSshRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/app/users': {
       id: '/app/users'
@@ -460,6 +552,13 @@ declare module '@tanstack/react-router' {
       path: '/tunnels'
       fullPath: '/app/tunnels/'
       preLoaderRoute: typeof AppTunnelsIndexRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/app/ssh-sessions/': {
+      id: '/app/ssh-sessions/'
+      path: '/ssh-sessions'
+      fullPath: '/app/ssh-sessions/'
+      preLoaderRoute: typeof AppSshSessionsIndexRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/app/settings/': {
@@ -646,6 +745,7 @@ interface AppRouteRouteChildren {
   AppNetworksIndexRoute: typeof AppNetworksIndexRoute
   AppRelaysIndexRoute: typeof AppRelaysIndexRoute
   AppServesIndexRoute: typeof AppServesIndexRoute
+  AppSshSessionsIndexRoute: typeof AppSshSessionsIndexRoute
   AppTunnelsIndexRoute: typeof AppTunnelsIndexRoute
 }
 
@@ -665,6 +765,7 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppNetworksIndexRoute: AppNetworksIndexRoute,
   AppRelaysIndexRoute: AppRelaysIndexRoute,
   AppServesIndexRoute: AppServesIndexRoute,
+  AppSshSessionsIndexRoute: AppSshSessionsIndexRoute,
   AppTunnelsIndexRoute: AppTunnelsIndexRoute,
 }
 
@@ -675,8 +776,12 @@ const AppRouteRouteWithChildren = AppRouteRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRouteRoute: AppRouteRouteWithChildren,
+  ConsentRoute: ConsentRoute,
   LoginRoute: LoginRoute,
   AcceptInvitationInvitationIdRoute: AcceptInvitationInvitationIdRoute,
+  AuthSshRoute: AuthSshRoute,
+  DeviceApproveRoute: DeviceApproveRoute,
+  DeviceIndexRoute: DeviceIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

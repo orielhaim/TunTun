@@ -5,10 +5,13 @@ use anyhow::Context;
 use tuntun_common::TUNNEL_ALPN;
 use tuntun_core::ipc::{AgentIpcState, spawn_ipc_server};
 use tuntun_core::{CoreNode, CoreNodeConfig};
+use uuid::Uuid;
 
+use crate::accept::AcceptDeps;
 use crate::cli::RunArgs;
 use crate::metrics::AgentMetrics;
-use crate::tun_io::{build_tun, run_inbound, run_outbound};
+use crate::recorder::{RecordingStore, recordings_dir};
+use crate::tun_io::{build_tun, run_outbound};
 
 pub async fn run(
     identity: tuntun_core::AgentIdentity,
@@ -22,6 +25,23 @@ pub async fn run(
     let hostname = std::env::var("HOSTNAME")
         .or_else(|_| std::env::var("COMPUTERNAME"))
         .unwrap_or_else(|_| "tuntun-agent".into());
+
+    let ssh_sessions = crate::ssh::SshSessionRegistry::default();
+    let on_kill_ssh = {
+        let sessions = ssh_sessions.clone();
+        Some(std::sync::Arc::new(move |session_id: &str| {
+            if let Ok(id) = Uuid::parse_str(session_id) {
+                if sessions.kill(&id) {
+                    tracing::info!(%session_id, "killed SSH session by CP request");
+                } else {
+                    tracing::debug!(%session_id, "KillSshSession: session not found locally");
+                }
+            } else {
+                tracing::warn!(%session_id, "KillSshSession: invalid session id");
+            }
+        }) as std::sync::Arc<dyn Fn(&str) + Send + Sync>)
+    };
+
     let node = CoreNode::bootstrap(
         identity,
         persisted,
@@ -31,7 +51,9 @@ pub async fn run(
             agent_version: env!("CARGO_PKG_VERSION"),
             poll_secs: args.poll_secs,
             advertise_datagram_alpn: true, // agent tunnels raw IP over datagrams
+            advertise_recording_alpn: args.recorder,
             kind: "agent",
+            on_kill_ssh,
         },
     )
     .await?;
@@ -57,7 +79,38 @@ pub async fn run(
     )?);
 
     crate::forward::ensure_ip_forwarding(!node.routes.advertised_subnets().is_empty());
-    crate::stream_proxy::spawn(node.endpoint.clone(), node.routes.clone());
+
+    // Always open a local cast store so destination-side local recording works.
+    // `--recorder` additionally advertises ALPN and accepts inbound streams.
+    let recording_store = match RecordingStore::open(recordings_dir(&node.paths.dir)) {
+        Ok(s) => Some(Arc::new(s)),
+        Err(e) => {
+            tracing::warn!(?e, "recording store unavailable");
+            None
+        }
+    };
+    if args.recorder {
+        tracing::info!("session recorder enabled (ALPN tuntun/recording/1)");
+    }
+
+    let stream_handler = crate::stream_proxy::stream_handler(node.routes.clone());
+    crate::accept::spawn(AcceptDeps {
+        endpoint: node.endpoint.clone(),
+        routes: node.routes.clone(),
+        acl: node.acl.clone(),
+        metrics: metrics.clone(),
+        tun: tun.clone(),
+        stream_handler,
+        ssh_sessions,
+        cp_tx: node.serves.client_tx(),
+        pool: node.pool.clone(),
+        recording_store,
+        signed: Some(node.signed.clone()),
+        hostname: hostname.clone(),
+        network_name: node.persisted.network_name.clone(),
+        self_endpoint_id: node.endpoint_id_hex(),
+        recorder_enabled: args.recorder,
+    });
 
     let dns_cfg = membership_snap.dns.clone();
     let dns_bind = tuntun_core::dns_stub::bind_addr(membership_snap.assigned_ipv4);
@@ -121,18 +174,6 @@ pub async fn run(
             }
         })
     };
-    let inbound = {
-        let ep = node.endpoint.clone();
-        let tun = tun.clone();
-        let routes = node.routes.clone();
-        let acl = node.acl.clone();
-        let metrics = metrics.clone();
-        tokio::spawn(async move {
-            if let Err(e) = run_inbound(ep, tun, routes, acl, metrics).await {
-                tracing::error!(?e, "inbound crashed");
-            }
-        })
-    };
 
     if !args.disable_gossip {
         let gossip = iroh_gossip::Gossip::builder().spawn(node.endpoint.clone());
@@ -156,7 +197,6 @@ pub async fn run(
 
     tokio::select! {
         _ = outbound => tracing::error!("outbound task exited"),
-        _ = inbound  => tracing::error!("inbound task exited"),
         _ = tokio::signal::ctrl_c() => tracing::info!("ctrl-c, shutting down"),
     }
 

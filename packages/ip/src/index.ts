@@ -39,7 +39,7 @@ export function formatIp(value: string): string {
 
 /**
  * Normalized IPv4 CIDR for Postgres `cidr` columns.
- * Must keep the prefix — `Address4.correctForm()` alone drops `/24` etc.,
+ * Must keep the prefix - `Address4.correctForm()` alone drops `/24` etc.,
  * and Postgres treats a bare address as `/32`.
  */
 export function formatIpv4Cidr(value: string): string {

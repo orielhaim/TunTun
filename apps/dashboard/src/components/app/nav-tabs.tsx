@@ -10,6 +10,7 @@ const navItems = [
   { to: "/app/relays", label: "Relays" },
   { to: "/app/tunnels", label: "Tunnels", badge: "tunnels" as const },
   { to: "/app/serves", label: "Serves", badge: "serves" as const },
+  { to: "/app/ssh-sessions", label: "SSH" },
   { to: "/app/networks", label: "Networks" },
   { to: "/app/users", label: "Users" },
   { to: "/app/access", label: "Access" },

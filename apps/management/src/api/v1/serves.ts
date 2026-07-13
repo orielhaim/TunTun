@@ -228,7 +228,7 @@ export const servesRoutes = new Elysia()
             await notifyEntityChanged(tx, {
               organizationId: auth.organizationId,
               kind: "serve",
-              entityId: created!.id,
+              entityId: created?.id,
               networkId: params.networkId,
             });
 
@@ -236,7 +236,7 @@ export const servesRoutes = new Elysia()
               organizationId: auth.organizationId,
               actor: auth.user.id,
               action: "serve.create",
-              target: created!.id,
+              target: created?.id,
               metadata: {
                 internalHostname,
                 endpointId: parsed.endpointId,
@@ -292,7 +292,6 @@ export const servesRoutes = new Elysia()
                 device.endpointId,
               ),
             }),
-            /** Delivered once so the agent can start TLS — never logged. */
             ...(leafCertificatePem && leafPrivateKeyPem
               ? {
                   certificatePem: leafCertificatePem,
@@ -335,7 +334,7 @@ export const servesRoutes = new Elysia()
           await notifyEntityChanged(db, {
             organizationId: auth.organizationId,
             kind: "serve",
-            entityId: updated!.id,
+            entityId: updated?.id,
             networkId: params.networkId,
           });
 

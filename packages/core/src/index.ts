@@ -37,7 +37,7 @@ function mapCreateOptions(config: CreateNodeOptions = {}): NodeConfig {
   };
 }
 
-/** One-shot enrolment — persist identity and initial routing snapshot to `state_dir`. */
+/** One-shot enrolment - persist identity and initial routing snapshot to `state_dir`. */
 export async function enroll(config: EnrollConfig): Promise<EnrollResult> {
   return nativeEnroll(config);
 }
@@ -102,7 +102,7 @@ export class TunTunStream {
 
 /**
  * A handle to the overlay network from a single process. Multiple processes
- * on the same machine share one iroh endpoint through the coordinator UDS —
+ * on the same machine share one iroh endpoint through the coordinator UDS -
  * one process becomes coordinator, others become clients transparently.
  */
 export class TunTunNode {
@@ -142,7 +142,7 @@ export class TunTunNode {
    * upgrading a stream and speaking HTTP/1.1 manually.
    *
    * For non-trivial HTTP semantics, wire the stream into your favourite
-   * HTTP client instead — most support custom transports.
+   * HTTP client instead - most support custom transports.
    */
   async fetch(
     url: string,

@@ -56,6 +56,11 @@ pub enum ServerMsg {
     StopTunnel {
         tunnel_id: String,
     },
+
+    /// Dashboard / CP tells destination agent to force-close an SSH session.
+    KillSshSession {
+        session_id: String,
+    },
 }
 
 fn default_all_peers() -> String {
@@ -113,6 +118,36 @@ pub enum ClientMsg {
     TunnelFailed {
         tunnel_id: String,
         error: String,
+    },
+
+    /// Destination agent: an SSH session started.
+    SshSessionStarted {
+        session_id: String,
+        src_endpoint_id: EndpointIdHex,
+        target_user: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        src_hostname: Option<String>,
+        recorded: bool,
+    },
+    /// Destination agent: an SSH session ended.
+    SshSessionEnded {
+        session_id: String,
+        #[serde(default)]
+        status: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        duration_ms: Option<u64>,
+    },
+
+    /// Recorder node: a session recording was saved locally (and cast uploaded separately).
+    SshRecordingSaved {
+        session_id: String,
+        recorder_endpoint_id: EndpointIdHex,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        duration_ms: Option<u64>,
+        #[serde(default)]
+        byte_size: u64,
+        #[serde(default)]
+        content_sha256: String,
     },
 }
 

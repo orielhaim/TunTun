@@ -3,7 +3,7 @@ use clap::{Args, Parser, Subcommand};
 use tuntun_core::{AgentIdentity, PersistedState, StatePaths};
 
 #[derive(Parser, Debug)]
-#[command(name = "tuntun", about = "TunTun — mesh networking, serve, and tunnel")]
+#[command(name = "tuntun", about = "TunTun - mesh networking, serve, and tunnel")]
 pub struct Cli {
     #[arg(long, env = "TUNTUN_STATE_DIR", global = true)]
     pub state_dir: Option<String>,
@@ -44,6 +44,14 @@ pub enum Command {
     ///
     /// Examples: `tuntun tunnel 3000`, `tuntun tunnel status`, `tuntun tunnel off 3000`
     Tunnel(crate::cmds::TunnelArgs),
+    /// SSH to a peer over the mesh (identity-based, no SSH keys)
+    ///
+    /// Examples: `tuntun ssh db-server`, `tuntun ssh db-server -u root`, `tuntun ssh db-server -- uname -a`
+    Ssh(crate::cmds_ssh::SshArgs),
+    /// Sign in via browser (device authorization) and store a management token
+    Login(crate::cmds_login::LoginArgs),
+    /// Clear stored management tokens
+    Logout(crate::cmds_login::LogoutArgs),
 }
 
 #[derive(Subcommand, Debug)]
@@ -80,6 +88,9 @@ pub struct RunArgs {
     pub metrics_bind: String,
     #[arg(long, env = "TUNTUN_DISABLE_GOSSIP")]
     pub disable_gossip: bool,
+    /// Accept inbound session recordings (advertise `tuntun/recording/1`).
+    #[arg(long, env = "TUNTUN_RECORDER")]
+    pub recorder: bool,
     #[cfg(windows)]
     #[arg(long, env = "TUNTUN_WINTUN_FILE")]
     pub wintun_file: Option<String>,

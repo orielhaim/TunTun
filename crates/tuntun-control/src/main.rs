@@ -21,6 +21,8 @@ mod register;
 mod service_auth;
 mod signing_key;
 mod snapshot;
+mod ssh;
+mod ssh_auth;
 mod state;
 mod tunnels;
 mod ws_hub;
@@ -82,6 +84,9 @@ async fn main() -> anyhow::Result<()> {
             ticker.tick().await;
             if let Err(e) = evictor_state.evict_stale_devices().await {
                 tracing::warn!(?e, "evict_stale_devices failed");
+            }
+            if let Err(e) = evictor_state.purge_expired_ephemera().await {
+                tracing::warn!(?e, "purge_expired_ephemera failed");
             }
         }
     });

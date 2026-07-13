@@ -8,6 +8,14 @@ export const queryKeys = {
   machines: (orgId: string) => [...queryKeys.org(orgId), "machines"] as const,
   policies: (orgId: string, networkId: string) =>
     [...queryKeys.network(orgId, networkId), "policies"] as const,
+  organizationPolicies: (orgId: string) =>
+    [...queryKeys.org(orgId), "policies"] as const,
+  sshPolicies: (orgId: string, networkId: string) =>
+    [...queryKeys.network(orgId, networkId), "ssh-policies"] as const,
+  deviceSshAuth: (orgId: string, endpointId: string) =>
+    [...queryKeys.org(orgId), "device-ssh-auth", endpointId] as const,
+  ssoSettings: (orgId: string) =>
+    [...queryKeys.org(orgId), "sso-settings"] as const,
   subnetRoutes: (orgId: string, networkId: string) =>
     [...queryKeys.network(orgId, networkId), "subnet-routes"] as const,
   hostnameRoutes: (orgId: string, networkId: string) =>
@@ -39,17 +47,11 @@ export const queryKeys = {
   tunnels: (orgId: string) => [...queryKeys.org(orgId), "tunnels"] as const,
   tunnelsByNetwork: (orgId: string, networkId: string) =>
     [...queryKeys.tunnels(orgId), networkId] as const,
-  tunnelRedirectRules: (orgId: string, networkId: string, tunnelId: string) =>
+  tunnelRoutingRules: (orgId: string, networkId: string, tunnelId: string) =>
     [
       ...queryKeys.tunnelsByNetwork(orgId, networkId),
       tunnelId,
-      "redirect-rules",
-    ] as const,
-  tunnelPortMappings: (orgId: string, networkId: string, tunnelId: string) =>
-    [
-      ...queryKeys.tunnelsByNetwork(orgId, networkId),
-      tunnelId,
-      "port-mappings",
+      "routing-rules",
     ] as const,
   tunnelTraffic: (orgId: string, networkId: string, tunnelId: string) =>
     [
@@ -62,6 +64,12 @@ export const queryKeys = {
     [...queryKeys.serves(orgId), networkId] as const,
   servePeers: (orgId: string, networkId: string, serveId: string) =>
     [...queryKeys.serves(orgId), networkId, serveId, "peers"] as const,
+  sshSessions: (orgId: string, status?: string) =>
+    [...queryKeys.org(orgId), "ssh-sessions", status ?? "all"] as const,
+  sshRecordings: (orgId: string) =>
+    [...queryKeys.org(orgId), "ssh-recordings"] as const,
+  sshRecording: (orgId: string, sessionId: string) =>
+    [...queryKeys.org(orgId), "ssh-recording", sessionId] as const,
   internalCa: (orgId: string) =>
     [...queryKeys.org(orgId), "internal-ca"] as const,
   tunnelSettings: (orgId: string) =>

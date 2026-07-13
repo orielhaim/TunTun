@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use super::protocol::{
     DnsStatusInfo, ExitNodeRouteInfo, HostnameRouteInfo, IpcRequest, IpcResponse, PeerLite,
-    RoutesInfo, StatusInfo, SubnetRouteInfo,
+    RoutesInfo, SshRecordingInfo, SshSessionInfo, StatusInfo, SubnetRouteInfo,
 };
 use super::transport::{IpcListener, IpcStream};
 use crate::node::CoreNode;
@@ -59,7 +59,7 @@ pub fn spawn(network_id: Uuid, state: Arc<AgentIpcState>) -> tokio::task::JoinHa
                 }
             }
             Err(e) => {
-                tracing::error!(?e, "failed to bind agent IPC — CLI commands will not work");
+                tracing::error!(?e, "failed to bind agent IPC - CLI commands will not work");
             }
         }
     })
@@ -71,7 +71,7 @@ async fn handle_connection(stream: IpcStream, state: Arc<AgentIpcState>) -> anyh
     let mut line = String::new();
 
     // One request per connection for most commands. OpenStream is special
-    // (switches to raw splice after Ready) — handled separately.
+    // (switches to raw splice after Ready) - handled separately.
     let n = reader.read_line(&mut line).await?;
     if n == 0 {
         return Ok(());
@@ -82,6 +82,23 @@ async fn handle_connection(stream: IpcStream, state: Arc<AgentIpcState>) -> anyh
     match req {
         IpcRequest::OpenStream { host, port } => {
             handle_open_stream(host, port, state, reader, write).await
+        }
+        IpcRequest::Ssh {
+            target,
+            user,
+            local_user,
+            term_type,
+            width,
+            height,
+            env_vars,
+            auth_token,
+            command,
+        } => {
+            handle_ssh(
+                target, user, local_user, term_type, width, height, env_vars, auth_token, command,
+                state, reader, write,
+            )
+            .await
         }
         IpcRequest::Ping {
             peer,
@@ -193,10 +210,47 @@ async fn dispatch(req: IpcRequest, state: &AgentIpcState) -> IpcResponse {
                 message: e.to_string(),
             },
         },
-        // Handled earlier:
-        IpcRequest::OpenStream { .. } | IpcRequest::Ping { .. } => IpcResponse::Error {
-            message: "internal: request should have been handled specially".into(),
+        IpcRequest::SshSessions { limit, status } => {
+            match list_ssh_sessions(state, limit, status.as_deref()).await {
+                Ok(sessions) => IpcResponse::SshSessions { sessions },
+                Err(e) => IpcResponse::Error {
+                    message: e.to_string(),
+                },
+            }
+        }
+        IpcRequest::SshRecordings { limit } => match list_ssh_recordings(state, limit).await {
+            Ok(recordings) => IpcResponse::SshRecordings { recordings },
+            Err(e) => IpcResponse::Error {
+                message: e.to_string(),
+            },
         },
+        IpcRequest::SshPlay { session_id } => match get_ssh_cast(state, &session_id).await {
+            Ok((session_id, cast_text, content_sha256)) => IpcResponse::SshCast {
+                session_id,
+                cast_text,
+                content_sha256,
+            },
+            Err(e) => IpcResponse::Error {
+                message: e.to_string(),
+            },
+        },
+        IpcRequest::SshAuthPoll { challenge_token } => {
+            match poll_ssh_auth(state, &challenge_token).await {
+                Ok((status, proof_token)) => IpcResponse::SshAuthPoll {
+                    status,
+                    proof_token,
+                },
+                Err(e) => IpcResponse::Error {
+                    message: e.to_string(),
+                },
+            }
+        }
+        // Handled earlier:
+        IpcRequest::OpenStream { .. } | IpcRequest::Ssh { .. } | IpcRequest::Ping { .. } => {
+            IpcResponse::Error {
+                message: "internal: request should have been handled specially".into(),
+            }
+        }
     }
 }
 
@@ -609,6 +663,88 @@ async fn handle_open_stream(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+async fn handle_ssh(
+    target: String,
+    user: String,
+    local_user: String,
+    term_type: String,
+    width: u16,
+    height: u16,
+    env_vars: Vec<(String, String)>,
+    auth_token: Option<String>,
+    command: Option<String>,
+    state: Arc<AgentIpcState>,
+    reader: BufReader<Box<dyn tokio::io::AsyncRead + Unpin + Send>>,
+    mut write: Box<dyn tokio::io::AsyncWrite + Unpin + Send>,
+) -> anyhow::Result<()> {
+    let peer = resolve_peer(&state.node, &target)
+        .ok_or_else(|| anyhow::anyhow!("no peer matches target {target}"))?;
+    let header = tuntun_common::ssh::SshRequestHeader {
+        target_user: user,
+        term_type,
+        width,
+        height,
+        env_vars,
+        auth_token,
+        command,
+        local_user,
+    };
+    match crate::ssh::dial_ssh(&state.node.pool, peer.endpoint, &header).await {
+        Ok((send, recv, response)) => {
+            if response.status == tuntun_common::ssh::SshStatus::ReauthRequired as u8 {
+                let reauth_url = response.reauth_url.unwrap_or_default();
+                let challenge_token = challenge_token_from_url(&reauth_url).unwrap_or_default();
+                let message = response
+                    .message
+                    .unwrap_or_else(|| "Re-authentication required".into());
+                write_response(
+                    &mut write,
+                    &IpcResponse::SshReauthRequired {
+                        reauth_url,
+                        challenge_token,
+                        message,
+                    },
+                )
+                .await?;
+                return Ok(());
+            }
+            if response.status != tuntun_common::ssh::SshStatus::Ok as u8 {
+                let message = response
+                    .message
+                    .unwrap_or_else(|| format!("ssh failed with status {}", response.status));
+                write_response(&mut write, &IpcResponse::Error { message }).await?;
+                return Ok(());
+            }
+            write_response(&mut write, &IpcResponse::Ready).await?;
+            let local_read = reader.into_inner();
+            crate::stream::splice_bidirectional(recv, send, local_read, write).await
+        }
+        Err(e) => {
+            write_response(
+                &mut write,
+                &IpcResponse::Error {
+                    message: e.to_string(),
+                },
+            )
+            .await?;
+            Err(e)
+        }
+    }
+}
+
+fn challenge_token_from_url(url: &str) -> Option<String> {
+    let idx = url.find("token=")?;
+    let rest = &url[idx + "token=".len()..];
+    let end = rest.find(['&', '#']).unwrap_or(rest.len());
+    let token = &rest[..end];
+    if token.is_empty() {
+        None
+    } else {
+        Some(token.to_string())
+    }
+}
+
 fn resolve_peer(node: &CoreNode, host: &str) -> Option<std::sync::Arc<crate::routing::PeerInfo>> {
     if let Ok(ip) = host.parse::<std::net::Ipv4Addr>() {
         return node.routes.lookup_ip(&ip);
@@ -616,4 +752,189 @@ fn resolve_peer(node: &CoreNode, host: &str) -> Option<std::sync::Arc<crate::rou
     node.routes
         .lookup_hostname(host)
         .or_else(|| node.routes.lookup_endpoint(host))
+}
+
+async fn list_ssh_sessions(
+    state: &AgentIpcState,
+    limit: u32,
+    status: Option<&str>,
+) -> anyhow::Result<Vec<SshSessionInfo>> {
+    let raw = state
+        .node
+        .signed
+        .list_ssh_sessions(limit, status)
+        .await
+        .context("list ssh sessions from control plane")?;
+    let sessions = raw
+        .get("sessions")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let mut out = Vec::with_capacity(sessions.len());
+    for s in sessions {
+        out.push(SshSessionInfo {
+            id: s
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            src_endpoint_id: s
+                .get("srcEndpointId")
+                .or_else(|| s.get("src_endpoint_id"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            dst_endpoint_id: s
+                .get("dstEndpointId")
+                .or_else(|| s.get("dst_endpoint_id"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            src_hostname: s
+                .get("srcHostname")
+                .or_else(|| s.get("src_hostname"))
+                .and_then(|v| v.as_str())
+                .map(str::to_string),
+            dst_hostname: s
+                .get("dstHostname")
+                .or_else(|| s.get("dst_hostname"))
+                .and_then(|v| v.as_str())
+                .map(str::to_string),
+            target_user: s
+                .get("targetUser")
+                .or_else(|| s.get("target_user"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            status: s
+                .get("status")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            recorded: s.get("recorded").and_then(|v| v.as_bool()).unwrap_or(false),
+            started_at: s
+                .get("startedAt")
+                .or_else(|| s.get("started_at"))
+                .map(|v| v.to_string().trim_matches('"').to_string())
+                .unwrap_or_default(),
+            duration_ms: s
+                .get("durationMs")
+                .or_else(|| s.get("duration_ms"))
+                .and_then(|v| v.as_u64()),
+        });
+    }
+    Ok(out)
+}
+
+async fn list_ssh_recordings(
+    state: &AgentIpcState,
+    limit: u32,
+) -> anyhow::Result<Vec<SshRecordingInfo>> {
+    let raw = state
+        .node
+        .signed
+        .list_ssh_recordings(limit)
+        .await
+        .context("list ssh recordings from control plane")?;
+    let recordings = raw
+        .get("recordings")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let mut out = Vec::with_capacity(recordings.len());
+    for r in recordings {
+        out.push(SshRecordingInfo {
+            session_id: r
+                .get("sessionId")
+                .or_else(|| r.get("session_id"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            src_hostname: r
+                .get("srcHostname")
+                .or_else(|| r.get("src_hostname"))
+                .and_then(|v| v.as_str())
+                .map(str::to_string),
+            dst_hostname: r
+                .get("dstHostname")
+                .or_else(|| r.get("dst_hostname"))
+                .and_then(|v| v.as_str())
+                .map(str::to_string),
+            target_user: r
+                .get("targetUser")
+                .or_else(|| r.get("target_user"))
+                .and_then(|v| v.as_str())
+                .map(str::to_string),
+            byte_size: r
+                .get("byteSize")
+                .or_else(|| r.get("byte_size"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0),
+            created_at: r
+                .get("createdAt")
+                .or_else(|| r.get("created_at"))
+                .map(|v| v.to_string().trim_matches('"').to_string())
+                .unwrap_or_default(),
+            content_sha256: r
+                .get("contentSha256")
+                .or_else(|| r.get("content_sha256"))
+                .and_then(|v| v.as_str())
+                .map(str::to_string),
+        });
+    }
+    Ok(out)
+}
+
+async fn get_ssh_cast(
+    state: &AgentIpcState,
+    session_id: &str,
+) -> anyhow::Result<(String, String, String)> {
+    let raw = state
+        .node
+        .signed
+        .get_ssh_recording_cast(session_id)
+        .await
+        .context("fetch ssh recording cast")?;
+    let cast_text = raw
+        .get("castText")
+        .or_else(|| raw.get("cast_text"))
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("cast missing"))?
+        .to_string();
+    let content_sha256 = raw
+        .get("contentSha256")
+        .or_else(|| raw.get("content_sha256"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let sid = raw
+        .get("sessionId")
+        .or_else(|| raw.get("session_id"))
+        .and_then(|v| v.as_str())
+        .unwrap_or(session_id)
+        .to_string();
+    Ok((sid, cast_text, content_sha256))
+}
+
+async fn poll_ssh_auth(
+    state: &AgentIpcState,
+    challenge_token: &str,
+) -> anyhow::Result<(String, Option<String>)> {
+    let raw = state
+        .node
+        .signed
+        .poll_ssh_auth(challenge_token)
+        .await
+        .context("poll ssh auth")?;
+    let status = raw
+        .get("status")
+        .and_then(|v| v.as_str())
+        .unwrap_or("failed")
+        .to_string();
+    let proof_token = raw
+        .get("proofToken")
+        .or_else(|| raw.get("proof_token"))
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+    Ok((status, proof_token))
 }

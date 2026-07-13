@@ -1,6 +1,5 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
-/** Map lives on the Mesh overview — keep URL for bookmarks. */
 export const Route = createFileRoute("/app/networks/$networkId/map")({
   beforeLoad: ({ params }) => {
     throw redirect({

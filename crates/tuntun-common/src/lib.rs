@@ -1,7 +1,9 @@
 pub mod ipv6;
 pub mod policy;
+pub mod recording;
 pub mod relay;
 pub mod signing;
+pub mod ssh;
 pub mod ws;
 
 use serde::{Deserialize, Serialize};
@@ -15,6 +17,12 @@ pub const TUNNEL_ALPN: &[u8] = b"tuntun/tunnel/1";
 
 /// ALPN for agent ↔ public relay reverse tunnels.
 pub const RELAY_ALPN: &[u8] = b"tuntun/relay/1";
+
+/// ALPN for mesh SSH sessions.
+pub use ssh::SSH_ALPN;
+
+/// ALPN for SSH session recording streams.
+pub use recording::RECORDING_ALPN;
 
 /// Header the agent sends with every authenticated request.
 pub const HDR_ENDPOINT_ID: &str = "x-endpoint-id";
@@ -232,6 +240,9 @@ pub struct NetworkMembershipSnapshot {
     /// Tunnel configs for *this* endpoint (agent opens reverse tunnels).
     #[serde(default)]
     pub tunnel_config: Vec<TunnelConfig>,
+    /// Tags assigned to *this* endpoint (needed for dst tag ACL / SSH policy).
+    #[serde(default)]
+    pub self_tags: Vec<String>,
     pub policy: policy::PolicyBundle,
     pub gossip_bootstrap: Vec<EndpointIdHex>,
     pub gossip_topic_hex: String,

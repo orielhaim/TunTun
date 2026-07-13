@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use bytes::Bytes;
+use iroh::endpoint::Connection;
 use tun_rs::{AsyncDevice, DeviceBuilder};
 use tuntun_common::policy::Direction;
 use tuntun_core::{AclEngine, ConnPool, RoutingTable, iroh_pool::send_datagram};
@@ -99,80 +100,61 @@ pub async fn run_outbound(
     }
 }
 
-pub async fn run_inbound(
-    endpoint: iroh::Endpoint,
+/// Handle an already-accepted connection negotiated with [`tuntun_common::TUNNEL_ALPN`].
+pub async fn serve_tunnel_connection(
+    conn: Connection,
     tun: Arc<AsyncDevice>,
     routes: RoutingTable,
     acl: AclEngine,
     metrics: AgentMetrics,
-) -> anyhow::Result<()> {
-    tracing::info!("inbound iroh→TUN accept loop started");
-    while let Some(incoming) = endpoint.accept().await {
-        let tun = tun.clone();
-        let routes = routes.clone();
-        let acl = acl.clone();
-        let metrics = metrics.clone();
-        tokio::spawn(async move {
-            let conn = match incoming.await {
-                Ok(c) => c,
-                Err(e) => {
-                    tracing::warn!(?e, "incoming handshake failed");
-                    return;
-                }
-            };
-            if conn.alpn() != tuntun_common::TUNNEL_ALPN {
-                return;
-            }
-            let remote_id = conn.remote_id();
-            let remote_hex = format!("{remote_id}");
-            if !acl.allow_inbound_peer(&remote_hex) {
-                tracing::warn!(%remote_id, "policy denied inbound peer");
-                conn.close(1u32.into(), b"policy_deny");
-                return;
-            }
-            tracing::info!(%remote_id, "peer connected");
-            metrics.active_conns.inc();
-            loop {
-                match conn.read_datagram().await {
-                    Ok(dg) => {
-                        if let Some(parsed) = ip::parse_ipv4(&dg) {
-                            let dst_for_acl = if routes.is_advertised_destination(&parsed.dst) {
-                                Some(parsed.dst)
-                            } else {
-                                Some(parsed.src)
-                            };
-                            if !acl.allow_packet(
-                                &remote_hex,
-                                dst_for_acl,
-                                parsed.dst_port,
-                                parsed.protocol,
-                                Direction::Inbound,
-                            ) {
-                                metrics.dropped.with_label_values(&["policy_deny_in"]).inc();
-                                continue;
-                            }
-                        }
-                        let n = dg.len() as u64;
-                        if let Err(e) = tun.send(&dg).await {
-                            tracing::warn!(?e, "tun send failed");
-                            metrics
-                                .dropped
-                                .with_label_values(&["tun_send_failed"])
-                                .inc();
-                            break;
-                        }
-                        metrics.packets.with_label_values(&["in"]).inc();
-                        metrics.bytes.with_label_values(&["in"]).inc_by(n);
-                    }
-                    Err(e) => {
-                        tracing::debug!(?e, "read_datagram closed");
-                        break;
-                    }
-                }
-            }
-            metrics.active_conns.dec();
-            tracing::info!(%remote_id, "peer disconnected");
-        });
+) {
+    let remote_id = conn.remote_id();
+    let remote_hex = format!("{remote_id}");
+    if !acl.allow_inbound_peer(&remote_hex) {
+        tracing::warn!(%remote_id, "policy denied inbound peer");
+        conn.close(1u32.into(), b"policy_deny");
+        return;
     }
-    Ok(())
+    tracing::info!(%remote_id, "peer connected");
+    metrics.active_conns.inc();
+    loop {
+        match conn.read_datagram().await {
+            Ok(dg) => {
+                if let Some(parsed) = ip::parse_ipv4(&dg) {
+                    let dst_for_acl = if routes.is_advertised_destination(&parsed.dst) {
+                        Some(parsed.dst)
+                    } else {
+                        Some(parsed.src)
+                    };
+                    if !acl.allow_packet(
+                        &remote_hex,
+                        dst_for_acl,
+                        parsed.dst_port,
+                        parsed.protocol,
+                        Direction::Inbound,
+                    ) {
+                        metrics.dropped.with_label_values(&["policy_deny_in"]).inc();
+                        continue;
+                    }
+                }
+                let n = dg.len() as u64;
+                if let Err(e) = tun.send(&dg).await {
+                    tracing::warn!(?e, "tun send failed");
+                    metrics
+                        .dropped
+                        .with_label_values(&["tun_send_failed"])
+                        .inc();
+                    break;
+                }
+                metrics.packets.with_label_values(&["in"]).inc();
+                metrics.bytes.with_label_values(&["in"]).inc_by(n);
+            }
+            Err(e) => {
+                tracing::debug!(?e, "read_datagram closed");
+                break;
+            }
+        }
+    }
+    metrics.active_conns.dec();
+    tracing::info!(%remote_id, "peer disconnected");
 }

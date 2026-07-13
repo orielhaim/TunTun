@@ -43,6 +43,7 @@ pub fn apply_membership(
         membership.version,
     );
     acl.replace_bundle(membership.policy.clone());
+    acl.replace_self_tags(membership.self_tags.clone());
     version.store(Arc::new(org_version));
 }
 
@@ -62,6 +63,7 @@ pub fn spawn_ws_processor(
     agent_version: &'static str,
     serves: Option<crate::serve::ServeManager>,
     tunnels: Option<crate::tunnel::TunnelManager>,
+    on_kill_ssh: Option<crate::node::KillSshHook>,
 ) {
     tokio::spawn(async move {
         let _ = ws
@@ -216,6 +218,14 @@ pub fn spawn_ws_processor(
                                 let _ = mgr.stop(&tunnel_id);
                             }
                             let _ = ws.tx.send(ClientMsg::TunnelStopped { tunnel_id }).await;
+                        }
+                        ServerMsg::KillSshSession { session_id } => {
+                            if let Some(hook) = &on_kill_ssh {
+                                hook(&session_id);
+                                tracing::info!(%session_id, "KillSshSession handled");
+                            } else {
+                                tracing::warn!(%session_id, "KillSshSession ignored (no hook)");
+                            }
                         }
                     }
                 }

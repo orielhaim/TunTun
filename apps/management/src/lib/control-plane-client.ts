@@ -258,3 +258,17 @@ export async function pushStopServe(body: {
     })
     .json();
 }
+
+export async function pushKillSshSession(body: {
+  endpointId: string;
+  sessionId: string;
+}): Promise<void> {
+  await getClient()
+    .post("/internal/v1/ssh/kill-session", {
+      json: {
+        endpoint_id: body.endpointId,
+        session_id: body.sessionId,
+      },
+    })
+    .json();
+}

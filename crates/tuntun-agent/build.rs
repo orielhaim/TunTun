@@ -1,6 +1,6 @@
 //! On Windows, copy `resources/wintun/<arch>/wintun.dll` next to the built binary.
 //!
-//! See https://github.com/tun-rs/tun-rs — TUN mode requires wintun.dll beside the exe.
+//! See https://github.com/tun-rs/tun-rs - TUN mode requires wintun.dll beside the exe.
 
 fn main() {
     #[cfg(windows)]

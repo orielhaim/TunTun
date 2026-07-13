@@ -1,4 +1,4 @@
-//! Agent-side reverse tunnel manager — dials a public relay over iroh and
+//! Agent-side reverse tunnel manager - dials a public relay over iroh and
 //! forwards relay-opened streams to localhost.
 
 use std::collections::HashMap;
@@ -74,7 +74,7 @@ impl TunnelManager {
             let guard = self.inner.lock();
             if let Some(active) = guard.tunnels.get(&tunnel_id) {
                 // Idempotent: reconnect OpenTunnel replay must not double-register.
-                tracing::debug!(%tunnel_id, "tunnel already active — skipping start");
+                tracing::debug!(%tunnel_id, "tunnel already active - skipping start");
                 return Ok(active.info.clone());
             }
         }
