@@ -127,6 +127,13 @@
       "when": 1783933033679,
       "tag": "0017_far_azazel",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1783952893213,
+      "tag": "0018_hot_wong",
+      "breakpoints": true
     }
   ]
 }

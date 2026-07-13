@@ -72,7 +72,7 @@ function MachinesPage() {
   }, [orgId, machines, queryClient]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<
-    "all" | "online" | "offline"
+    "all" | "online" | "offline" | "pending"
   >("all");
   const [enrollOpen, setEnrollOpen] = useState(false);
   const [tunnelOpen, setTunnelOpen] = useState(false);
@@ -106,15 +106,20 @@ function MachinesPage() {
     return map;
   }, [serves]);
 
+  const pendingCount = useMemo(
+    () => (machines ?? []).filter((m) => m.status === "pending").length,
+    [machines],
+  );
+
   const filtered = useMemo(() => {
     const now = Date.now();
     let list = machines ?? [];
     if (statusFilter !== "all") {
       list = list.filter((m) => {
         const presence = getMachinePresence(m, now);
-        return statusFilter === "online"
-          ? presence === "online"
-          : presence !== "online";
+        if (statusFilter === "pending") return presence === "pending";
+        if (statusFilter === "online") return presence === "online";
+        return presence !== "online" && presence !== "pending";
       });
     }
     const q = search.trim().toLowerCase();
@@ -254,61 +259,97 @@ function MachinesPage() {
                   </DropdownMenuItem>
                   {isAdmin ? (
                     <>
-                      <DropdownMenuItem
-                        onClick={() => {
-                          setActionEndpointId(machine.endpointId);
-                          setActionNetworkId(machine.networkId);
-                          setActionHostname(machine.name);
-                          setTunnelOpen(true);
-                        }}
-                      >
-                        Create tunnel
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => {
-                          setActionEndpointId(machine.endpointId);
-                          setActionNetworkId(machine.networkId);
-                          setActionHostname(machine.name);
-                          setServeOpen(true);
-                        }}
-                      >
-                        Create serve
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() =>
-                          void deviceMutations.updateMembership
-                            .mutateAsync({
-                              networkId: machine.networkId,
-                              endpointId: machine.endpointId,
-                              status:
-                                machine.status === "active"
-                                  ? "suspended"
-                                  : "active",
-                            })
-                            .then(() =>
-                              toast.success(
-                                machine.status === "active"
-                                  ? "Machine suspended"
-                                  : "Machine activated",
-                              ),
-                            )
-                            .catch((err: Error) => toast.error(err.message))
-                        }
-                      >
-                        {machine.status === "active" ? "Suspend" : "Activate"}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        variant="destructive"
-                        onClick={() =>
-                          setConfirmRemove({
-                            networkId: machine.networkId,
-                            endpointId: machine.endpointId,
-                            name: machine.name,
-                          })
-                        }
-                      >
-                        Remove
-                      </DropdownMenuItem>
+                      {machine.status === "pending" ? (
+                        <>
+                          <DropdownMenuItem
+                            onClick={() =>
+                              void deviceMutations.approve
+                                .mutateAsync({
+                                  networkId: machine.networkId,
+                                  endpointId: machine.endpointId,
+                                })
+                                .then(() => toast.success("Machine approved"))
+                                .catch((err: Error) => toast.error(err.message))
+                            }
+                          >
+                            Approve
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onClick={() =>
+                              void deviceMutations.reject
+                                .mutateAsync({
+                                  networkId: machine.networkId,
+                                  endpointId: machine.endpointId,
+                                })
+                                .then(() => toast.success("Machine rejected"))
+                                .catch((err: Error) => toast.error(err.message))
+                            }
+                          >
+                            Reject
+                          </DropdownMenuItem>
+                        </>
+                      ) : (
+                        <>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setActionEndpointId(machine.endpointId);
+                              setActionNetworkId(machine.networkId);
+                              setActionHostname(machine.name);
+                              setTunnelOpen(true);
+                            }}
+                          >
+                            Create tunnel
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setActionEndpointId(machine.endpointId);
+                              setActionNetworkId(machine.networkId);
+                              setActionHostname(machine.name);
+                              setServeOpen(true);
+                            }}
+                          >
+                            Create serve
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() =>
+                              void deviceMutations.updateMembership
+                                .mutateAsync({
+                                  networkId: machine.networkId,
+                                  endpointId: machine.endpointId,
+                                  status:
+                                    machine.status === "active"
+                                      ? "suspended"
+                                      : "active",
+                                })
+                                .then(() =>
+                                  toast.success(
+                                    machine.status === "active"
+                                      ? "Machine suspended"
+                                      : "Machine activated",
+                                  ),
+                                )
+                                .catch((err: Error) => toast.error(err.message))
+                            }
+                          >
+                            {machine.status === "active"
+                              ? "Suspend"
+                              : "Activate"}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onClick={() =>
+                              setConfirmRemove({
+                                networkId: machine.networkId,
+                                endpointId: machine.endpointId,
+                                name: machine.name,
+                              })
+                            }
+                          >
+                            Remove
+                          </DropdownMenuItem>
+                        </>
+                      )}
                     </>
                   ) : null}
                 </DropdownMenuGroup>
@@ -319,6 +360,8 @@ function MachinesPage() {
       },
     ],
     [
+      deviceMutations.approve,
+      deviceMutations.reject,
       deviceMutations.updateMembership,
       isAdmin,
       orgId,
@@ -342,6 +385,23 @@ function MachinesPage() {
         }
       />
 
+      {isAdmin && pendingCount > 0 ? (
+        <div className="bg-amber-500/10 text-amber-950 dark:text-amber-100 mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/30 px-4 py-3 text-sm">
+          <p>
+            {pendingCount === 1
+              ? "1 machine is waiting for approval."
+              : `${pendingCount} machines are waiting for approval.`}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setStatusFilter("pending")}
+          >
+            Show pending
+          </Button>
+        </div>
+      ) : null}
+
       <PageToolbar
         search={search}
         onSearchChange={(value) => {
@@ -355,7 +415,9 @@ function MachinesPage() {
           <Select
             value={statusFilter}
             onValueChange={(value) =>
-              setStatusFilter((value as "all" | "online" | "offline") ?? "all")
+              setStatusFilter(
+                (value as "all" | "online" | "offline" | "pending") ?? "all",
+              )
             }
           >
             <SelectTrigger className="w-[140px]">
@@ -365,6 +427,7 @@ function MachinesPage() {
               <SelectItem value="all">All statuses</SelectItem>
               <SelectItem value="online">Online</SelectItem>
               <SelectItem value="offline">Offline</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
             </SelectContent>
           </Select>
         }

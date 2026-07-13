@@ -72,10 +72,20 @@ pub enum RouteCommand {
 pub struct EnrollArgs {
     #[arg(long, env = "TUNTUN_CONTROL_URL")]
     pub control_url: String,
-    #[arg(long, env = "TUNTUN_ENROLL_TOKEN")]
-    pub token: String,
+    /// One-time enrollment token (primary path).
+    #[arg(long, env = "TUNTUN_ENROLL_TOKEN", conflicts_with = "org")]
+    pub token: Option<String>,
+    /// Organization slug for quick enroll (awaits admin approval).
+    #[arg(long, env = "TUNTUN_ORG_SLUG", conflicts_with = "token")]
+    pub org: Option<String>,
+    /// Network id or name for quick enroll (defaults to "default").
+    #[arg(long, env = "TUNTUN_NETWORK")]
+    pub network: Option<String>,
     #[arg(long, env = "TUNTUN_HOSTNAME")]
     pub hostname: Option<String>,
+    /// How long to wait for quick-enroll approval (seconds).
+    #[arg(long, default_value_t = 600)]
+    pub wait_secs: u64,
 }
 
 #[derive(Args, Debug)]
@@ -122,6 +132,23 @@ pub async fn run_enroll(args: EnrollArgs, state_dir: Option<&str>) -> anyhow::Re
     let paths = paths(state_dir);
     paths.ensure()?;
 
+    let token = args
+        .token
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let org = args
+        .org
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+
+    if token.is_none() && org.is_none() {
+        anyhow::bail!("provide --token <TOKEN> or --org <slug>");
+    }
+
     let hostname = args
         .hostname
         .or_else(|| std::env::var("HOSTNAME").ok())
@@ -135,9 +162,14 @@ pub async fn run_enroll(args: EnrollArgs, state_dir: Option<&str>) -> anyhow::Re
     let metadata =
         crate::system_info::collect_system_metadata(&hostname, env!("CARGO_PKG_VERSION"));
 
-    let resp = client
+    let (network_id, network_name) = parse_network_arg(args.network.as_deref())?;
+
+    let mut resp = client
         .enroll(tuntun_common::EnrollRequest {
-            enrollment_token: args.token,
+            enrollment_token: token,
+            organization_slug: org,
+            network_id,
+            network_name,
             endpoint_id: identity.endpoint_id_hex(),
             hostname: hostname.clone(),
             os: std::env::consts::OS.to_string(),
@@ -146,6 +178,16 @@ pub async fn run_enroll(args: EnrollArgs, state_dir: Option<&str>) -> anyhow::Re
         })
         .await
         .context("enroll with control plane")?;
+
+    if resp.status == "pending" {
+        println!(
+            "Quick enroll pending approval. endpoint_id={} network={} (waiting up to {}s)",
+            identity.endpoint_id_hex(),
+            resp.network_name,
+            args.wait_secs,
+        );
+        resp = wait_for_approval(&client, &identity, resp, args.wait_secs).await?;
+    }
 
     let membership = resp
         .snapshot
@@ -179,6 +221,62 @@ pub async fn run_enroll(args: EnrollArgs, state_dir: Option<&str>) -> anyhow::Re
         resp.network_name,
     );
     Ok(())
+}
+
+fn parse_network_arg(
+    network: Option<&str>,
+) -> anyhow::Result<(Option<uuid::Uuid>, Option<String>)> {
+    let Some(raw) = network.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok((None, None));
+    };
+    if let Ok(id) = uuid::Uuid::parse_str(raw) {
+        return Ok((Some(id), None));
+    }
+    Ok((None, Some(raw.to_string())))
+}
+
+async fn wait_for_approval(
+    client: &tuntun_core::UnauthedClient,
+    identity: &AgentIdentity,
+    pending: tuntun_common::EnrollResponse,
+    wait_secs: u64,
+) -> anyhow::Result<tuntun_common::EnrollResponse> {
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(wait_secs);
+    loop {
+        if tokio::time::Instant::now() >= deadline {
+            anyhow::bail!("timed out waiting for enrollment approval");
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+        let status = client
+            .enroll_status(tuntun_common::EnrollStatusRequest {
+                endpoint_id: identity.endpoint_id_hex(),
+                network_id: pending.network_id,
+            })
+            .await
+            .context("poll enroll status")?;
+
+        match status {
+            tuntun_common::EnrollStatusResponse::Pending { .. } => continue,
+            tuntun_common::EnrollStatusResponse::Rejected => {
+                anyhow::bail!("enrollment was rejected by an organization admin");
+            }
+            tuntun_common::EnrollStatusResponse::Active {
+                organization_id,
+                network_id,
+                network_name,
+                snapshot,
+            } => {
+                return Ok(tuntun_common::EnrollResponse {
+                    organization_id,
+                    network_id,
+                    network_name,
+                    status: "active".into(),
+                    snapshot,
+                });
+            }
+        }
+    }
 }
 
 pub async fn run_reset(args: ResetArgs, state_dir: Option<&str>) -> anyhow::Result<()> {

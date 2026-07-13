@@ -13,7 +13,7 @@ import { bumpNetworkAndNotify, bumpOrgAndNotify } from "../../lib/notify";
 import { removeDeviceMembership } from "../../lib/remove-device-membership";
 import { serializeDevice } from "../../lib/serialize-device";
 import { getAuth, requireAdmin, requireAuth } from "./middleware/authz";
-import { notFound, sessionPlugin } from "./middleware/session";
+import { badRequest, notFound, sessionPlugin } from "./middleware/session";
 
 async function getNetworkInOrg(networkId: string, organizationId: string) {
   return db.query.networks.findFirst({
@@ -190,6 +190,158 @@ export const devicesRoutes = new Elysia()
             lastSeen: row.membership.lastSeen,
             status: row.membership.status,
           });
+        },
+      )
+      .post(
+        "/organizations/:orgId/networks/:networkId/devices/:endpointId/approve",
+        async ({ authContext, params }) => {
+          const auth = getAuth({ authContext });
+          const network = await getNetworkInOrg(
+            params.networkId,
+            auth.organizationId,
+          );
+          if (!network) return notFound("Network not found");
+
+          const row = await db
+            .transaction(async (tx) => {
+              const membership = await tx.query.networkMemberships.findFirst({
+                where: and(
+                  eq(schema.networkMemberships.endpointId, params.endpointId),
+                  eq(schema.networkMemberships.networkId, params.networkId),
+                ),
+              });
+              if (!membership) {
+                throw new Error("Device not found");
+              }
+              if (membership.status !== "pending") {
+                throw new Error("Device is not pending approval");
+              }
+
+              const device = await tx.query.devices.findFirst({
+                where: eq(schema.devices.endpointId, params.endpointId),
+              });
+              if (!device || device.organizationId !== auth.organizationId) {
+                throw new Error("Device not found");
+              }
+
+              const [updated] = await tx
+                .update(schema.networkMemberships)
+                .set({ status: "active" })
+                .where(
+                  and(
+                    eq(schema.networkMemberships.endpointId, params.endpointId),
+                    eq(schema.networkMemberships.networkId, params.networkId),
+                  ),
+                )
+                .returning();
+
+              if (!updated) {
+                throw new Error("Device not found");
+              }
+
+              await writeAudit(tx, {
+                organizationId: auth.organizationId,
+                actor: auth.user.id,
+                action: "device.approved",
+                target: updated.endpointId,
+                metadata: { networkId: params.networkId },
+              });
+
+              await bumpNetworkAndNotify(
+                tx,
+                params.networkId,
+                auth.organizationId,
+              );
+
+              return { device, membership: updated };
+            })
+            .catch((e: unknown) => {
+              const message = e instanceof Error ? e.message : "Failed";
+              if (message === "Device not found") return null;
+              if (message === "Device is not pending approval") {
+                return "not_pending" as const;
+              }
+              throw e;
+            });
+
+          if (row === null) return notFound("Device not found");
+          if (row === "not_pending") {
+            return badRequest("Device is not pending approval");
+          }
+
+          return {
+            device: serializeDevice({
+              endpointId: row.device.endpointId,
+              organizationId: row.device.organizationId,
+              networkId: row.membership.networkId,
+              name: row.device.name,
+              metadata: row.device.metadata,
+              type: row.device.type,
+              assignedIp: row.membership.assignedIp,
+              publicIp: row.device.publicIp,
+              tenantIpv6: row.device.tenantIpv6,
+              ipv6Enabled: row.device.ipv6Enabled,
+              agentConnected: row.device.agentConnected,
+              connectedAt: row.device.connectedAt,
+              disconnectedAt: row.device.disconnectedAt,
+              lastHeartbeatAt: row.device.lastHeartbeatAt,
+              firstSeen: row.membership.firstSeen,
+              lastSeen: row.membership.lastSeen,
+              status: row.membership.status,
+            }),
+          };
+        },
+      )
+      .post(
+        "/organizations/:orgId/networks/:networkId/devices/:endpointId/reject",
+        async ({ authContext, params }) => {
+          const auth = getAuth({ authContext });
+          const network = await getNetworkInOrg(
+            params.networkId,
+            auth.organizationId,
+          );
+          if (!network) return notFound("Network not found");
+
+          const result = await db
+            .transaction(async (tx) => {
+              const membership = await tx.query.networkMemberships.findFirst({
+                where: and(
+                  eq(schema.networkMemberships.endpointId, params.endpointId),
+                  eq(schema.networkMemberships.networkId, params.networkId),
+                ),
+              });
+              if (!membership) {
+                throw new Error("Device not found");
+              }
+              if (membership.status !== "pending") {
+                throw new Error("Device is not pending approval");
+              }
+
+              await removeDeviceMembership(tx, {
+                organizationId: auth.organizationId,
+                actor: auth.user.id,
+                networkId: params.networkId,
+                endpointId: params.endpointId,
+                auditAction: "device.rejected",
+              });
+
+              return true;
+            })
+            .catch((e: unknown) => {
+              const message = e instanceof Error ? e.message : "Failed";
+              if (message === "Device not found") return null;
+              if (message === "Device is not pending approval") {
+                return "not_pending" as const;
+              }
+              throw e;
+            });
+
+          if (result === null) return notFound("Device not found");
+          if (result === "not_pending") {
+            return badRequest("Device is not pending approval");
+          }
+
+          return { ok: true as const };
         },
       ),
   )

@@ -18,8 +18,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
-import { authClient, useActiveOrganization } from "@/lib/auth-client";
+import { authClient } from "@/lib/auth-client";
 import {
   useInternalCa,
   useInternalCaMutations,
@@ -35,12 +36,15 @@ export const Route = createFileRoute("/app/settings/")({
 });
 
 function OrganizationSettingsPage() {
-  const { data: activeOrg } = useActiveOrganization();
+  const { data: activeOrg } = authClient.useActiveOrganization();
   const orgId = activeOrg?.id;
   const { data: role } = useMemberRole(orgId);
   const isAdmin = isAdminRole(role);
   const isOwner = role?.includes("owner") ?? false;
   const [name, setName] = useState(activeOrg?.name ?? "");
+  const [quickEnrollEnabled, setQuickEnrollEnabled] = useState(
+    activeOrg?.quickEnrollEnabled ?? true,
+  );
   const [loading, setLoading] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState("");
@@ -100,13 +104,22 @@ function OrganizationSettingsPage() {
     setClientSecret("");
   }, [ssoProvider]);
 
-  async function saveName(e: React.FormEvent) {
+  useEffect(() => {
+    if (!activeOrg) return;
+    setName(activeOrg.name);
+    setQuickEnrollEnabled(activeOrg.quickEnrollEnabled ?? true);
+  }, [activeOrg]);
+
+  async function saveGeneral(e: React.FormEvent) {
     e.preventDefault();
     if (!orgId) return;
     setLoading(true);
     const { error } = await authClient.organization.update({
       organizationId: orgId,
-      data: { name: name.trim() },
+      data: {
+        name: name.trim(),
+        quickEnrollEnabled,
+      },
     });
     setLoading(false);
     if (error) {
@@ -187,7 +200,7 @@ function OrganizationSettingsPage() {
         <CardContent>
           <form
             className="max-w-md space-y-4"
-            onSubmit={(e) => void saveName(e)}
+            onSubmit={(e) => void saveGeneral(e)}
           >
             <div className="space-y-2">
               <Label htmlFor="org-name">Organization name</Label>
@@ -201,6 +214,21 @@ function OrganizationSettingsPage() {
             <div className="space-y-2">
               <Label>Slug</Label>
               <Input value={activeOrg?.slug ?? ""} disabled />
+            </div>
+            <div className="flex items-center justify-between gap-4 rounded-lg border px-3 py-3">
+              <div className="space-y-1">
+                <Label htmlFor="quick-enroll">Quick enroll</Label>
+                <p className="text-muted-foreground text-xs leading-relaxed">
+                  Allow machines to join without a token. They stay pending
+                  until an admin approves.
+                </p>
+              </div>
+              <Switch
+                id="quick-enroll"
+                checked={quickEnrollEnabled}
+                onCheckedChange={setQuickEnrollEnabled}
+                disabled={!isAdmin}
+              />
             </div>
             {isAdmin ? (
               <Button type="submit" disabled={loading}>
@@ -254,7 +282,7 @@ function OrganizationSettingsPage() {
                   <p>
                     {ca?.notBefore
                       ? new Date(ca.notBefore).toLocaleString()
-                      : "—"}
+                      : "-"}
                   </p>
                 </div>
                 <div>
@@ -262,7 +290,7 @@ function OrganizationSettingsPage() {
                   <p>
                     {ca?.notAfter
                       ? `${new Date(ca.notAfter).toLocaleString()} (${formatDistanceToNow(new Date(ca.notAfter), { addSuffix: true })})`
-                      : "—"}
+                      : "-"}
                   </p>
                 </div>
               </div>
@@ -539,7 +567,7 @@ function OrganizationSettingsPage() {
             <span className="font-mono text-foreground">
               {peerDnsSuffix.trim() || "tuntun"}
             </span>
-            ) is used for mesh name resolution on agents — peers reach each
+            ) is used for mesh name resolution on agents - peers reach each
             other as{" "}
             <span className="font-mono text-foreground">
               hostname.{peerDnsSuffix.trim() || "tuntun"}

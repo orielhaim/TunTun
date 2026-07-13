@@ -220,6 +220,7 @@ async fn register_device_handler(
             device_type: parsed.device_type,
             metadata: parsed.metadata,
             public_ip: None,
+            membership_status: "active".into(),
         },
     )
     .await;

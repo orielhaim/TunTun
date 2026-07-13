@@ -35,7 +35,14 @@ pub const MAX_SKEW_SECS: i64 = 60;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnrollRequest {
-    pub enrollment_token: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enrollment_token: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub organization_slug: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub network_id: Option<Uuid>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub network_name: Option<String>,
     pub endpoint_id: EndpointIdHex,
     pub hostname: String,
     pub os: String,
@@ -44,12 +51,42 @@ pub struct EnrollRequest {
     pub metadata: Option<serde_json::Value>,
 }
 
+fn default_enroll_status() -> String {
+    "active".into()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnrollResponse {
     pub organization_id: String,
     pub network_id: Uuid,
     pub network_name: String,
+    /// `"pending"` for quick enroll awaiting approval; `"active"` otherwise.
+    #[serde(default = "default_enroll_status")]
+    pub status: String,
     pub snapshot: EndpointSnapshot,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnrollStatusRequest {
+    pub endpoint_id: EndpointIdHex,
+    pub network_id: Uuid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "lowercase")]
+pub enum EnrollStatusResponse {
+    Pending {
+        organization_id: String,
+        network_id: Uuid,
+        network_name: String,
+    },
+    Active {
+        organization_id: String,
+        network_id: Uuid,
+        network_name: String,
+        snapshot: EndpointSnapshot,
+    },
+    Rejected,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

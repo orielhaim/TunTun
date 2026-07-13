@@ -14,7 +14,8 @@ use serde_json::json;
 use std::net::SocketAddr;
 use tower_http::trace::TraceLayer;
 use tuntun_common::{
-    EndpointSnapshot, EnrollRequest, EnrollResponse, PollRequest, RegisterRequest,
+    EndpointSnapshot, EnrollRequest, EnrollResponse, EnrollStatusRequest, EnrollStatusResponse,
+    PollRequest, RegisterRequest,
     ws::{ClientMsg, ServerMsg},
 };
 
@@ -25,6 +26,7 @@ pub async fn serve(state: SharedState) -> anyhow::Result<()> {
     let public = Router::new()
         .route("/health", get(|| async { "ok" }))
         .route("/v1/enroll", post(enroll_handler))
+        .route("/v1/enroll/status", post(enroll_status_handler))
         .route("/v1/register", post(register_handler))
         .route("/v1/poll", post(poll_handler))
         .route("/v1/ws", get(ws_handler))
@@ -116,6 +118,10 @@ fn err(code: StatusCode, msg: &str) -> Response {
 
 // ---------- enroll ----------
 
+const DEFAULT_NETWORK_NAME: &str = "default";
+const DEFAULT_NETWORK_CIDR: &str = "10.7.0.0/24";
+const DEFAULT_NETWORK_MTU: i32 = 1280;
+
 async fn enroll_handler(
     State(state): State<SharedState>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
@@ -135,6 +141,16 @@ async fn enroll_handler(
     }
 }
 
+async fn enroll_status_handler(
+    State(state): State<SharedState>,
+    Json(req): Json<EnrollStatusRequest>,
+) -> Response {
+    match enroll_status_inner(&state, req).await {
+        Ok(resp) => (StatusCode::OK, Json(resp)).into_response(),
+        Err((code, msg)) => err(code, &msg),
+    }
+}
+
 async fn enroll_inner(
     state: &SharedState,
     req: EnrollRequest,
@@ -146,7 +162,76 @@ async fn enroll_inner(
         return Err((StatusCode::BAD_REQUEST, "hostname too long".into()));
     }
 
-    let token_hash = crate::enrollment::hash_token(&req.enrollment_token);
+    let token = req
+        .enrollment_token
+        .as_deref()
+        .map(str::trim)
+        .filter(|t| !t.is_empty());
+    let org_slug = req
+        .organization_slug
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+
+    let (organization_id, network_id, membership_status) = match (token, org_slug) {
+        (Some(token), None) => {
+            let (org_id, net_id) = consume_enrollment_token(state, token).await?;
+            (org_id, net_id, "active".to_string())
+        }
+        (None, Some(slug)) => resolve_quick_enroll(state, slug, &req).await?,
+        (Some(_), Some(_)) => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "provide either enrollment_token or organization_slug, not both".into(),
+            ));
+        }
+        (None, None) => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "enrollment_token or organization_slug is required".into(),
+            ));
+        }
+    };
+
+    let device_type = req
+        .metadata
+        .as_ref()
+        .and_then(|m| m.get("kind"))
+        .and_then(|k| k.as_str())
+        .unwrap_or("agent")
+        .to_string();
+
+    let resp = crate::register::register_device(
+        &state.pool,
+        &state.policy_key,
+        crate::register::RegisterDeviceParams {
+            endpoint_id: req.endpoint_id.clone(),
+            organization_id,
+            network_id,
+            hostname: req.hostname.clone(),
+            os: req.os.clone(),
+            agent_version: req.agent_version.clone(),
+            device_type,
+            metadata: req.metadata.clone(),
+            public_ip,
+            membership_status,
+        },
+    )
+    .await?;
+
+    state
+        .metrics
+        .http_requests
+        .with_label_values(&["enroll", "200"])
+        .inc();
+    Ok(resp)
+}
+
+async fn consume_enrollment_token(
+    state: &SharedState,
+    token: &str,
+) -> Result<(String, uuid::Uuid), (StatusCode, String)> {
+    let token_hash = crate::enrollment::hash_token(token);
 
     let mut tx = state
         .pool
@@ -182,37 +267,185 @@ async fn enroll_inner(
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db: {e}")))?;
 
-    let device_type = req
-        .metadata
-        .as_ref()
-        .and_then(|m| m.get("kind"))
-        .and_then(|k| k.as_str())
-        .unwrap_or("agent")
-        .to_string();
+    Ok((organization_id, network_id))
+}
 
-    let resp = crate::register::register_device(
-        &state.pool,
-        &state.policy_key,
-        crate::register::RegisterDeviceParams {
-            endpoint_id: req.endpoint_id.clone(),
-            organization_id,
-            network_id,
-            hostname: req.hostname.clone(),
-            os: req.os.clone(),
-            agent_version: req.agent_version.clone(),
-            device_type,
-            metadata: req.metadata.clone(),
-            public_ip,
-        },
+async fn resolve_quick_enroll(
+    state: &SharedState,
+    slug: &str,
+    req: &EnrollRequest,
+) -> Result<(String, uuid::Uuid, String), (StatusCode, String)> {
+    if slug.len() > 128 {
+        return Err((StatusCode::BAD_REQUEST, "organization_slug too long".into()));
+    }
+
+    let org: Option<(String, bool)> =
+        sqlx::query_as("SELECT id, quick_enroll_enabled FROM organization WHERE slug = $1")
+            .bind(slug)
+            .fetch_optional(&state.pool)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db: {e}")))?;
+
+    let (organization_id, quick_enroll_enabled) = org.ok_or_else(|| {
+        state
+            .metrics
+            .auth_failures
+            .with_label_values(&["bad_quick_enroll"])
+            .inc();
+        (StatusCode::NOT_FOUND, "organization not found".into())
+    })?;
+
+    if !quick_enroll_enabled {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "quick enroll is disabled for this organization".into(),
+        ));
+    }
+
+    let network_id = resolve_quick_enroll_network(state, &organization_id, req).await?;
+    Ok((organization_id, network_id, "pending".to_string()))
+}
+
+async fn resolve_quick_enroll_network(
+    state: &SharedState,
+    organization_id: &str,
+    req: &EnrollRequest,
+) -> Result<uuid::Uuid, (StatusCode, String)> {
+    if let Some(network_id) = req.network_id {
+        let exists: Option<(uuid::Uuid,)> =
+            sqlx::query_as("SELECT id FROM networks WHERE id = $1 AND organization_id = $2")
+                .bind(network_id)
+                .bind(organization_id)
+                .fetch_optional(&state.pool)
+                .await
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db: {e}")))?;
+        return exists
+            .map(|(id,)| id)
+            .ok_or_else(|| (StatusCode::NOT_FOUND, "network not found".into()));
+    }
+
+    let name = req
+        .network_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(DEFAULT_NETWORK_NAME);
+
+    if let Some((id,)) = sqlx::query_as::<_, (uuid::Uuid,)>(
+        "SELECT id FROM networks WHERE organization_id = $1 AND name = $2",
     )
-    .await?;
+    .bind(organization_id)
+    .bind(name)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db: {e}")))?
+    {
+        return Ok(id);
+    }
 
-    state
-        .metrics
-        .http_requests
-        .with_label_values(&["enroll", "200"])
-        .inc();
-    Ok(resp)
+    if name != DEFAULT_NETWORK_NAME {
+        return Err((StatusCode::NOT_FOUND, "network not found".into()));
+    }
+
+    ensure_default_network(&state.pool, organization_id).await
+}
+
+async fn ensure_default_network(
+    pool: &sqlx::PgPool,
+    organization_id: &str,
+) -> Result<uuid::Uuid, (StatusCode, String)> {
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db: {e}")))?;
+
+    let existing: Option<(uuid::Uuid,)> = sqlx::query_as(
+        "SELECT id FROM networks WHERE organization_id = $1 AND name = $2 FOR UPDATE",
+    )
+    .bind(organization_id)
+    .bind(DEFAULT_NETWORK_NAME)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db: {e}")))?;
+
+    if let Some((id,)) = existing {
+        tx.commit()
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db: {e}")))?;
+        return Ok(id);
+    }
+
+    let (id,): (uuid::Uuid,) = sqlx::query_as(
+        "INSERT INTO networks (organization_id, name, cidr, mtu) \
+         VALUES ($1, $2, $3::cidr, $4) \
+         RETURNING id",
+    )
+    .bind(organization_id)
+    .bind(DEFAULT_NETWORK_NAME)
+    .bind(DEFAULT_NETWORK_CIDR)
+    .bind(DEFAULT_NETWORK_MTU)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db: {e}")))?;
+
+    tx.commit()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db: {e}")))?;
+
+    Ok(id)
+}
+
+async fn enroll_status_inner(
+    state: &SharedState,
+    req: EnrollStatusRequest,
+) -> Result<EnrollStatusResponse, (StatusCode, String)> {
+    tuntun_common::validate_endpoint_id(&req.endpoint_id)
+        .map_err(|_| (StatusCode::BAD_REQUEST, "invalid endpoint_id".into()))?;
+
+    let row: Option<(String, String, String)> = sqlx::query_as(
+        "SELECT d.organization_id, n.name, nm.status \
+         FROM network_memberships nm \
+         JOIN devices d ON d.endpoint_id = nm.endpoint_id \
+         JOIN networks n ON n.id = nm.network_id \
+         WHERE nm.endpoint_id = $1 AND nm.network_id = $2",
+    )
+    .bind(&req.endpoint_id)
+    .bind(req.network_id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db: {e}")))?;
+
+    let Some((organization_id, network_name, status)) = row else {
+        return Ok(EnrollStatusResponse::Rejected);
+    };
+
+    match status.as_str() {
+        "pending" => Ok(EnrollStatusResponse::Pending {
+            organization_id,
+            network_id: req.network_id,
+            network_name,
+        }),
+        "active" => {
+            let snapshot = crate::snapshot::build_endpoint_snapshot(
+                &state.pool,
+                &state.policy_key,
+                &req.endpoint_id,
+            )
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("snapshot: {e}")))?;
+            Ok(EnrollStatusResponse::Active {
+                organization_id,
+                network_id: req.network_id,
+                network_name,
+                snapshot,
+            })
+        }
+        "suspended" => Err((
+            StatusCode::FORBIDDEN,
+            "device membership is suspended".into(),
+        )),
+        _ => Ok(EnrollStatusResponse::Rejected),
+    }
 }
 
 async fn register_handler(State(state): State<SharedState>, req: Request<Body>) -> Response {

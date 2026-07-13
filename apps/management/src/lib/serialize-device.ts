@@ -53,7 +53,7 @@ export function serializeDevice(row: {
     lastHeartbeatAt: toIso(row.lastHeartbeatAt),
     firstSeen: toIso(row.firstSeen)!,
     lastSeen: toIso(row.lastSeen)!,
-    status: row.status as "active" | "suspended",
+    status: row.status as "active" | "suspended" | "pending",
   };
 }
 

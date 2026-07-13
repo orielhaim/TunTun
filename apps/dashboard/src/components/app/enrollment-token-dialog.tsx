@@ -85,7 +85,8 @@ export function EnrollmentTokenDialog({
         <DialogHeader>
           <DialogTitle>Generate enrollment token</DialogTitle>
           <DialogDescription>
-            Use this token once to enroll a machine into a network.
+            Primary path: one-time token. Machines can also quick enroll with
+            your org slug and wait for approval.
           </DialogDescription>
         </DialogHeader>
 

@@ -18,8 +18,8 @@ export function AddMachinePanel({ className }: { className?: string }) {
           Add machines to your organization
         </CardTitle>
         <p className="text-muted-foreground text-sm">
-          Install the TunTun agent on your devices, then enroll with a token
-          from any network.
+          Install the TunTun agent, then enroll with a token or quick enroll
+          with your organization slug.
         </p>
       </CardHeader>
       <CardContent>

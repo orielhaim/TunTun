@@ -39,6 +39,7 @@ export const organization = pgTable(
     snapshotVersion: bigint("snapshot_version", { mode: "number" })
       .notNull()
       .default(0),
+    quickEnrollEnabled: boolean("quick_enroll_enabled").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

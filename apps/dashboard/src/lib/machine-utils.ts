@@ -25,7 +25,12 @@ export function aggregateMachines(
   );
 }
 
-export type MachinePresence = "online" | "stale" | "offline" | "suspended";
+export type MachinePresence =
+  | "online"
+  | "stale"
+  | "offline"
+  | "suspended"
+  | "pending";
 
 /** Agent heartbeats arrive every ~30s; allow one missed beat. */
 export const HEARTBEAT_ONLINE_MS = 45_000;
@@ -35,6 +40,7 @@ export function getMachinePresence(
   now = Date.now(),
 ): MachinePresence {
   if (device.status === "suspended") return "suspended";
+  if (device.status === "pending") return "pending";
 
   if (device.agentConnected && device.lastHeartbeatAt) {
     const heartbeatAge = now - new Date(device.lastHeartbeatAt).getTime();

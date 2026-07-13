@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ADD COLUMN "quick_enroll_enabled" boolean DEFAULT true NOT NULL;

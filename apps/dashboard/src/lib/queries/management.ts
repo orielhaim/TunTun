@@ -59,7 +59,11 @@ export function useMachines(orgId: string | undefined) {
 
       return aggregateMachines(networks, devicesByNetwork);
     },
-    refetchInterval: false,
+    refetchInterval: (query) => {
+      const machines = query.state.data;
+      if (machines?.some((m) => m.status === "pending")) return 5_000;
+      return false;
+    },
   });
 }
 
@@ -385,6 +389,38 @@ export function useDeviceMutations(orgId: string | undefined) {
           networkId,
           endpointId,
           { status },
+        );
+      },
+      onSuccess: invalidate,
+    }),
+    approve: useMutation({
+      mutationFn: async ({
+        networkId,
+        endpointId,
+      }: {
+        networkId: string;
+        endpointId: string;
+      }) => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).approveDevice(
+          networkId,
+          endpointId,
+        );
+      },
+      onSuccess: invalidate,
+    }),
+    reject: useMutation({
+      mutationFn: async ({
+        networkId,
+        endpointId,
+      }: {
+        networkId: string;
+        endpointId: string;
+      }) => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).rejectDevice(
+          networkId,
+          endpointId,
         );
       },
       onSuccess: invalidate,

@@ -1,5 +1,6 @@
 import {
   apiKeyListResponse,
+  approveDeviceResponse,
   auditListResponse,
   type CreateApiKeyBody,
   type CreateEnrollmentTokenBody,
@@ -70,6 +71,7 @@ import {
   patchTunnelRoutingRuleBody,
   policyListResponse,
   policySchema,
+  rejectDeviceResponse,
   relayHealthResponse,
   relayListResponse,
   relaySchema,
@@ -219,6 +221,22 @@ export function createManagementClient(orgId: string) {
           body: JSON.stringify(patchDeviceMembershipBody.parse(body)),
         },
         deviceListResponse.shape.devices.element,
+      ),
+
+    approveDevice: (networkId: string, endpointId: string) =>
+      request(
+        orgId,
+        org(`/networks/${networkId}/devices/${endpointId}/approve`),
+        { method: "POST" },
+        approveDeviceResponse,
+      ),
+
+    rejectDevice: (networkId: string, endpointId: string) =>
+      request(
+        orgId,
+        org(`/networks/${networkId}/devices/${endpointId}/reject`),
+        { method: "POST" },
+        rejectDeviceResponse,
       ),
 
     getDevice: (endpointId: string) =>

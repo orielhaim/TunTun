@@ -129,6 +129,18 @@ export const auth = betterAuth({
   plugins: [
     organization({
       allowUserToCreateOrganization: true,
+      schema: {
+        organization: {
+          additionalFields: {
+            quickEnrollEnabled: {
+              type: "boolean",
+              required: false,
+              defaultValue: true,
+              input: true,
+            },
+          },
+        },
+      },
       organizationHooks: {
         afterCreateOrganization: async ({ organization, user }) => {
           await createDefaultNetwork(organization.id, user.id);

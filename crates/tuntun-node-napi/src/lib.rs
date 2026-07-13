@@ -124,7 +124,10 @@ pub async fn enroll(cfg: EnrollConfig) -> Result<EnrollResult> {
         let client = tuntun_core::UnauthedClient::new(cfg.control_url.clone()).map_err(err)?;
         client
             .enroll(tuntun_common::EnrollRequest {
-                enrollment_token: token,
+                enrollment_token: Some(token),
+                organization_slug: None,
+                network_id: None,
+                network_name: None,
                 endpoint_id: identity.endpoint_id_hex(),
                 hostname: hostname.clone(),
                 os: std::env::consts::OS.to_string(),

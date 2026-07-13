@@ -36,6 +36,26 @@ impl UnauthedClient {
         }
         Ok(serde_json::from_str(&body)?)
     }
+
+    pub async fn enroll_status(
+        &self,
+        req: tuntun_common::EnrollStatusRequest,
+    ) -> anyhow::Result<tuntun_common::EnrollStatusResponse> {
+        let url = format!("{}/v1/enroll/status", self.base);
+        let resp = self
+            .http
+            .post(&url)
+            .json(&req)
+            .send()
+            .await
+            .with_context(|| format!("POST {url}"))?;
+        let status = resp.status();
+        let body = resp.text().await?;
+        if !status.is_success() {
+            anyhow::bail!("enroll status failed: {status}: {body}");
+        }
+        Ok(serde_json::from_str(&body)?)
+    }
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -106,6 +126,7 @@ impl ManagementClient {
             organization_id: parsed.organization_id,
             network_id: parsed.network_id,
             network_name: parsed.network_name,
+            status: "active".into(),
             snapshot: parsed.snapshot,
         })
     }

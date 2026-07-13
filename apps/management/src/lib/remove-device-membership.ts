@@ -12,6 +12,8 @@ export type RemoveDeviceMembershipInput = {
   actor: string;
   networkId: string;
   endpointId: string;
+  /** Defaults to `device.deleted`. */
+  auditAction?: string;
 };
 
 export async function removeDeviceMembership(
@@ -65,7 +67,7 @@ export async function removeDeviceMembership(
   await writeAudit(tx, {
     organizationId: input.organizationId,
     actor: input.actor,
-    action: "device.deleted",
+    action: input.auditAction ?? "device.deleted",
     target: deleted.endpointId,
     metadata: { networkId: input.networkId },
   });

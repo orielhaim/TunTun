@@ -2,6 +2,7 @@ import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { ssoClient } from "@better-auth/sso/client";
 import {
   deviceAuthorizationClient,
+  inferOrgAdditionalFields,
   organizationClient,
 } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
@@ -14,7 +15,18 @@ export const authClient = createAuthClient({
     credentials: "include",
   },
   plugins: [
-    organizationClient(),
+    organizationClient({
+      schema: inferOrgAdditionalFields({
+        organization: {
+          additionalFields: {
+            quickEnrollEnabled: {
+              type: "boolean",
+              defaultValue: true,
+            },
+          },
+        },
+      }),
+    }),
     ssoClient(),
     oauthProviderClient(),
     deviceAuthorizationClient(),

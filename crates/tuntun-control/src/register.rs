@@ -13,6 +13,8 @@ pub struct RegisterDeviceParams {
     pub device_type: String,
     pub metadata: Option<serde_json::Value>,
     pub public_ip: Option<std::net::IpAddr>,
+    /// `"active"` (token/SDK) or `"pending"` (quick enroll).
+    pub membership_status: String,
 }
 
 pub async fn register_device(
@@ -30,6 +32,12 @@ pub async fn register_device(
         return Err((
             axum::http::StatusCode::BAD_REQUEST,
             "hostname too long".into(),
+        ));
+    }
+    if params.membership_status != "active" && params.membership_status != "pending" {
+        return Err((
+            axum::http::StatusCode::BAD_REQUEST,
+            "invalid membership status".into(),
         ));
     }
 
@@ -58,6 +66,27 @@ pub async fn register_device(
         return Err((
             axum::http::StatusCode::NOT_FOUND,
             "network not found".into(),
+        ));
+    }
+
+    let existing_org: Option<String> =
+        sqlx::query_scalar("SELECT organization_id FROM devices WHERE endpoint_id = $1")
+            .bind(&params.endpoint_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| {
+                (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("db: {e}"),
+                )
+            })?;
+
+    if let Some(ref org) = existing_org
+        && org != &params.organization_id
+    {
+        return Err((
+            axum::http::StatusCode::CONFLICT,
+            "endpoint already enrolled in another organization".into(),
         ));
     }
 
@@ -91,6 +120,7 @@ pub async fn register_device(
          ON CONFLICT (endpoint_id) DO UPDATE \
          SET metadata = devices.metadata || EXCLUDED.metadata, \
              type = EXCLUDED.type, \
+             name = EXCLUDED.name, \
              last_seen = now()",
     )
     .bind(&params.endpoint_id)
@@ -108,16 +138,38 @@ pub async fn register_device(
         )
     })?;
 
+    // Active always wins (token enroll can approve a pending machine).
+    // Pending never downgrades an already-active membership.
     sqlx::query(
-        "INSERT INTO network_memberships (endpoint_id, network_id, assigned_ip) \
-         VALUES ($1, $2, $3) \
+        "INSERT INTO network_memberships (endpoint_id, network_id, assigned_ip, status) \
+         VALUES ($1, $2, $3, $4) \
          ON CONFLICT (endpoint_id, network_id) DO UPDATE \
-         SET assigned_ip = EXCLUDED.assigned_ip, last_seen = now()",
+         SET assigned_ip = EXCLUDED.assigned_ip, \
+             last_seen = now(), \
+             status = CASE \
+               WHEN EXCLUDED.status = 'active' THEN 'active' \
+               ELSE network_memberships.status \
+             END",
     )
     .bind(&params.endpoint_id)
     .bind(params.network_id)
     .bind(crate::pg_inet::pg_host(alloc.ip))
+    .bind(&params.membership_status)
     .execute(&mut *tx)
+    .await
+    .map_err(|e| {
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            format!("db: {e}"),
+        )
+    })?;
+
+    let (final_status,): (String,) = sqlx::query_as(
+        "SELECT status FROM network_memberships WHERE endpoint_id = $1 AND network_id = $2",
+    )
+    .bind(&params.endpoint_id)
+    .bind(params.network_id)
+    .fetch_one(&mut *tx)
     .await
     .map_err(|e| {
         (
@@ -202,25 +254,36 @@ pub async fn register_device(
         })
     });
 
-    let snap = crate::snapshot::build_endpoint_snapshot(pool, policy_key, &params.endpoint_id)
-        .await
-        .map_err(|e| {
-            (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                format!("snapshot: {e}"),
-            )
-        })?;
+    let snap = if final_status == "active" {
+        crate::snapshot::build_endpoint_snapshot(pool, policy_key, &params.endpoint_id)
+            .await
+            .map_err(|e| {
+                (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("snapshot: {e}"),
+                )
+            })?
+    } else {
+        empty_pending_snapshot()
+    };
+
+    let audit_action = if final_status == "pending" {
+        "device.enroll_pending"
+    } else {
+        "device.enrolled"
+    };
 
     crate::audit::log(
         pool,
         Some(&params.organization_id),
         Some(&params.endpoint_id),
-        "device.enrolled",
+        audit_action,
         Some(&params.endpoint_id),
         serde_json::json!({
             "hostname": params.hostname,
             "ip": alloc.ip,
             "type": params.device_type,
+            "status": final_status,
         }),
         None,
     )
@@ -250,6 +313,19 @@ pub async fn register_device(
         organization_id: params.organization_id,
         network_id: params.network_id,
         network_name,
+        status: final_status,
         snapshot: snap,
     })
+}
+
+fn empty_pending_snapshot() -> tuntun_common::EndpointSnapshot {
+    tuntun_common::EndpointSnapshot {
+        ipv6_enabled: false,
+        tenant_ipv6: None,
+        memberships: vec![],
+        ipv6_peers: vec![],
+        org_policy: tuntun_common::policy::PolicyBundle::default(),
+        org_ca_pem: None,
+        version: 0,
+    }
 }

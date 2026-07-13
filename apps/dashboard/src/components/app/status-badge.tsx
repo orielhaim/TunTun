@@ -11,6 +11,7 @@ const labels: Record<MachinePresence, string> = {
   stale: "Stale",
   offline: "Offline",
   suspended: "Suspended",
+  pending: "Pending",
 };
 
 const variants: Record<
@@ -21,6 +22,7 @@ const variants: Record<
   stale: "secondary",
   offline: "outline",
   suspended: "destructive",
+  pending: "secondary",
 };
 
 const dotClass: Record<MachinePresence, string> = {
@@ -28,6 +30,7 @@ const dotClass: Record<MachinePresence, string> = {
   stale: "bg-amber-400",
   offline: "bg-muted-foreground/40",
   suspended: "bg-destructive",
+  pending: "bg-amber-400",
 };
 
 export const StatusBadge = memo(function StatusBadge({

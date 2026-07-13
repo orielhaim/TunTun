@@ -75,7 +75,15 @@ export const patchDeviceBody = z
   });
 
 export const patchDeviceMembershipBody = z.object({
-  status: deviceStatusSchema,
+  status: z.enum(["active", "suspended"]),
+});
+
+export const approveDeviceResponse = z.object({
+  device: deviceSchema,
+});
+
+export const rejectDeviceResponse = z.object({
+  ok: z.literal(true),
 });
 
 export const deviceListResponse = z.object({
@@ -108,3 +116,5 @@ export type PatchDeviceBody = z.infer<typeof patchDeviceBody>;
 export type PatchDeviceMembershipBody = z.infer<
   typeof patchDeviceMembershipBody
 >;
+export type ApproveDeviceResponse = z.infer<typeof approveDeviceResponse>;
+export type RejectDeviceResponse = z.infer<typeof rejectDeviceResponse>;
