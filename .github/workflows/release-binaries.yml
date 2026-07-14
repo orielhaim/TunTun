@@ -83,6 +83,7 @@ jobs:
     name: Binaries - ${{ matrix.target }}
     needs: [validate]
     runs-on: ${{ matrix.host }}
+    environment: production
     strategy:
       fail-fast: false
       matrix:
@@ -99,8 +100,6 @@ jobs:
             target: aarch64-unknown-linux-musl
             cross: true
           - host: macos-latest
-            target: x86_64-apple-darwin
-          - host: macos-latest
             target: aarch64-apple-darwin
           - host: windows-latest
             target: x86_64-pc-windows-msvc
@@ -116,7 +115,7 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           targets: ${{ matrix.target }}
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry/index/
@@ -190,7 +189,6 @@ jobs:
     needs: [validate, build-binaries]
     if: needs.validate.outputs.dry-run != 'true'
     runs-on: ubuntu-latest
-    environment: production
     steps:
       - uses: actions/checkout@v7
         with:
@@ -248,7 +246,7 @@ jobs:
           path: artifacts
           merge-multiple: true
 
-      - uses: actions/attest-build-provenance@v2
+      - uses: actions/attest@v4
         with:
           subject-path: |
             artifacts/*.tar.gz

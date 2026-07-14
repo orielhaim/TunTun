@@ -84,6 +84,7 @@ jobs:
     name: SDK - ${{ matrix.target }}
     needs: [validate]
     runs-on: ${{ matrix.host }}
+    environment: production
     defaults:
       run:
         working-directory: crates/tuntun-node-napi
@@ -91,9 +92,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - host: macos-latest
-            target: x86_64-apple-darwin
-            build: bun run build -- --target x86_64-apple-darwin
           - host: macos-latest
             target: aarch64-apple-darwin
             build: bun run build -- --target aarch64-apple-darwin
@@ -105,16 +103,13 @@ jobs:
             build: bun run build -- --target aarch64-pc-windows-msvc
           - host: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            build: bun run build -- --target x86_64-unknown-linux-gnu --use-napi-cross
+            build: TARGET_CC=clang TARGET_CXX=clang++ bun run build -- --target x86_64-unknown-linux-gnu --use-napi-cross
           - host: ubuntu-latest
             target: aarch64-unknown-linux-gnu
-            build: bun run build -- --target aarch64-unknown-linux-gnu --use-napi-cross
+            build: TARGET_CC=clang TARGET_CXX=clang++ bun run build -- --target aarch64-unknown-linux-gnu --use-napi-cross
           - host: ubuntu-latest
             target: x86_64-unknown-linux-musl
             build: bun run build -- --target x86_64-unknown-linux-musl -x
-          - host: ubuntu-latest
-            target: aarch64-unknown-linux-musl
-            build: bun run build -- --target aarch64-unknown-linux-musl -x
     steps:
       - uses: actions/checkout@v7
         with:
@@ -127,7 +122,7 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           targets: ${{ matrix.target }}
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry/index/
@@ -168,7 +163,6 @@ jobs:
     needs: [validate, build-sdk]
     if: needs.validate.outputs.dry-run != 'true'
     runs-on: ubuntu-latest
-    environment: production
     defaults:
       run:
         working-directory: crates/tuntun-node-napi
@@ -179,7 +173,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "24"
           registry-url: https://registry.npmjs.org
