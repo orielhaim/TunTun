@@ -14,3 +14,5 @@ dist-ssr
 __unconfig*
 todos.json
 *.key
+**/.vitepress/cache/
+**/.vitepress/dist/
