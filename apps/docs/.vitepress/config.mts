@@ -23,6 +23,28 @@ export default defineConfig({
           "Private overlay networking with an open control plane. Mesh VPN, tunnels, internal services, file transfer, and SSH - all in one.",
       },
     ],
+
+    [
+      "meta",
+      {
+        name: "og:image",
+        content: "/banner.jpg",
+      },
+    ],
+    [
+      "meta",
+      {
+        name: "twitter:card",
+        content: "summary_large_image",
+      },
+    ],
+    [
+      "meta",
+      {
+        name: "twitter:image",
+        content: "/banner.jpg",
+      },
+    ],
   ],
 
   themeConfig: {
