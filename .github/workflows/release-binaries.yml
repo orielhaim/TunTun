@@ -184,9 +184,35 @@ jobs:
             ${{ steps.package.outputs.asset }}.sha256
           if-no-files-found: error
 
+  package-installers:
+    name: Package install scripts
+    needs: [validate]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+
+      - name: Stage installers
+        shell: bash
+        run: |
+          cp scripts/install.sh scripts/install.ps1 .
+          sha256sum install.sh > install.sh.sha256
+          sha256sum install.ps1 > install.ps1.sha256
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: installers
+          path: |
+            install.sh
+            install.ps1
+            install.sh.sha256
+            install.ps1.sha256
+          if-no-files-found: error
+
   github-release:
     name: GitHub Release (draft)
-    needs: [validate, build-binaries]
+    needs: [validate, build-binaries, package-installers]
     if: needs.validate.outputs.dry-run != 'true'
     runs-on: ubuntu-latest
     steps:
@@ -201,23 +227,29 @@ jobs:
           path: artifacts
           merge-multiple: true
 
+      - uses: actions/download-artifact@v8
+        with:
+          name: installers
+          path: artifacts
+
       - name: Generate release notes
         shell: bash
         run: |
           version="${{ needs.validate.outputs.version }}"
+          repo="${{ github.repository }}"
           {
-            echo "## Checksums"
-            echo ""
-            echo '```'
-            cat artifacts/*.sha256
-            echo '```'
-            echo ""
             echo "## Installation"
             echo ""
+            echo "### Linux / macOS"
+            echo ""
             echo '```bash'
-            echo "# Linux x86_64"
-            echo "curl -fsSL https://github.com/${{ github.repository }}/releases/download/v${version}/tuntun-${version}-x86_64-unknown-linux-gnu.tar.gz | tar xz"
-            echo "sudo mv tuntun-${version}-x86_64-unknown-linux-gnu/tuntun* /usr/local/bin/"
+            echo "curl -fsSL https://github.com/${repo}/releases/latest/download/install.sh | sh"
+            echo '```'
+            echo ""
+            echo "### Windows (PowerShell as Administrator)"
+            echo ""
+            echo '```powershell'
+            echo "irm https://github.com/${repo}/releases/latest/download/install.ps1 | iex"
             echo '```'
           } > release-notes.md
 
@@ -233,6 +265,8 @@ jobs:
             artifacts/*.tar.gz
             artifacts/*.zip
             artifacts/*.sha256
+            artifacts/install.sh
+            artifacts/install.ps1
 
   attest:
     name: Attestation

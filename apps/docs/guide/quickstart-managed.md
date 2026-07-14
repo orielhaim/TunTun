@@ -2,6 +2,10 @@
 
 Managed mode is TunTun's full-featured deployment with a control plane, dashboard, SSO, access policies, and organization management. This is the mode for teams and organizations.
 
+## 0. Install the agent
+
+On every machine that will join the mesh make sure to install the agent first: [Installation](/guide/installation).
+
 ## 1. Set up the infrastructure
 
 Create a `.env` file in the repository root:

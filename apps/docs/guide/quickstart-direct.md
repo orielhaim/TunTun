@@ -4,6 +4,10 @@ Direct mode creates a peer-to-peer mesh network with **no control plane, no serv
 
 This mode is ideal for individuals, small groups, or situations where you cannot or do not want to run any servers.
 
+## 0. Install the agent
+
+On every machine that will join the mesh make sure to install the agent first: [Installation](/guide/installation).
+
 ## 1. Create a network
 
 On the first machine:

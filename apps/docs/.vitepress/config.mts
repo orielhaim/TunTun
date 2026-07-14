@@ -230,6 +230,7 @@ export default defineConfig({
             { text: "tuntun login / logout", link: "/cli/login" },
             { text: "Direct Mode Commands", link: "/cli/direct" },
             { text: "tuntun service", link: "/cli/service" },
+            { text: "tuntun update", link: "/cli/update" },
             { text: "tuntun-relay", link: "/cli/relay" },
           ],
         },

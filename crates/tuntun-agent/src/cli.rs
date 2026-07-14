@@ -3,8 +3,16 @@ use clap::{Args, Parser, Subcommand};
 use tuntun_core::{AgentIdentity, ManagedState, PersistedState, StatePaths};
 
 #[derive(Parser, Debug)]
-#[command(name = "tuntun", about = "TunTun - mesh networking, serve, and tunnel")]
+#[command(
+    name = "tuntun",
+    about = "TunTun - mesh networking, serve, and tunnel",
+    version = env!("CARGO_PKG_VERSION"),
+    disable_version_flag = true
+)]
 pub struct Cli {
+    /// Print version and exit
+    #[arg(short = 'v', long = "version", action = clap::ArgAction::Version)]
+    _version: bool,
     #[arg(long, env = "TUNTUN_STATE_DIR", global = true)]
     pub state_dir: Option<String>,
     #[arg(long, env = "TUNTUN_JSON_LOGS", global = true)]
@@ -63,6 +71,11 @@ pub enum Command {
     Login(crate::cmds_login::LoginArgs),
     /// Clear stored management tokens
     Logout(crate::cmds_login::LogoutArgs),
+    /// Update this binary from GitHub Releases
+    ///
+    /// Linux default: download + graceful reload (SIGHUP / ecdysis).
+    /// Pass `--restart` for a hard service restart. Windows always restarts.
+    Update(crate::cmds_update::UpdateArgs),
 
     // --- Direct mode ---
     /// Create a Direct (P2P) network - no control plane

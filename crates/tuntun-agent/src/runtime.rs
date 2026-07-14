@@ -240,8 +240,19 @@ pub async fn run(
         });
     }
 
-    tokio::signal::ctrl_c().await?;
-    tracing::info!("ctrl-c, shutting down");
-    node.shutdown().await;
-    Ok(())
+    #[cfg(unix)]
+    {
+        let upgrade = crate::upgrade::UpgradeGuard::install()?;
+        let reason = upgrade.wait().await;
+        tracing::info!(?reason, "shutdown signal; draining");
+        node.shutdown().await;
+        Ok(())
+    }
+    #[cfg(not(unix))]
+    {
+        tokio::signal::ctrl_c().await?;
+        tracing::info!("ctrl-c, shutting down");
+        node.shutdown().await;
+        Ok(())
+    }
 }

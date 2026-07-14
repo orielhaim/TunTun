@@ -36,13 +36,26 @@ When you outgrow Direct mode, `tuntun upgrade-to-managed` migrates your network 
 
 ## Quick start
 
+### Install the agent
+
+**Linux / macOS**
+
+```bash
+curl -fsSL https://github.com/orielhaim/TunTun/releases/latest/download/install.sh | sh
+```
+
+**Windows** (PowerShell as Administrator)
+
+```powershell
+irm https://github.com/orielhaim/TunTun/releases/latest/download/install.ps1 | iex
+```
+
+Verify with `tuntun -v`. Later upgrades: `tuntun update`.
+
 ### Managed mode
 
 ```bash
-# Build
-cargo build --release
-
-# Start the stack
+# Start the stack (from a TunTun checkout)
 docker compose up -d
 
 # Or run manually:
@@ -56,7 +69,7 @@ Open the dashboard at `http://localhost:5173`. Create an account and organizatio
 ```bash
 # On each machine
 sudo tuntun enroll --control-url http://your-host:8080 --token TOKEN
-sudo tuntun run
+sudo tuntun service start
 ```
 
 ### Direct mode
@@ -64,14 +77,14 @@ sudo tuntun run
 ```bash
 # Machine A - create a network
 sudo tuntun create --name my-net --secret "a-strong-passphrase"
-sudo tuntun run
+sudo tuntun service start
 
 # Generate an invite
 tuntun invite --name my-net
 
 # Machine B - join
 sudo tuntun join <INVITE_CODE>
-sudo tuntun run
+sudo tuntun service start
 ```
 
 ### Verify
@@ -92,6 +105,8 @@ tuntun route list              # Subnet / hostname / exit routes
 tuntun route add 192.168.1.0/24  # Advertise a LAN
 tuntun diag                    # Full diagnostics
 tuntun netcheck                # Quick connectivity check
+tuntun update                  # Upgrade from GitHub Releases
+tuntun update --check          # Check for a newer release
 
 # Serve - internal services
 tuntun serve 3000              # Expose to mesh with TLS

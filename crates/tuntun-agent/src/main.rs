@@ -5,6 +5,7 @@ mod cmds_direct;
 mod cmds_login;
 mod cmds_send;
 mod cmds_ssh;
+mod cmds_update;
 mod dataplane;
 mod forward;
 mod gossip_presence;
@@ -22,6 +23,8 @@ mod system_dns;
 mod system_info;
 mod system_routes;
 mod tun_io;
+#[cfg(unix)]
+mod upgrade;
 #[cfg(windows)]
 mod wintun_path;
 
@@ -53,6 +56,7 @@ async fn main() -> anyhow::Result<()> {
             | crate::cli::Command::Up
             | crate::cli::Command::Down
             | crate::cli::Command::Service(_)
+            | crate::cli::Command::Update(_)
     );
     if !quiet || std::env::var_os("RUST_LOG").is_some() {
         crate::cli::init_logging(&cli);
@@ -95,6 +99,7 @@ async fn main() -> anyhow::Result<()> {
         crate::cli::Command::Send(a) => crate::cmds_send::run(a).await,
         crate::cli::Command::Login(a) => crate::cmds_login::run_login(a).await,
         crate::cli::Command::Logout(a) => crate::cmds_login::run_logout(a).await,
+        crate::cli::Command::Update(a) => crate::cmds_update::run(a).await,
         crate::cli::Command::Create(a) => {
             crate::cmds_direct::run_create(a, cli.state_dir.as_deref()).await
         }

@@ -1,12 +1,61 @@
 # Installation
 
-TunTun has three components you may need to install depending on your role.
+Install the TunTun agent on every machine you want on the mesh.
 
-## Prerequisites
+<InstallPicker compact />
 
-TunTun requires **Rust 1.96+**, **Bun**, and **PostgreSQL** (for the management/control plane). The agent itself only needs the Rust binary and root/admin privileges to create a TUN interface.
+## What to do next
+
+**Join a managed network** (control plane + dashboard):
+
+```bash
+sudo tuntun enroll --control-url http://your-host:8080 --token YOUR_TOKEN
+sudo tuntun service start
+```
+
+**Or start a Direct network** (no server):
+
+```bash
+sudo tuntun create --name my-net --secret "a-strong-passphrase"
+sudo tuntun service start
+```
+
+See [Quick Start (Managed)](/guide/quickstart-managed) or [Quick Start (Direct)](/guide/quickstart-direct).
+
+## Options
+
+Pin a version:
+
+```bash
+curl -fsSL https://github.com/orielhaim/TunTun/releases/latest/download/install.sh | sh -s -- --version v0.3.0
+```
+
+```powershell
+# Download install.ps1 from the latest release, then:
+.\install.ps1 -Version v0.3.0
+```
+
+Skip the service unit:
+
+```bash
+curl -fsSL https://github.com/orielhaim/TunTun/releases/latest/download/install.sh | sh -s -- --no-service
+```
+
+```powershell
+.\install.ps1 -NoService
+```
+
+## Updating
+
+```bash
+sudo tuntun update
+```
+
+On Linux this reloads the agent gracefully by default. Pass `--restart` for a full service restart. Use `tuntun update --check` to only look for a newer release.
 
 ## Building from source
+
+If you are developing TunTun or self-hosting the full stack from a checkout:
 
 ```bash
 git clone https://github.com/orielhaim/TunTun.git
@@ -14,25 +63,10 @@ cd TunTun
 cargo build --release
 ```
 
-This produces three binaries in `target/release/`:
+Binaries land in `target/release/`. For the management API and dashboard, also run `bun install` and see [Self-Hosting](/self-hosting/).
 
-`tuntun` is the agent and CLI - this is what you install on every machine that joins the network. `tuntun-control` is the control plane server that coordinates managed networks. `tuntun-relay` is the optional edge relay for public tunnels.
+## Platform notes
 
-## Setting up the management stack
-
-If you are self-hosting (rather than joining an existing network), you also need the management API and dashboard:
-
-```bash
-bun install
-bun run db:migrate
-```
-
-See the [Self-Hosting guide](/self-hosting/) for full configuration details.
-
-## Platform-specific notes
-
-On **Linux**, the agent needs `CAP_NET_ADMIN` capability or root access to create the `tuntun0` TUN interface.
-
-On **macOS**, the agent needs root access. The TUN interface is created via the utun kernel driver.
-
-On **Windows**, the agent needs Administrator privileges and the [Wintun](https://www.wintun.net/) driver installed. You can specify the path with `--wintun-file` or `TUNTUN_WINTUN_FILE`.
+- **Linux** - root (or `CAP_NET_ADMIN`) for the TUN interface.
+- **macOS** - admin privileges for the TUN interface.
+- **Windows** - Administrator privileges and the [Wintun](https://www.wintun.net/) driver.

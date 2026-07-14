@@ -10,8 +10,8 @@ hero:
     alt: TunTun
   actions:
     - theme: brand
-      text: Get Started
-      link: /guide/what-is-tuntun
+      text: Install TunTun
+      link: /guide/installation
     - theme: alt
       text: View on GitHub
       link: https://github.com/orielhaim/TunTun
@@ -42,3 +42,5 @@ features:
     details: Run your own edge relay for public tunnels. ACME support, bring your own certs, full control over your tunnel infrastructure.
     link: /products/relay/
 ---
+
+<InstallPicker />

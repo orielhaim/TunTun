@@ -19,12 +19,18 @@ fn unit_path() -> &'static Path {
 }
 
 #[cfg(unix)]
-fn is_root() -> bool {
+pub fn is_root() -> bool {
     unsafe { libc::geteuid() == 0 }
 }
 
 pub fn install(state_dir: Option<&str>) -> anyhow::Result<()> {
     install_inner(state_dir, true)
+}
+
+/// Rewrite the service unit without printing the install banner.
+#[cfg(target_os = "linux")]
+pub fn refresh_unit(state_dir: Option<&str>) -> anyhow::Result<()> {
+    install_inner(state_dir, false)
 }
 
 fn install_inner(state_dir: Option<&str>, announce: bool) -> anyhow::Result<()> {
@@ -383,10 +389,13 @@ pub fn render_systemd_unit(exe: &str, state_dir: Option<&str>) -> String {
          Wants=network-online.target\n\
          \n\
          [Service]\n\
-         Type=simple\n\
+         Type=notify-reload\n\
          ExecStart={exe} run\n\
+         ExecReload=/bin/kill -HUP $MAINPID\n\
          Restart=always\n\
          RestartSec=2\n\
+         KillMode=mixed\n\
+         TimeoutStopSec=30\n\
          StateDirectory=tuntun\n\
          Environment=TUNTUN_STATE_DIR={dir}\n\
          \n\
@@ -509,6 +518,8 @@ mod tests {
         assert!(unit.contains("RestartSec=2"));
         assert!(unit.contains("After=network-online.target"));
         assert!(unit.contains("ExecStart=/usr/bin/tuntun run"));
+        assert!(unit.contains("Type=notify-reload"));
+        assert!(unit.contains("ExecReload=/bin/kill -HUP $MAINPID"));
         assert!(unit.contains("TUNTUN_STATE_DIR=/var/lib/tuntun"));
         assert!(unit.contains("StateDirectory=tuntun"));
     }
