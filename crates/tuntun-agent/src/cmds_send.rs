@@ -2,8 +2,8 @@
 
 use anyhow::Context;
 use clap::{Args, Subcommand};
+use tuntun_core::ipc::IpcClient;
 use tuntun_core::ipc::protocol::{IpcRequest, IpcResponse};
-use tuntun_core::ipc::{IpcClient, discover_network_id};
 
 use crate::output::Output;
 
@@ -151,10 +151,8 @@ pub async fn run(args: SendArgs) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn ipc_req(state_dir: &Option<String>, req: IpcRequest) -> anyhow::Result<IpcResponse> {
-    let (network_id, _) = discover_network_id(state_dir.as_deref())?;
-    let client = IpcClient::for_network(network_id);
-    client.request(req).await
+async fn ipc_req(_state_dir: &Option<String>, req: IpcRequest) -> anyhow::Result<IpcResponse> {
+    IpcClient::connect().request(req).await
 }
 
 fn print_resp(out: &Output, resp: IpcResponse) -> anyhow::Result<()> {

@@ -4,7 +4,6 @@ use std::path::Path;
 
 use anyhow::{Context, bail};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use uuid::Uuid;
 
 use super::protocol::{IpcRequest, IpcResponse};
 use super::transport::{self, default_ipc_path};
@@ -14,10 +13,16 @@ pub struct IpcClient {
 }
 
 impl IpcClient {
-    pub fn for_network(network_id: Uuid) -> Self {
+    /// Connect to the local agent on the fixed IPC path.
+    pub fn connect() -> Self {
         Self {
-            path: default_ipc_path(network_id),
+            path: default_ipc_path(),
         }
+    }
+
+    /// Alias for [`Self::connect`].
+    pub fn agent() -> Self {
+        Self::connect()
     }
 
     pub fn with_path(path: impl Into<std::path::PathBuf>) -> Self {
@@ -94,17 +99,29 @@ impl IpcClient {
     }
 }
 
-/// Discover network id from persisted agent state on this machine.
-pub fn discover_network_id(
+/// Load persisted agent state (for display / network selection). IPC uses a fixed path.
+pub fn discover_agent_state(
     state_dir: Option<&str>,
-) -> anyhow::Result<(Uuid, crate::state::PersistedState)> {
+) -> anyhow::Result<crate::state::PersistedState> {
     let paths = crate::state::StatePaths::resolve(state_dir);
-    let persisted = crate::state::PersistedState::try_load(&paths)?.with_context(|| {
+    crate::state::PersistedState::try_load(&paths)?.with_context(|| {
         format!(
             "not connected to a network yet (no state in {}). \
                  Use `tuntun create` for Direct or `tuntun enroll` for Managed",
             paths.dir.display()
         )
-    })?;
-    Ok((persisted.network_id(), persisted))
+    })
+}
+
+/// Discover primary network id from persisted agent state on this machine.
+pub fn discover_network_id(
+    state_dir: Option<&str>,
+) -> anyhow::Result<(uuid::Uuid, crate::state::PersistedState)> {
+    let persisted = discover_agent_state(state_dir)?;
+    Ok((
+        persisted
+            .primary_network_id()
+            .context("persisted state has no network id")?,
+        persisted,
+    ))
 }

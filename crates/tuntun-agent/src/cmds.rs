@@ -2,8 +2,8 @@
 
 use anyhow::Context;
 use clap::Args;
+use tuntun_core::ipc::IpcClient;
 use tuntun_core::ipc::protocol::{IpcRequest, IpcResponse, PingProbe, PingSummary, StatusInfo};
-use tuntun_core::ipc::{IpcClient, discover_network_id};
 use tuntun_core::{PersistedState, StatePaths};
 
 use crate::output::{self, Output};
@@ -91,9 +91,8 @@ pub struct NetcheckArgs {
     pub state_dir: Option<String>,
 }
 
-async fn client(state_dir: Option<&str>) -> anyhow::Result<IpcClient> {
-    let (network_id, _) = discover_network_id(state_dir)?;
-    Ok(IpcClient::for_network(network_id))
+async fn client(_state_dir: Option<&str>) -> anyhow::Result<IpcClient> {
+    Ok(IpcClient::connect())
 }
 
 pub async fn run_status(args: StatusArgs) -> anyhow::Result<()> {
@@ -133,7 +132,7 @@ pub async fn run_status(args: StatusArgs) -> anyhow::Result<()> {
         tuntun_core::NodeMode::Direct => "Direct",
         tuntun_core::NodeMode::Managed => "Managed",
     };
-    let ipc = IpcClient::for_network(persisted.network_id());
+    let ipc = IpcClient::connect();
     match ipc.request(IpcRequest::Status { peers: args.peers }).await {
         Ok(IpcResponse::Status(info)) => {
             if out.json {
@@ -230,13 +229,22 @@ fn offline_status(paths: &StatePaths, persisted: &PersistedState) -> OfflineStat
         .map(|(id, _, _)| id.endpoint_id_hex())
         .unwrap_or_default();
     match persisted {
-        PersistedState::Direct(d) => OfflineStatus {
-            hostname: d.hostname.clone(),
-            ip: d.assigned_ipv4.to_string(),
-            network_name: d.network_name.clone(),
-            network_id: d.network_id.to_string(),
-            endpoint_id,
-        },
+        PersistedState::Direct { networks } => {
+            let d = networks.first();
+            OfflineStatus {
+                hostname: d.map(|d| d.hostname.clone()).unwrap_or_else(|| "-".into()),
+                ip: d
+                    .map(|d| d.assigned_ipv4.to_string())
+                    .unwrap_or_else(|| "-".into()),
+                network_name: d
+                    .map(|d| d.network_name.clone())
+                    .unwrap_or_else(|| "-".into()),
+                network_id: d
+                    .map(|d| d.network_id.to_string())
+                    .unwrap_or_else(|| "-".into()),
+                endpoint_id,
+            }
+        }
         PersistedState::Managed(m) => {
             let ip = tuntun_core::state::load_snapshot_cache(paths)
                 .and_then(|snap| {

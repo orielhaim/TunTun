@@ -17,6 +17,7 @@ use bytes::Bytes;
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use tuntun_common::policy::{Action, PolicyBundle, PolicyRule, PortRange, Protocol, Selector};
+use uuid::Uuid;
 
 use crate::state::StatePaths;
 
@@ -97,8 +98,8 @@ impl FirewallConfig {
         Ok(crate::agent_config::load_firewall(paths))
     }
 
-    pub fn save(&self, paths: &StatePaths) -> anyhow::Result<()> {
-        crate::agent_config::save_firewall(paths, self)
+    pub fn save(&self, paths: &StatePaths, network_name: &str) -> anyhow::Result<()> {
+        crate::agent_config::save_firewall(paths, network_name, self)
     }
 
     pub fn add_rule(&mut self, rule: FirewallRule) {
@@ -474,12 +475,14 @@ impl FirewallEngine {
     }
 
     /// Evaluate a packet. `peer_endpoint_hex` is the remote mesh peer (if known).
+    /// `network_id` is the peer's Direct network (for `PeerFilter::NetworkId`).
     pub fn evaluate(
         &self,
         direction: PacketDirection,
         packet: &[u8],
         peer_endpoint_hex: Option<&str>,
         peer_hostname: Option<&str>,
+        network_id: Option<Uuid>,
     ) -> EvalResult {
         if !**self.inner.enabled.load() {
             self.inner.allowed.fetch_add(1, Ordering::Relaxed);
@@ -504,6 +507,7 @@ impl FirewallEngine {
             &view,
             peer_endpoint_hex,
             peer_hostname,
+            network_id,
         ) {
             return self.apply_action(action, direction, packet, &view);
         }
@@ -513,6 +517,7 @@ impl FirewallEngine {
             &view,
             peer_endpoint_hex,
             peer_hostname,
+            network_id,
         ) {
             return self.apply_action(action, direction, packet, &view);
         }
@@ -554,6 +559,7 @@ impl FirewallEngine {
         view: &PacketView,
         peer_hex: Option<&str>,
         peer_hostname: Option<&str>,
+        network_id: Option<Uuid>,
     ) -> Option<FirewallAction> {
         let want_dir = match direction {
             PacketDirection::Inbound => FirewallDirection::In,
@@ -577,7 +583,7 @@ impl FirewallEngine {
                     continue;
                 }
             }
-            if !peer_matches(&rule.peer, peer_hex, peer_hostname) {
+            if !peer_matches(&rule.peer, peer_hex, peer_hostname, network_id) {
                 continue;
             }
             return Some(rule.action);
@@ -694,12 +700,23 @@ impl FirewallEngine {
     }
 }
 
-fn peer_matches(filter: &PeerFilter, peer_hex: Option<&str>, peer_hostname: Option<&str>) -> bool {
+fn peer_matches(
+    filter: &PeerFilter,
+    peer_hex: Option<&str>,
+    peer_hostname: Option<&str>,
+    network_id: Option<Uuid>,
+) -> bool {
     match filter {
         PeerFilter::Any => true,
         PeerFilter::Endpoint(id) => peer_hex.is_some_and(|h| h.eq_ignore_ascii_case(id)),
         PeerFilter::Hostname(h) => peer_hostname.is_some_and(|n| n.eq_ignore_ascii_case(h)),
-        PeerFilter::NetworkId(_) => true, // single-network Direct agent
+        PeerFilter::NetworkId(n) => {
+            let Some(id) = network_id else {
+                return false;
+            };
+            id.to_string().eq_ignore_ascii_case(n)
+                || n.parse::<Uuid>().ok().is_some_and(|parsed| parsed == id)
+        }
     }
 }
 
@@ -1031,7 +1048,7 @@ mod tests {
             443,
         );
         assert!(matches!(
-            e.evaluate(PacketDirection::Outbound, &p, Some("peer"), None),
+            e.evaluate(PacketDirection::Outbound, &p, Some("peer"), None, None),
             EvalResult::Allow
         ));
     }
@@ -1046,7 +1063,7 @@ mod tests {
             12345,
         );
         assert!(matches!(
-            e.evaluate(PacketDirection::Inbound, &p, Some("peer"), None),
+            e.evaluate(PacketDirection::Inbound, &p, Some("peer"), None, None),
             EvalResult::Deny
         ));
     }
@@ -1061,7 +1078,7 @@ mod tests {
             443,
         );
         assert!(matches!(
-            e.evaluate(PacketDirection::Outbound, &out, Some("peer"), None),
+            e.evaluate(PacketDirection::Outbound, &out, Some("peer"), None, None),
             EvalResult::Allow
         ));
         let ret = tcp_ack(
@@ -1071,7 +1088,7 @@ mod tests {
             12345,
         );
         assert!(matches!(
-            e.evaluate(PacketDirection::Inbound, &ret, Some("peer"), None),
+            e.evaluate(PacketDirection::Inbound, &ret, Some("peer"), None, None),
             EvalResult::Allow
         ));
     }
@@ -1100,7 +1117,7 @@ mod tests {
             443,
         );
         assert!(matches!(
-            e.evaluate(PacketDirection::Outbound, &p, Some("peer"), None),
+            e.evaluate(PacketDirection::Outbound, &p, Some("peer"), None, None),
             EvalResult::Deny
         ));
     }

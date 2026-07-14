@@ -57,14 +57,27 @@ fn install_peer_route(
     endpoint: EndpointId,
     hostname: &str,
     ip: std::net::Ipv4Addr,
-) {
+) -> anyhow::Result<()> {
+    let direct = state.node.persisted.require_direct_network(None)?;
+    let network_id = direct.network_id;
+    let network_name = direct.network_name.clone();
+    let join_index = state
+        .node
+        .persisted
+        .direct_networks()
+        .iter()
+        .position(|d| d.network_id == network_id)
+        .unwrap_or(0) as u64;
+
     let hex = format!("{endpoint}");
-    let info = std::sync::Arc::new(PeerInfo {
+    let _info = std::sync::Arc::new(PeerInfo {
         endpoint,
         endpoint_hex: hex.clone(),
         hostname: hostname.to_string(),
         ip,
         tags: vec!["connect".into()],
+        network_id,
+        network_name: network_name.clone(),
     });
     // Merge into routing table via replace with existing peers + this one.
     let mut peers: Vec<tuntun_common::PeerEntry> = state
@@ -72,7 +85,7 @@ fn install_peer_route(
         .routes
         .peers()
         .into_iter()
-        .filter(|p| p.endpoint_hex != hex)
+        .filter(|p| p.endpoint_hex != hex && p.network_id == network_id)
         .map(|p| tuntun_common::PeerEntry {
             ip: p.ip,
             endpoint_id: p.endpoint_hex.clone(),
@@ -87,35 +100,30 @@ fn install_peer_route(
         tags: vec!["connect".into()],
     });
     let version = state.node.routes.version() + 1;
-    let network = state.node.persisted.network_name().to_string();
     let self_id = state.node.endpoint_id_hex();
-    state.node.routes.replace(
+    let dns = crate::agent_config::load_dns(&state.node.paths);
+    state.node.routes.replace_network(
+        network_id,
+        join_index,
         &peers,
-        &[],
-        &[],
-        &[],
-        &tuntun_common::DeviceProfile::default(),
-        &tuntun_common::DnsConfig::default(),
-        &network,
+        &dns,
+        &network_name,
         &self_id,
         version,
     );
     if let Some(auth) = &state.node.direct_auth {
-        auth.insert(hex);
+        auth.insert(hex, network_id);
     }
-    let _ = info;
+    Ok(())
 }
 
 /// Initiate a connect dial to a remote contact id.
 pub async fn request_connect(state: &AgentIpcState, contact_id: &str) -> anyhow::Result<String> {
-    let _ = state.node.persisted.require_direct()?;
+    let direct = state.node.persisted.require_direct_network(None)?;
     let peer = parse_contact_id(contact_id).context("parse contact id")?;
-    let secret = state
-        .node
-        .persisted
-        .as_direct()
-        .map(|d| d.network_secret.clone())
-        .context("direct state")?;
+    let secret = direct.network_secret.clone();
+    let network_id = direct.network_id;
+    let hostname = direct.hostname.clone();
     let self_hex = state.node.endpoint_id_hex();
 
     let conn = state
@@ -124,18 +132,12 @@ pub async fn request_connect(state: &AgentIpcState, contact_id: &str) -> anyhow:
         .connect(peer, AUTH_ALPN)
         .await
         .context("dial contact")?;
-    run_psk_handshake_client(&conn, &secret, &self_hex)
+    run_psk_handshake_client(&conn, network_id, &secret, &self_hex)
         .await
         .context("connect auth")?;
 
     // Send connect request on a bi-stream.
     let (mut send, mut recv) = conn.open_bi().await.context("open bi")?;
-    let hostname = state
-        .node
-        .persisted
-        .as_direct()
-        .map(|d| d.hostname.clone())
-        .unwrap_or_else(|| "peer".into());
     let req = serde_json::json!({
         "type": "connect_request",
         "contact_id": contact_id_from_endpoint(&state.node.endpoint.id()),
@@ -167,7 +169,7 @@ pub async fn request_connect(state: &AgentIpcState, contact_id: &str) -> anyhow:
                 .get("hostname")
                 .and_then(|v| v.as_str())
                 .unwrap_or("peer");
-            install_peer_route(state, peer, peer_host, peer_ip);
+            install_peer_route(state, peer, peer_host, peer_ip)?;
             Ok(format!("Connected to {contact_id} ({peer_ip})"))
         }
         Some("pending") => Ok(format!(
@@ -180,7 +182,7 @@ pub async fn request_connect(state: &AgentIpcState, contact_id: &str) -> anyhow:
 }
 
 pub fn allow_contact(state: &AgentIpcState, contact_id: &str) -> anyhow::Result<String> {
-    let _ = state.node.persisted.require_direct()?;
+    let _ = state.node.persisted.require_direct_network(None)?;
     let _ = parse_contact_id(contact_id)?;
     let mut set = load_allowlist(state)?;
     set.insert(contact_id.to_string());
@@ -189,7 +191,7 @@ pub fn allow_contact(state: &AgentIpcState, contact_id: &str) -> anyhow::Result<
 }
 
 pub fn list_pending(state: &AgentIpcState) -> anyhow::Result<IpcResponse> {
-    let _ = state.node.persisted.require_direct()?;
+    let _ = state.node.persisted.require_direct_network(None)?;
     let list = load_pending(state)?;
     Ok(IpcResponse::DirectConnectPending {
         requests: list
@@ -205,7 +207,7 @@ pub fn list_pending(state: &AgentIpcState) -> anyhow::Result<IpcResponse> {
 }
 
 pub async fn accept_pending(state: &AgentIpcState, contact_id: &str) -> anyhow::Result<String> {
-    let _ = state.node.persisted.require_direct()?;
+    let direct = state.node.persisted.require_direct_network(None)?.clone();
     let mut list = load_pending(state)?;
     let Some(idx) = list.iter().position(|p| p.contact_id == contact_id) else {
         anyhow::bail!("no pending connect from {contact_id}");
@@ -218,30 +220,20 @@ pub async fn accept_pending(state: &AgentIpcState, contact_id: &str) -> anyhow::
         .parse()
         .context("parse pending endpoint")?;
     let peer_ip = derive_ipv4(&pending.endpoint_id, 0);
-    install_peer_route(state, peer, &pending.hostname, peer_ip);
+    install_peer_route(state, peer, &pending.hostname, peer_ip)?;
 
     // Best-effort: dial back to notify acceptance.
     if let Ok(conn) = state.node.endpoint.connect(peer, AUTH_ALPN).await {
-        let secret = state
-            .node
-            .persisted
-            .as_direct()
-            .map(|d| d.network_secret.clone())
-            .unwrap_or_default();
         let self_hex = state.node.endpoint_id_hex();
-        let _ = run_psk_handshake_client(&conn, &secret, &self_hex).await;
+        let _ =
+            run_psk_handshake_client(&conn, direct.network_id, &direct.network_secret, &self_hex)
+                .await;
         if let Ok((mut send, _)) = conn.open_bi().await {
-            let hostname = state
-                .node
-                .persisted
-                .as_direct()
-                .map(|d| d.hostname.clone())
-                .unwrap_or_else(|| "peer".into());
             let resp = serde_json::json!({
                 "type": "connect_accepted",
                 "status": "accepted",
                 "ipv4": state.node.self_ipv4.to_string(),
-                "hostname": hostname,
+                "hostname": direct.hostname,
             });
             if let Ok(bytes) = serde_json::to_vec(&resp) {
                 let _ = send.write_all(&(bytes.len() as u32).to_be_bytes()).await;
@@ -258,7 +250,7 @@ pub async fn accept_pending(state: &AgentIpcState, contact_id: &str) -> anyhow::
 }
 
 pub fn deny_pending(state: &AgentIpcState, contact_id: &str) -> anyhow::Result<String> {
-    let _ = state.node.persisted.require_direct()?;
+    let _ = state.node.persisted.require_direct_network(None)?;
     let mut list = load_pending(state)?;
     let before = list.len();
     list.retain(|p| p.contact_id != contact_id);
@@ -270,9 +262,12 @@ pub fn deny_pending(state: &AgentIpcState, contact_id: &str) -> anyhow::Result<S
 }
 
 pub async fn rotate_identity(state: &AgentIpcState) -> anyhow::Result<IpcResponse> {
-    let direct = state.node.persisted.require_direct()?.clone();
+    let networks = state.node.persisted.direct_networks().to_vec();
+    if networks.is_empty() {
+        anyhow::bail!("no Direct networks joined");
+    }
     let new_id = AgentIdentity::generate();
-    let persisted = PersistedState::Direct(direct);
+    let persisted = PersistedState::Direct { networks };
     crate::secret_store::persist_agent(
         &state.node.paths,
         &new_id,

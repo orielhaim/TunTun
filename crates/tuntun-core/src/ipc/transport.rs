@@ -3,17 +3,15 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-use uuid::Uuid;
-
-/// Resolve the IPC endpoint path / pipe name for a network.
-pub fn default_ipc_path(network_id: Uuid) -> PathBuf {
+/// Resolve the fixed agent IPC endpoint path / pipe name.
+pub fn default_ipc_path() -> PathBuf {
     if let Ok(override_path) = std::env::var("TUNTUN_IPC_PATH") {
         return PathBuf::from(override_path);
     }
     #[cfg(unix)]
     {
         let base = std::env::var("TUNTUN_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".to_string());
-        PathBuf::from(base).join(format!("tuntun-{network_id}.sock"))
+        PathBuf::from(base).join("tuntun-agent.sock")
     }
     #[cfg(windows)]
     {
@@ -21,18 +19,17 @@ pub fn default_ipc_path(network_id: Uuid) -> PathBuf {
         PathBuf::from(base)
             .join("tuntun")
             .join("ipc")
-            .join(format!("{network_id}.pipe"))
+            .join("tuntun-agent.pipe")
     }
     #[cfg(not(any(unix, windows)))]
     {
-        let _ = network_id;
-        PathBuf::from("tuntun.ipc")
+        PathBuf::from("tuntun-agent.ipc")
     }
 }
 
 #[cfg(windows)]
-pub fn pipe_name_for(network_id: Uuid) -> String {
-    format!(r"\\.\pipe\tuntun-{network_id}")
+pub fn pipe_name_for() -> String {
+    r"\\.\pipe\tuntun-agent".to_string()
 }
 
 /// Abstract listener accepting framed JSON connections.
@@ -46,7 +43,6 @@ pub struct IpcListener {
 
 #[cfg(windows)]
 struct WindowsListener {
-    network_id: Uuid,
     /// Next server instance waiting for a client.
     pending: tokio::sync::Mutex<Option<tokio::net::windows::named_pipe::NamedPipeServer>>,
     marker: PathBuf,
@@ -61,8 +57,8 @@ pub enum IpcStream {
 }
 
 impl IpcListener {
-    pub async fn bind(network_id: Uuid) -> anyhow::Result<(Self, PathBuf)> {
-        let path = default_ipc_path(network_id);
+    pub async fn bind() -> anyhow::Result<(Self, PathBuf)> {
+        let path = default_ipc_path();
         #[cfg(unix)]
         {
             if path.exists() {
@@ -88,7 +84,7 @@ impl IpcListener {
             if let Some(parent) = path.parent() {
                 std::fs::create_dir_all(parent)?;
             }
-            let name = pipe_name_for(network_id);
+            let name = pipe_name_for();
             std::fs::write(&path, &name)?;
             let first = ServerOptions::new()
                 .first_pipe_instance(true)
@@ -97,7 +93,6 @@ impl IpcListener {
             Ok((
                 Self {
                     windows: WindowsListener {
-                        network_id,
                         pending: tokio::sync::Mutex::new(Some(first)),
                         marker: path.clone(),
                     },
@@ -126,7 +121,7 @@ impl IpcListener {
         {
             use tokio::net::windows::named_pipe::ServerOptions;
 
-            let name = pipe_name_for(self.windows.network_id);
+            let name = pipe_name_for();
             let mut guard = self.windows.pending.lock().await;
             let server = guard.take().ok_or_else(|| {
                 anyhow::anyhow!("IPC listener has no pending named pipe instance")

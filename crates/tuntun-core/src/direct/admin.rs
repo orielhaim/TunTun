@@ -5,6 +5,7 @@ use std::net::Ipv4Addr;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::state::StatePaths;
 
@@ -16,39 +17,53 @@ pub struct PendingJoin {
     pub collision_index: u8,
 }
 
-pub fn load_pending(paths: &StatePaths) -> anyhow::Result<Vec<PendingJoin>> {
-    let p = paths.pending_file();
+pub fn load_pending(paths: &StatePaths, network_id: Uuid) -> anyhow::Result<Vec<PendingJoin>> {
+    let p = paths.pending_file(network_id);
     if !p.exists() {
         return Ok(vec![]);
     }
     Ok(serde_json::from_slice(&std::fs::read(p)?)?)
 }
 
-pub fn save_pending(paths: &StatePaths, list: &[PendingJoin]) -> anyhow::Result<()> {
-    paths.ensure()?;
-    std::fs::write(paths.pending_file(), serde_json::to_vec_pretty(list)?)?;
+pub fn save_pending(
+    paths: &StatePaths,
+    network_id: Uuid,
+    list: &[PendingJoin],
+) -> anyhow::Result<()> {
+    paths.ensure_network_dirs(network_id)?;
+    std::fs::write(
+        paths.pending_file(network_id),
+        serde_json::to_vec_pretty(list)?,
+    )?;
     Ok(())
 }
 
-pub fn push_pending(paths: &StatePaths, p: &PendingJoin) -> anyhow::Result<()> {
-    let mut list = load_pending(paths)?;
+pub fn push_pending(paths: &StatePaths, network_id: Uuid, p: &PendingJoin) -> anyhow::Result<()> {
+    let mut list = load_pending(paths, network_id)?;
     list.retain(|x| x.endpoint_id != p.endpoint_id);
     list.push(p.clone());
-    save_pending(paths, &list)
+    save_pending(paths, network_id, &list)
 }
 
-pub fn load_invite_ids(paths: &StatePaths) -> anyhow::Result<HashSet<String>> {
-    if !paths.invites_file().exists() {
+pub fn load_invite_ids(paths: &StatePaths, network_id: Uuid) -> anyhow::Result<HashSet<String>> {
+    if !paths.invites_file(network_id).exists() {
         return Ok(HashSet::new());
     }
     Ok(serde_json::from_slice(&std::fs::read(
-        paths.invites_file(),
+        paths.invites_file(network_id),
     )?)?)
 }
 
-pub fn save_invite_ids(paths: &StatePaths, set: &HashSet<String>) -> anyhow::Result<()> {
-    paths.ensure()?;
-    std::fs::write(paths.invites_file(), serde_json::to_vec_pretty(set)?)?;
+pub fn save_invite_ids(
+    paths: &StatePaths,
+    network_id: Uuid,
+    set: &HashSet<String>,
+) -> anyhow::Result<()> {
+    paths.ensure_network_dirs(network_id)?;
+    std::fs::write(
+        paths.invites_file(network_id),
+        serde_json::to_vec_pretty(set)?,
+    )?;
     Ok(())
 }
 
@@ -70,8 +85,15 @@ pub fn parse_expires(s: &str) -> anyhow::Result<chrono::Duration> {
     Ok(chrono::Duration::seconds(secs))
 }
 
-pub fn queue_kick(paths: &StatePaths, peer_id: &str) -> anyhow::Result<()> {
-    let kick_path = paths.dir.join("direct_pending_kick.json");
+pub fn queue_kick(paths: &StatePaths, network_id: Uuid, peer_id: &str) -> anyhow::Result<()> {
+    paths.ensure_network_dirs(network_id)?;
+    let kick_path = paths
+        .dir
+        .join("direct_pending_kick")
+        .join(format!("{network_id}.json"));
+    if let Some(parent) = kick_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
     let mut kicks: Vec<String> = if kick_path.exists() {
         serde_json::from_slice(&std::fs::read(&kick_path)?)?
     } else {
@@ -84,6 +106,6 @@ pub fn queue_kick(paths: &StatePaths, peer_id: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn pending_path(paths: &StatePaths) -> PathBuf {
-    paths.pending_file()
+pub fn pending_path(paths: &StatePaths, network_id: Uuid) -> PathBuf {
+    paths.pending_file(network_id)
 }

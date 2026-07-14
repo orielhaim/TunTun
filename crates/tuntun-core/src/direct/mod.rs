@@ -21,7 +21,8 @@ pub mod sync;
 pub use admin::{PendingJoin, load_pending, push_pending, save_pending};
 pub use antispoof::{SpoofTracker, source_matches_peer};
 pub use auth::{
-    AUTH_ALPN, AuthCache, DirectAuthHook, run_psk_handshake_client, run_psk_handshake_server,
+    AUTH_ALPN, AuthCache, DirectAuthHook, SecretResolver, run_psk_handshake_client,
+    run_psk_handshake_server,
 };
 pub use contact::{contact_id_from_endpoint, contact_id_from_hex, is_contact_id, parse_contact_id};
 pub use discovery::{DiscoveryHandle, spawn_discovery, topic_from_name_secret};

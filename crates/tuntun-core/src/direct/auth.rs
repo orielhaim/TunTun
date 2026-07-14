@@ -1,10 +1,13 @@
 //! PSK transport authentication for Direct mode.
 //!
-//! Peers prove knowledge of the network secret over [`AUTH_ALPN`] using an
-//! HMAC challenge-response (patterned after iroh-auth). [`DirectAuthHook`]
-//! blocks non-auth ALPNs until the peer is authenticated or already a member.
+//! Peers prove knowledge of a **specific** network secret over [`AUTH_ALPN`] using an
+//! HMAC challenge-response. The claimed `network_id` is bound into the proof so the
+//! server verifies against that network's secret only (no try-all-secrets).
+//!
+//! [`DirectAuthHook`] blocks non-auth ALPNs until the peer is authenticated for at
+//! least one joined network or already allowed by ACL.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use anyhow::Context;
@@ -16,17 +19,20 @@ use iroh::endpoint::{
 };
 use parking_lot::Mutex;
 use sha2::Sha256;
+use uuid::Uuid;
 
 use crate::acl::AclEngine;
 
-pub const AUTH_ALPN: &[u8] = b"tuntun/direct-auth/1";
+/// Wire version: network_id bound into the HMAC proof.
+pub const AUTH_ALPN: &[u8] = b"tuntun/direct-auth/2";
 
 type HmacSha256 = Hmac<Sha256>;
 
-/// Set of peers that completed PSK auth (or are known members).
+/// Peers that completed PSK auth, keyed per network.
 #[derive(Clone, Default)]
 pub struct AuthCache {
-    inner: Arc<Mutex<HashSet<String>>>,
+    /// endpoint_hex → set of network_ids
+    inner: Arc<Mutex<HashMap<String, HashSet<Uuid>>>>,
 }
 
 impl AuthCache {
@@ -34,16 +40,49 @@ impl AuthCache {
         Self::default()
     }
 
-    pub fn insert(&self, endpoint_hex: impl Into<String>) {
-        self.inner.lock().insert(endpoint_hex.into());
+    pub fn insert(&self, endpoint_hex: impl Into<String>, network_id: Uuid) {
+        self.inner
+            .lock()
+            .entry(endpoint_hex.into())
+            .or_default()
+            .insert(network_id);
     }
 
+    /// Authenticated for any joined network.
     pub fn contains(&self, endpoint_hex: &str) -> bool {
-        self.inner.lock().contains(endpoint_hex)
+        self.inner
+            .lock()
+            .get(endpoint_hex)
+            .is_some_and(|s| !s.is_empty())
+    }
+
+    pub fn contains_network(&self, endpoint_hex: &str, network_id: Uuid) -> bool {
+        self.inner
+            .lock()
+            .get(endpoint_hex)
+            .is_some_and(|s| s.contains(&network_id))
+    }
+
+    pub fn networks_for(&self, endpoint_hex: &str) -> Vec<Uuid> {
+        self.inner
+            .lock()
+            .get(endpoint_hex)
+            .map(|s| s.iter().copied().collect())
+            .unwrap_or_default()
     }
 
     pub fn remove(&self, endpoint_hex: &str) {
         self.inner.lock().remove(endpoint_hex);
+    }
+
+    pub fn remove_network(&self, endpoint_hex: &str, network_id: Uuid) {
+        let mut g = self.inner.lock();
+        if let Some(set) = g.get_mut(endpoint_hex) {
+            set.remove(&network_id);
+            if set.is_empty() {
+                g.remove(endpoint_hex);
+            }
+        }
     }
 }
 
@@ -105,12 +144,20 @@ impl EndpointHooks for DirectAuthHook {
     }
 }
 
-fn compute_proof(secret_hex: &str, local_hex: &str, remote_hex: &str, nonce: &[u8]) -> Vec<u8> {
+fn compute_proof(
+    secret_hex: &str,
+    local_hex: &str,
+    remote_hex: &str,
+    network_id: Uuid,
+    nonce: &[u8],
+) -> Vec<u8> {
     let secret = hex::decode(secret_hex).unwrap_or_else(|_| secret_hex.as_bytes().to_vec());
     let mut mac = HmacSha256::new_from_slice(&secret).expect("hmac accepts any key length");
     mac.update(local_hex.as_bytes());
     mac.update(b"|");
     mac.update(remote_hex.as_bytes());
+    mac.update(b"|");
+    mac.update(network_id.as_bytes());
     mac.update(b"|");
     mac.update(nonce);
     mac.finalize().into_bytes().to_vec()
@@ -148,9 +195,10 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     diff == 0
 }
 
-/// Client side: prove PSK to a peer (typically the coordinator).
+/// Client side: prove PSK for a specific network.
 pub async fn run_psk_handshake_client(
     conn: &Connection,
+    network_id: Uuid,
     network_secret_hex: &str,
     local_endpoint_hex: &str,
 ) -> anyhow::Result<()> {
@@ -158,8 +206,15 @@ pub async fn run_psk_handshake_client(
     let remote_hex = format!("{}", conn.remote_id());
     let nonce: [u8; 32] = rand::random();
     write_frame(&mut send, local_endpoint_hex.as_bytes()).await?;
+    write_frame(&mut send, network_id.as_bytes()).await?;
     write_frame(&mut send, &nonce).await?;
-    let proof = compute_proof(network_secret_hex, local_endpoint_hex, &remote_hex, &nonce);
+    let proof = compute_proof(
+        network_secret_hex,
+        local_endpoint_hex,
+        &remote_hex,
+        network_id,
+        &nonce,
+    );
     write_frame(&mut send, &proof).await?;
     let resp = read_frame(&mut recv, 64).await?;
     if resp.as_slice() != b"ok" {
@@ -168,28 +223,52 @@ pub async fn run_psk_handshake_client(
     Ok(())
 }
 
-/// Server handshake with known local endpoint hex.
+/// Resolve a network secret by id (joined networks only).
+pub type SecretResolver = Arc<dyn Fn(Uuid) -> Option<String> + Send + Sync>;
+
+/// Server handshake: client claims `network_id`; verify against that secret only.
 pub async fn run_psk_handshake_server(
     conn: &Connection,
-    network_secret_hex: &str,
+    resolve_secret: SecretResolver,
     self_endpoint_hex: &str,
     auth: &AuthCache,
-) -> anyhow::Result<String> {
+) -> anyhow::Result<(String, Uuid)> {
     let (mut send, mut recv) = conn.accept_bi().await.context("accept auth stream")?;
     let peer_claimed =
         String::from_utf8(read_frame(&mut recv, 128).await?).context("peer id utf8")?;
+    let network_id_bytes = read_frame(&mut recv, 16).await?;
+    if network_id_bytes.len() != 16 {
+        write_frame(&mut send, b"no").await.ok();
+        anyhow::bail!("invalid network_id frame");
+    }
+    let mut uuid_bytes = [0u8; 16];
+    uuid_bytes.copy_from_slice(&network_id_bytes);
+    let network_id = Uuid::from_bytes(uuid_bytes);
+
     let nonce = read_frame(&mut recv, 64).await?;
     let proof = read_frame(&mut recv, 64).await?;
     let remote_hex = format!("{}", conn.remote_id());
     if peer_claimed != remote_hex {
         anyhow::bail!("peer id mismatch in auth handshake");
     }
-    let expected = compute_proof(network_secret_hex, &peer_claimed, self_endpoint_hex, &nonce);
+
+    let Some(secret) = resolve_secret(network_id) else {
+        write_frame(&mut send, b"no").await.ok();
+        anyhow::bail!("unknown network_id in PSK handshake");
+    };
+
+    let expected = compute_proof(
+        &secret,
+        &peer_claimed,
+        self_endpoint_hex,
+        network_id,
+        &nonce,
+    );
     if !constant_time_eq(&expected, &proof) {
         write_frame(&mut send, b"no").await.ok();
         anyhow::bail!("invalid PSK proof");
     }
     write_frame(&mut send, b"ok").await?;
-    auth.insert(peer_claimed.clone());
-    Ok(peer_claimed)
+    auth.insert(peer_claimed.clone(), network_id);
+    Ok((peer_claimed, network_id))
 }

@@ -270,7 +270,9 @@ impl TunTunNode {
 
         #[cfg(unix)]
         {
-            let network_id = persisted.network_id();
+            let network_id = persisted
+                .primary_network_id()
+                .ok_or_else(|| Error::from_reason("no network id in persisted state"))?;
             match coordinator::acquire(network_id).await.map_err(err)? {
                 Role::Client {
                     conn: _drop_conn,

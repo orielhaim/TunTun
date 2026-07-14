@@ -22,10 +22,14 @@ use anyhow::{Context, bail};
 use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
+use std::collections::BTreeMap;
+
+use uuid::Uuid;
+
 use crate::identity::AgentIdentity;
 use crate::state::{CliAuthTokens, StatePaths};
 
-const PAYLOAD_VERSION: u32 = 1;
+const PAYLOAD_VERSION: u32 = 2;
 const META_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -48,12 +52,20 @@ impl SealTier {
     }
 }
 
+/// Per-network sealed fields.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct NetworkSecrets {
+    pub network_secret: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub doc_ticket: Option<String>,
+}
+
 /// In-memory secrets held after unlock.
 #[derive(Clone, Zeroize, ZeroizeOnDrop)]
 pub struct AgentSecrets {
     pub identity_seed: [u8; 32],
-    pub network_secret: Option<String>,
-    pub doc_ticket: Option<String>,
+    #[zeroize(skip)]
+    pub networks: BTreeMap<Uuid, NetworkSecrets>,
     #[zeroize(skip)]
     pub auth: Option<CliAuthTokens>,
 }
@@ -66,8 +78,7 @@ impl AgentSecrets {
     pub fn from_identity(identity: &AgentIdentity) -> Self {
         Self {
             identity_seed: identity.secret_bytes,
-            network_secret: None,
-            doc_ticket: None,
+            networks: BTreeMap::new(),
             auth: None,
         }
     }
@@ -77,10 +88,8 @@ impl AgentSecrets {
 struct SensitivePayload {
     version: u32,
     identity_seed_hex: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    network_secret: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    doc_ticket: Option<String>,
+    #[serde(default)]
+    networks: BTreeMap<Uuid, NetworkSecrets>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     auth: Option<CliAuthTokens>,
 }
@@ -139,8 +148,7 @@ pub fn save_secrets(
     let payload = SensitivePayload {
         version: PAYLOAD_VERSION,
         identity_seed_hex: hex::encode(secrets.identity_seed),
-        network_secret: secrets.network_secret.clone(),
-        doc_ticket: secrets.doc_ticket.clone(),
+        networks: secrets.networks.clone(),
         auth: secrets.auth.clone(),
     };
     let plain = serde_json::to_vec(&payload).context("serialize sensitive payload")?;
@@ -258,8 +266,7 @@ pub fn load_secrets(paths: &StatePaths) -> anyhow::Result<(AgentSecrets, SealTie
     Ok((
         AgentSecrets {
             identity_seed: arr,
-            network_secret: payload.network_secret,
-            doc_ticket: payload.doc_ticket,
+            networks: payload.networks,
             auth: payload.auth,
         },
         meta.tier,
@@ -421,19 +428,21 @@ mod tests {
         let (_tmp, paths) = test_paths();
         paths.ensure().unwrap();
         let id = AgentIdentity::generate();
+        let nid = Uuid::from_u128(42);
         let secrets = AgentSecrets {
             identity_seed: id.secret_bytes,
-            network_secret: Some("deadbeef".into()),
-            doc_ticket: Some("ticket".into()),
+            networks: BTreeMap::from([(
+                nid,
+                NetworkSecrets {
+                    network_secret: "deadbeef".into(),
+                    doc_ticket: Some("ticket".into()),
+                },
+            )]),
             auth: None,
         };
-        // Force derived by using encrypt policy; on CI macOS may pick keychain -
-        // so save with Derived explicitly via plaintext then... we test wrap helpers.
         let policy = SealPolicy {
             allow_encrypt: true,
         };
-        // Override: write with derived by calling save after monkeypatch is hard;
-        // instead test encrypt with plaintext tier for determinism.
         let tier = save_secrets(
             &paths,
             &secrets,
@@ -446,8 +455,9 @@ mod tests {
         let (loaded, t) = load_secrets(&paths).unwrap();
         assert_eq!(t, SealTier::Plaintext);
         assert_eq!(loaded.identity_seed, secrets.identity_seed);
-        assert_eq!(loaded.network_secret.as_deref(), Some("deadbeef"));
-        assert_eq!(loaded.doc_ticket.as_deref(), Some("ticket"));
+        let ns = loaded.networks.get(&nid).unwrap();
+        assert_eq!(ns.network_secret, "deadbeef");
+        assert_eq!(ns.doc_ticket.as_deref(), Some("ticket"));
         let _ = policy;
     }
 

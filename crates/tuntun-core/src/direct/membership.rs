@@ -28,6 +28,7 @@ use iroh_gossip::net::Gossip;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use tuntun_common::DnsConfig;
+use uuid::Uuid;
 
 use crate::acl::AclEngine;
 use crate::direct::auth::AuthCache;
@@ -87,6 +88,8 @@ struct DocsInner {
     doc: Doc,
     author: AuthorId,
     members: Mutex<HashMap<String, MembershipEntry>>,
+    network_id: Uuid,
+    join_index: u64,
     network_name: String,
     network_secret: String,
     hostname: String,
@@ -113,6 +116,8 @@ pub struct DocsBootstrap<'a> {
     pub firewall: Option<crate::direct::FirewallEngine>,
     /// PeerDNS config (from tuntun.toml or defaults).
     pub dns: DnsConfig,
+    /// Join order among Direct networks (0 = first / outbound winner).
+    pub join_index: u64,
 }
 
 impl DocsMembership {
@@ -163,10 +168,10 @@ impl DocsMembership {
             policy,
             firewall,
             dns,
+            join_index,
         } = cfg;
-        paths.ensure()?;
-        let docs_dir = paths.dir.join("docs");
-        std::fs::create_dir_all(&docs_dir)?;
+        paths.ensure_network_dirs(direct.network_id)?;
+        let docs_dir = paths.docs_dir(direct.network_id);
 
         let gossip = Gossip::builder().spawn(endpoint.clone());
         let docs = Docs::persistent(docs_dir)
@@ -217,6 +222,8 @@ impl DocsMembership {
                 doc: doc.clone(),
                 author,
                 members: Mutex::new(HashMap::new()),
+                network_id: direct.network_id,
+                join_index,
                 network_name: direct.network_name.clone(),
                 network_secret: direct.network_secret.clone(),
                 hostname: direct.hostname.clone(),
@@ -442,12 +449,10 @@ impl DocsMembership {
             .collect();
         let version = members.len() as u64;
         let dns = (**self.inner.dns.load()).clone();
-        routes.replace(
+        routes.replace_network(
+            self.inner.network_id,
+            self.inner.join_index,
             &peers,
-            &[],
-            &[],
-            &[],
-            &tuntun_common::DeviceProfile::default(),
             &dns,
             &self.inner.network_name,
             &self.inner.self_endpoint_id,
@@ -456,7 +461,7 @@ impl DocsMembership {
         acl.replace_bundle(policy.clone());
         for m in &members {
             if m.status != "kicked" {
-                auth.insert(m.endpoint_id.clone());
+                auth.insert(m.endpoint_id.clone(), self.inner.network_id);
             }
         }
         // Cache for offline CLI (upgrade, etc.).
@@ -476,7 +481,12 @@ impl DocsMembership {
 
     /// Drain pending kick file written by CLI.
     pub async fn apply_pending_kicks(&self) -> anyhow::Result<()> {
-        let kick_path = self.inner.paths.dir.join("direct_pending_kick.json");
+        let kick_path = self
+            .inner
+            .paths
+            .dir
+            .join("direct_pending_kick")
+            .join(format!("{}.json", self.inner.network_id));
         if !kick_path.exists() {
             return Ok(());
         }
@@ -515,14 +525,25 @@ impl DocsMembership {
             if let Some(fw) = &self.inner.firewall {
                 fw.set_suggested(rules);
             }
-            let _ = std::fs::remove_file(self.inner.paths.firewall_pending_file());
+            let _ = std::fs::remove_file(
+                self.inner
+                    .paths
+                    .firewall_pending_file(self.inner.network_id),
+            );
         } else {
             let pending = crate::direct::policy_docs::PendingSuggestion {
                 received_at: Utc::now().to_rfc3339(),
                 policy: suggested,
             };
             let json = serde_json::to_vec_pretty(&pending)?;
-            std::fs::write(self.inner.paths.firewall_pending_file(), json)?;
+            let pending_path = self
+                .inner
+                .paths
+                .firewall_pending_file(self.inner.network_id);
+            if let Some(parent) = pending_path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            std::fs::write(pending_path, json)?;
         }
         Ok(())
     }

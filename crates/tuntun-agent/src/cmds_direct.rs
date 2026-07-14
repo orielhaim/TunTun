@@ -127,6 +127,24 @@ pub struct UpgradeArgs {
     pub token: Option<String>,
 }
 
+#[derive(Args, Debug)]
+pub struct LeaveArgs {
+    /// Network name to leave
+    #[arg(long)]
+    pub network: Option<String>,
+    pub name: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct OverrideIpArgs {
+    #[arg(long)]
+    pub network: Option<String>,
+    #[arg(long)]
+    pub peer: String,
+    #[arg(long)]
+    pub ip: String,
+}
+
 #[derive(Subcommand, Debug)]
 pub enum FirewallCommand {
     /// Show current local firewall rules and conntrack stats
@@ -151,6 +169,8 @@ pub enum FirewallCommand {
 
 #[derive(Args, Debug)]
 pub struct FirewallAddArgs {
+    #[arg(long)]
+    pub network: Option<String>,
     /// `in` or `out`
     pub direction: String,
     /// `allow`, `deny`, or `reject`
@@ -187,7 +207,7 @@ pub async fn try_handle_post_auth(
     let Ok((_identity, persisted, _)) = load_agent(&paths, policy) else {
         return Ok(());
     };
-    let Ok(direct) = persisted.require_direct() else {
+    let Ok(direct) = persisted.require_direct_network(None) else {
         return Ok(());
     };
 
@@ -250,11 +270,11 @@ pub async fn run_create(args: CreateArgs, state_dir: Option<&str>) -> anyhow::Re
     let paths = paths(state_dir);
     ensure_service_state_aligned(state_dir, &paths)?;
     paths.ensure()?;
-    if let Ok(existing) = PersistedState::load(&paths) {
+    let existing = PersistedState::try_load(&paths)?;
+    if let Some(PersistedState::Managed(m)) = &existing {
         anyhow::bail!(
-            "already configured in {:?} mode (network '{}'); run `tuntun reset --yes` first",
-            existing.mode(),
-            existing.network_name()
+            "already enrolled in Managed network '{}'; run `tuntun reset --yes` first",
+            m.network_name
         );
     }
 
@@ -282,13 +302,30 @@ pub async fn run_create(args: CreateArgs, state_dir: Option<&str>) -> anyhow::Re
         }
     };
 
-    let identity = AgentIdentity::generate();
     let topic_hash = topic_from_name_secret(&network_name, &network_secret);
     let network_id = network_id_from_topic(&topic_hash);
+    let policy = SealPolicy::from_env_and_flag(args.no_encrypt_state);
+
+    let (identity, mut networks) = match existing {
+        Some(PersistedState::Direct { networks }) => {
+            let (identity, _, _) = load_agent(&paths, policy)?;
+            if networks
+                .iter()
+                .any(|d| d.network_name.eq_ignore_ascii_case(&network_name))
+            {
+                anyhow::bail!("already joined Direct network '{network_name}'");
+            }
+            if networks.iter().any(|d| d.network_id == network_id) {
+                anyhow::bail!("network id collision with an existing Direct network");
+            }
+            (identity, networks)
+        }
+        _ => (AgentIdentity::generate(), Vec::new()),
+    };
     let my_id = identity.endpoint_id_hex();
     let assigned_ipv4 = derive_ipv4(&my_id, 0);
 
-    let persisted = PersistedState::Direct(DirectState {
+    networks.push(DirectState {
         network_name: network_name.clone(),
         network_secret: network_secret.clone(),
         topic_hash,
@@ -304,7 +341,7 @@ pub async fn run_create(args: CreateArgs, state_dir: Option<&str>) -> anyhow::Re
         auto_accept_firewall: false,
         created_at: chrono::Utc::now(),
     });
-    let policy = SealPolicy::from_env_and_flag(args.no_encrypt_state);
+    let persisted = PersistedState::Direct { networks };
     let tier = persist_agent(&paths, &identity, persisted, policy)?;
     {
         use tuntun_core::TunTunConfig;
@@ -370,6 +407,7 @@ pub async fn run_invite(args: InviteArgs, state_dir: Option<&str>) -> anyhow::Re
     let ipc = crate::cmds::ipc_or_err(state_dir).await?;
     match ipc
         .request(IpcRequest::DirectInvite {
+            network: args.network.clone(),
             reusable: args.reusable,
             expires: args.expires,
         })
@@ -388,16 +426,34 @@ pub async fn run_join(args: JoinArgs, state_dir: Option<&str>) -> anyhow::Result
     let paths = paths(state_dir);
     ensure_service_state_aligned(state_dir, &paths)?;
     paths.ensure()?;
-    if let Ok(existing) = PersistedState::load(&paths) {
-        anyhow::bail!(
-            "already configured in {:?} mode; run `tuntun reset --yes` first",
-            existing.mode()
-        );
-    }
 
     let invite = decode_invite(&args.invite_code)?;
     let hostname = hostname_arg(args.hostname);
-    let identity = AgentIdentity::generate();
+    let policy = SealPolicy::from_env_and_flag(args.no_encrypt_state);
+    let network_id = network_id_from_topic(&invite.topic);
+    let network_name = invite.network_name.clone();
+
+    let (identity, existing_networks) = match PersistedState::try_load(&paths)? {
+        Some(PersistedState::Managed(m)) => anyhow::bail!(
+            "already enrolled in Managed network '{}'; run `tuntun reset --yes` first",
+            m.network_name
+        ),
+        Some(PersistedState::Direct { networks }) => {
+            if networks
+                .iter()
+                .any(|d| d.network_name.eq_ignore_ascii_case(&network_name))
+            {
+                anyhow::bail!("already joined Direct network '{network_name}'");
+            }
+            if networks.iter().any(|d| d.network_id == network_id) {
+                anyhow::bail!("already joined this Direct network id");
+            }
+            let (id, _, _) = load_agent(&paths, policy)?;
+            (id, networks)
+        }
+        None => (AgentIdentity::generate(), Vec::new()),
+    };
+
     let my_id = identity.endpoint_id_hex();
     let mut collision_index = 0u8;
     let mut assigned_ipv4 = derive_ipv4(&my_id, collision_index);
@@ -419,7 +475,7 @@ pub async fn run_join(args: JoinArgs, state_dir: Option<&str>) -> anyhow::Result
         .connect(coord, AUTH_ALPN)
         .await
         .context("connect to coordinator")?;
-    run_psk_handshake_client(&conn, &invite.secret, &my_id)
+    run_psk_handshake_client(&conn, network_id, &invite.secret, &my_id)
         .await
         .context("PSK auth with coordinator")?;
 
@@ -467,9 +523,8 @@ pub async fn run_join(args: JoinArgs, state_dir: Option<&str>) -> anyhow::Result
 
     endpoint.close().await;
 
-    let network_id = network_id_from_topic(&invite.topic);
-    let network_name = invite.network_name.clone();
-    let persisted = PersistedState::Direct(DirectState {
+    let mut networks = existing_networks;
+    networks.push(DirectState {
         network_name: network_name.clone(),
         network_secret: invite.secret,
         topic_hash: invite.topic,
@@ -485,7 +540,7 @@ pub async fn run_join(args: JoinArgs, state_dir: Option<&str>) -> anyhow::Result
         auto_accept_firewall: args.auto_accept_firewall,
         created_at: chrono::Utc::now(),
     });
-    let policy = SealPolicy::from_env_and_flag(args.no_encrypt_state);
+    let persisted = PersistedState::Direct { networks };
     let tier = persist_agent(&paths, &identity, persisted, policy)?;
     {
         use tuntun_core::TunTunConfig;
@@ -550,6 +605,7 @@ pub async fn handle_join_request_bytes(
     if !direct.open && !pre_approved && invite_id.is_none() {
         push_pending(
             paths,
+            direct.network_id,
             &PendingJoin {
                 endpoint_id: endpoint_id.clone(),
                 hostname: hostname.clone(),
@@ -605,9 +661,14 @@ pub async fn handle_join_request_bytes(
     }))?)
 }
 
-pub async fn run_requests(_args: RequestsArgs, state_dir: Option<&str>) -> anyhow::Result<()> {
+pub async fn run_requests(args: RequestsArgs, state_dir: Option<&str>) -> anyhow::Result<()> {
     let ipc = crate::cmds::ipc_or_err(state_dir).await?;
-    match ipc.request(IpcRequest::DirectRequests).await? {
+    match ipc
+        .request(IpcRequest::DirectRequests {
+            network: args.network.clone(),
+        })
+        .await?
+    {
         IpcResponse::DirectPending { requests } => {
             if requests.is_empty() {
                 println!("No pending join requests.");
@@ -627,6 +688,7 @@ pub async fn run_accept(args: AcceptArgs, state_dir: Option<&str>) -> anyhow::Re
     let ipc = crate::cmds::ipc_or_err(state_dir).await?;
     match ipc
         .request(IpcRequest::DirectAccept {
+            network: args.network,
             peer_id: args.peer_id,
         })
         .await?
@@ -644,6 +706,7 @@ pub async fn run_deny(args: DenyArgs, state_dir: Option<&str>) -> anyhow::Result
     let ipc = crate::cmds::ipc_or_err(state_dir).await?;
     match ipc
         .request(IpcRequest::DirectDeny {
+            network: args.network,
             peer_id: args.peer_id,
         })
         .await?
@@ -661,6 +724,7 @@ pub async fn run_kick(args: KickArgs, state_dir: Option<&str>) -> anyhow::Result
     let ipc = crate::cmds::ipc_or_err(state_dir).await?;
     match ipc
         .request(IpcRequest::DirectKick {
+            network: args.network,
             peer_id: args.peer_id,
         })
         .await?
@@ -719,21 +783,29 @@ pub async fn run_connect(args: ConnectArgs, state_dir: Option<&str>) -> anyhow::
 pub async fn run_firewall(cmd: FirewallCommand, state_dir: Option<&str>) -> anyhow::Result<()> {
     let ipc = crate::cmds::ipc_or_err(state_dir).await?;
     let req = match cmd {
-        FirewallCommand::Show => IpcRequest::DirectFirewallShow,
-        FirewallCommand::Off => IpcRequest::DirectFirewallOff,
+        FirewallCommand::Show => IpcRequest::DirectFirewallShow { network: None },
+        FirewallCommand::Off => IpcRequest::DirectFirewallOff { network: None },
         FirewallCommand::Add(a) => IpcRequest::DirectFirewallAdd {
+            network: a.network,
             direction: a.direction,
             action: a.action,
             protocol: a.protocol,
             port: a.port,
             peer: a.peer,
         },
-        FirewallCommand::Remove { index } => IpcRequest::DirectFirewallRemove { index },
-        FirewallCommand::Reset => IpcRequest::DirectFirewallReset,
-        FirewallCommand::FlushConntrack => IpcRequest::DirectFirewallFlushConntrack,
-        FirewallCommand::Pending => IpcRequest::DirectFirewallPending,
-        FirewallCommand::Accept => IpcRequest::DirectFirewallAcceptSuggestion,
-        FirewallCommand::RejectSuggestion => IpcRequest::DirectFirewallRejectSuggestion,
+        FirewallCommand::Remove { index } => IpcRequest::DirectFirewallRemove {
+            network: None,
+            index,
+        },
+        FirewallCommand::Reset => IpcRequest::DirectFirewallReset { network: None },
+        FirewallCommand::FlushConntrack => {
+            IpcRequest::DirectFirewallFlushConntrack { network: None }
+        }
+        FirewallCommand::Pending => IpcRequest::DirectFirewallPending { network: None },
+        FirewallCommand::Accept => IpcRequest::DirectFirewallAcceptSuggestion { network: None },
+        FirewallCommand::RejectSuggestion => {
+            IpcRequest::DirectFirewallRejectSuggestion { network: None }
+        }
     };
     match ipc.request(req).await? {
         IpcResponse::DirectFirewall {
@@ -776,13 +848,16 @@ pub async fn run_firewall(cmd: FirewallCommand, state_dir: Option<&str>) -> anyh
 pub async fn run_policy(cmd: PolicyCommand, state_dir: Option<&str>) -> anyhow::Result<()> {
     let ipc = crate::cmds::ipc_or_err(state_dir).await?;
     let req = match cmd {
-        PolicyCommand::Show => IpcRequest::DirectPolicyShow,
+        PolicyCommand::Show => IpcRequest::DirectPolicyShow { network: None },
         PolicyCommand::Set { file } => {
             let toml = std::fs::read_to_string(&file)
                 .with_context(|| format!("read policy file {file}"))?;
-            IpcRequest::DirectPolicySet { toml }
+            IpcRequest::DirectPolicySet {
+                network: None,
+                toml,
+            }
         }
-        PolicyCommand::Clear => IpcRequest::DirectPolicyClear,
+        PolicyCommand::Clear => IpcRequest::DirectPolicyClear { network: None },
     };
     match ipc.request(req).await? {
         IpcResponse::DirectPolicy { json } => {
@@ -823,7 +898,7 @@ pub async fn run_upgrade(args: UpgradeArgs, state_dir: Option<&str>) -> anyhow::
     let paths = paths(state_dir);
     let policy = SealPolicy::from_env_and_flag(false);
     let (identity, persisted, _) = load_agent(&paths, policy)?;
-    let direct = persisted.require_direct()?.clone();
+    let direct = persisted.require_direct_network(None)?.clone();
     if !direct.coordinator {
         anyhow::bail!("only the coordinator should run upgrade-to-managed first");
     }
@@ -901,4 +976,49 @@ pub async fn run_upgrade(args: UpgradeArgs, state_dir: Option<&str>) -> anyhow::
         resp.network_name
     );
     Ok(())
+}
+
+pub async fn run_leave(args: LeaveArgs, state_dir: Option<&str>) -> anyhow::Result<()> {
+    let paths = paths(state_dir);
+    let policy = SealPolicy::from_env_and_flag(false);
+    let (identity, mut persisted, _) = load_agent(&paths, policy)?;
+    let name = args.network.or(args.name);
+    let direct = persisted.require_direct_network(name.as_deref())?.clone();
+    let nid = direct.network_id;
+    let nname = direct.network_name.clone();
+    let Some(networks) = persisted.direct_networks_mut() else {
+        anyhow::bail!("not in Direct mode");
+    };
+    networks.retain(|d| d.network_id != nid);
+    if networks.is_empty() {
+        // wipe public state + docs; keep identity only via full reset suggestion
+        anyhow::bail!("leaving the last Direct network; use `tuntun reset --yes` instead");
+    }
+    let docs = paths.docs_dir(nid);
+    if docs.exists() {
+        let _ = std::fs::remove_dir_all(&docs);
+    }
+    persist_agent(&paths, &identity, persisted, policy)?;
+    println!("Left Direct network '{nname}'. Restart the agent to apply.");
+    crate::service::reload_after_config(state_dir)?;
+    Ok(())
+}
+
+pub async fn run_override_ip(args: OverrideIpArgs, state_dir: Option<&str>) -> anyhow::Result<()> {
+    let ipc = crate::cmds::ipc_or_err(state_dir).await?;
+    match ipc
+        .request(IpcRequest::DirectOverrideIp {
+            network: args.network,
+            peer: args.peer,
+            ip: args.ip,
+        })
+        .await?
+    {
+        IpcResponse::Ok { message } => {
+            println!("{message}");
+            Ok(())
+        }
+        IpcResponse::Error { message } => anyhow::bail!("{message}"),
+        other => anyhow::bail!("unexpected response: {other:?}"),
+    }
 }

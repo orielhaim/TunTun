@@ -247,17 +247,21 @@ impl TunTunConfig {
             return Ok(cfg);
         };
         match state {
-            PersistedState::Direct(d) => {
-                cfg.node.hostname = d.hostname.clone();
-                cfg.direct.insert(
-                    d.network_name.clone(),
-                    DirectNetworkSection {
-                        open: d.open,
-                        keep_alive: false,
-                        firewall: DirectFirewallSection::default(),
-                        dns: DirectDnsSection::default(),
-                    },
-                );
+            PersistedState::Direct { networks } => {
+                if let Some(d) = networks.first() {
+                    cfg.node.hostname = d.hostname.clone();
+                }
+                for d in &networks {
+                    cfg.direct.insert(
+                        d.network_name.clone(),
+                        DirectNetworkSection {
+                            open: d.open,
+                            keep_alive: false,
+                            firewall: DirectFirewallSection::default(),
+                            dns: DirectDnsSection::default(),
+                        },
+                    );
+                }
             }
             PersistedState::Managed(_) => {}
         }
@@ -590,12 +594,14 @@ impl TomlPort {
     }
 }
 
-/// DNS for the active Direct network, or defaults.
+/// DNS for the first Direct network, or defaults.
 pub fn load_dns(paths: &StatePaths) -> DnsConfig {
     let Ok(cfg) = TunTunConfig::ensure(paths) else {
         return DnsConfig::default();
     };
-    if let Ok(Some(PersistedState::Direct(d))) = PersistedState::try_load(paths) {
+    if let Ok(Some(PersistedState::Direct { networks })) = PersistedState::try_load(paths)
+        && let Some(d) = networks.first()
+    {
         return cfg.dns_for_network(&d.network_name);
     }
     cfg.direct
@@ -605,26 +611,32 @@ pub fn load_dns(paths: &StatePaths) -> DnsConfig {
         .unwrap_or_default()
 }
 
-/// Firewall for the active Direct network (from `tuntun.toml` only).
-pub fn load_firewall(paths: &StatePaths) -> FirewallConfig {
+/// Firewall for a Direct network by name (from `tuntun.toml` only).
+pub fn load_firewall_for(paths: &StatePaths, network_name: &str) -> FirewallConfig {
     let Ok(cfg) = TunTunConfig::ensure(paths) else {
         return default_firewall();
     };
-    let Ok(Some(PersistedState::Direct(d))) = PersistedState::try_load(paths) else {
-        return default_firewall();
-    };
-    cfg.firewall_for_network(&d.network_name)
+    cfg.firewall_for_network(network_name)
 }
 
-pub fn save_firewall(paths: &StatePaths, fw: &FirewallConfig) -> anyhow::Result<()> {
-    let network = PersistedState::try_load(paths)?
-        .and_then(|s| match s {
-            PersistedState::Direct(d) => Some(d.network_name),
-            _ => None,
-        })
-        .context("firewall save requires Direct mode")?;
+/// Firewall for the first Direct network (from `tuntun.toml` only).
+pub fn load_firewall(paths: &StatePaths) -> FirewallConfig {
+    let Ok(Some(PersistedState::Direct { networks })) = PersistedState::try_load(paths) else {
+        return default_firewall();
+    };
+    let Some(d) = networks.first() else {
+        return default_firewall();
+    };
+    load_firewall_for(paths, &d.network_name)
+}
+
+pub fn save_firewall(
+    paths: &StatePaths,
+    network_name: &str,
+    fw: &FirewallConfig,
+) -> anyhow::Result<()> {
     let mut cfg = TunTunConfig::ensure(paths)?;
-    cfg.set_firewall_for_network(&network, fw);
+    cfg.set_firewall_for_network(network_name, fw);
     cfg.save(paths)
 }
 

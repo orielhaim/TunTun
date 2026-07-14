@@ -144,5 +144,11 @@ async fn main() -> anyhow::Result<()> {
         crate::cli::Command::UpgradeToManaged(a) => {
             crate::cmds_direct::run_upgrade(a, cli.state_dir.as_deref()).await
         }
+        crate::cli::Command::Leave(a) => {
+            crate::cmds_direct::run_leave(a, cli.state_dir.as_deref()).await
+        }
+        crate::cli::Command::OverrideIp(a) => {
+            crate::cmds_direct::run_override_ip(a, cli.state_dir.as_deref()).await
+        }
     }
 }

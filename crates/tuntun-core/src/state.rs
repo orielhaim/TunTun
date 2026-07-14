@@ -82,9 +82,6 @@ impl StatePaths {
     pub fn cache_file(&self) -> PathBuf {
         self.dir.join("routing_cache.json")
     }
-    pub fn membership_file(&self) -> PathBuf {
-        self.dir.join("direct_membership.json")
-    }
     /// Unified agent configuration (TOML)
     pub fn config_toml_file(&self) -> PathBuf {
         self.dir.join("tuntun.toml")
@@ -107,20 +104,47 @@ impl StatePaths {
     pub fn update_previous_bin(&self) -> PathBuf {
         self.update_dir().join("tuntun.prev")
     }
-    /// Pending coordinator firewall suggestion.
-    pub fn firewall_pending_file(&self) -> PathBuf {
-        self.dir.join("firewall_pending.json")
+    /// Per-network iroh-docs store root.
+    pub fn docs_dir(&self, network_id: Uuid) -> PathBuf {
+        self.dir.join("docs").join(network_id.to_string())
     }
-    pub fn invites_file(&self) -> PathBuf {
-        self.dir.join("direct_invites.json")
+    /// Pending coordinator firewall suggestion for a network.
+    pub fn firewall_pending_file(&self, network_id: Uuid) -> PathBuf {
+        self.dir
+            .join("firewall_pending")
+            .join(format!("{network_id}.json"))
     }
-    pub fn pending_file(&self) -> PathBuf {
-        self.dir.join("direct_pending.json")
+    pub fn invites_file(&self, network_id: Uuid) -> PathBuf {
+        self.dir
+            .join("direct_invites")
+            .join(format!("{network_id}.json"))
+    }
+    pub fn pending_file(&self, network_id: Uuid) -> PathBuf {
+        self.dir
+            .join("direct_pending")
+            .join(format!("{network_id}.json"))
+    }
+    /// Manual IP overrides for birthday collisions (`override-ip`).
+    pub fn ip_overrides_file(&self) -> PathBuf {
+        self.dir.join("ip_overrides.json")
     }
 
     pub fn ensure(&self) -> anyhow::Result<()> {
         std::fs::create_dir_all(&self.dir)
             .with_context(|| format!("mkdir {}", self.dir.display()))?;
+        Ok(())
+    }
+
+    pub fn ensure_network_dirs(&self, network_id: Uuid) -> anyhow::Result<()> {
+        self.ensure()?;
+        for sub in [
+            self.docs_dir(network_id),
+            self.dir.join("firewall_pending"),
+            self.dir.join("direct_invites"),
+            self.dir.join("direct_pending"),
+        ] {
+            std::fs::create_dir_all(&sub).with_context(|| format!("mkdir {}", sub.display()))?;
+        }
         Ok(())
     }
 
@@ -213,7 +237,10 @@ pub struct DirectState {
 #[serde(tag = "mode", rename_all = "lowercase")]
 pub enum PersistedState {
     Managed(ManagedState),
-    Direct(DirectState),
+    Direct {
+        /// Join order = vec order (first = outbound winner on IP clash).
+        networks: Vec<DirectState>,
+    },
 }
 
 impl PersistedState {
@@ -246,12 +273,12 @@ impl PersistedState {
 
     /// Merge secrets from `state.enc` into this in-memory state.
     pub fn apply_secrets(&mut self, secrets: &crate::secret_store::AgentSecrets) {
-        if let PersistedState::Direct(d) = self {
-            if let Some(s) = &secrets.network_secret {
-                d.network_secret = s.clone();
-            }
-            if secrets.doc_ticket.is_some() {
-                d.doc_ticket = secrets.doc_ticket.clone();
+        if let PersistedState::Direct { networks } = self {
+            for d in networks.iter_mut() {
+                if let Some(ns) = secrets.networks.get(&d.network_id) {
+                    d.network_secret = ns.network_secret.clone();
+                    d.doc_ticket = ns.doc_ticket.clone();
+                }
             }
         }
     }
@@ -259,7 +286,7 @@ impl PersistedState {
     pub fn mode(&self) -> NodeMode {
         match self {
             PersistedState::Managed(_) => NodeMode::Managed,
-            PersistedState::Direct(_) => NodeMode::Direct,
+            PersistedState::Direct { .. } => NodeMode::Direct,
         }
     }
 
@@ -268,21 +295,7 @@ impl PersistedState {
     }
 
     pub fn is_direct(&self) -> bool {
-        matches!(self, PersistedState::Direct(_))
-    }
-
-    pub fn network_name(&self) -> &str {
-        match self {
-            PersistedState::Managed(m) => &m.network_name,
-            PersistedState::Direct(d) => &d.network_name,
-        }
-    }
-
-    pub fn network_id(&self) -> Uuid {
-        match self {
-            PersistedState::Managed(m) => m.network_id,
-            PersistedState::Direct(d) => d.network_id,
-        }
+        matches!(self, PersistedState::Direct { .. })
     }
 
     pub fn as_managed(&self) -> Option<&ManagedState> {
@@ -292,10 +305,57 @@ impl PersistedState {
         }
     }
 
-    pub fn as_direct(&self) -> Option<&DirectState> {
+    pub fn direct_networks(&self) -> &[DirectState] {
         match self {
-            PersistedState::Direct(d) => Some(d),
+            PersistedState::Direct { networks } => networks,
+            _ => &[],
+        }
+    }
+
+    pub fn direct_networks_mut(&mut self) -> Option<&mut Vec<DirectState>> {
+        match self {
+            PersistedState::Direct { networks } => Some(networks),
             _ => None,
+        }
+    }
+
+    pub fn direct_by_name(&self, name: &str) -> Option<&DirectState> {
+        self.direct_networks()
+            .iter()
+            .find(|d| d.network_name.eq_ignore_ascii_case(name))
+    }
+
+    pub fn direct_by_id(&self, id: Uuid) -> Option<&DirectState> {
+        self.direct_networks().iter().find(|d| d.network_id == id)
+    }
+
+    /// Resolve a Direct network by optional name. If `name` is `None` and exactly
+    /// one network is joined, returns that network.
+    pub fn require_direct_network(&self, name: Option<&str>) -> anyhow::Result<&DirectState> {
+        let networks = match self {
+            PersistedState::Direct { networks } => networks,
+            PersistedState::Managed(_) => anyhow::bail!(
+                "this command requires Direct mode; this agent is in Managed mode \
+                 (run `tuntun reset --yes` to switch)"
+            ),
+        };
+        if networks.is_empty() {
+            anyhow::bail!("no Direct networks joined");
+        }
+        match name {
+            Some(n) => self
+                .direct_by_name(n)
+                .with_context(|| format!("Direct network '{n}' not found")),
+            None if networks.len() == 1 => Ok(&networks[0]),
+            None => anyhow::bail!(
+                "multiple Direct networks joined; pass --network <name> \
+                 (joined: {})",
+                networks
+                    .iter()
+                    .map(|d| d.network_name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
         }
     }
 
@@ -306,11 +366,21 @@ impl PersistedState {
         )
     }
 
-    pub fn require_direct(&self) -> anyhow::Result<&DirectState> {
-        self.as_direct().context(
-            "this command requires Direct mode; this agent is in Managed mode \
-             (run `tuntun reset --yes` to switch)",
-        )
+    /// Managed network id, or first Direct network id (status / display helpers).
+    pub fn primary_network_id(&self) -> Option<Uuid> {
+        match self {
+            PersistedState::Managed(m) => Some(m.network_id),
+            PersistedState::Direct { networks } => networks.first().map(|d| d.network_id),
+        }
+    }
+
+    pub fn primary_network_name(&self) -> Option<&str> {
+        match self {
+            PersistedState::Managed(m) => Some(&m.network_name),
+            PersistedState::Direct { networks } => {
+                networks.first().map(|d| d.network_name.as_str())
+            }
+        }
     }
 }
 
@@ -369,26 +439,28 @@ mod tests {
 
     #[test]
     fn tagged_direct_roundtrip() {
-        let s = PersistedState::Direct(DirectState {
-            network_name: "home".into(),
-            network_secret: "aa".repeat(32),
-            topic_hash: "bb".repeat(32),
-            network_id: Uuid::nil(),
-            coordinator: true,
-            open: true,
-            assigned_ipv4: "100.64.0.1".parse().unwrap(),
-            collision_index: 0,
-            hostname: "laptop".into(),
-            coordinator_endpoint_id: None,
-            doc_ticket: None,
-            namespace_id: None,
-            auto_accept_firewall: false,
-            created_at: Utc::now(),
-        });
+        let s = PersistedState::Direct {
+            networks: vec![DirectState {
+                network_name: "home".into(),
+                network_secret: "aa".repeat(32),
+                topic_hash: "bb".repeat(32),
+                network_id: Uuid::nil(),
+                coordinator: true,
+                open: true,
+                assigned_ipv4: "100.64.0.1".parse().unwrap(),
+                collision_index: 0,
+                hostname: "laptop".into(),
+                coordinator_endpoint_id: None,
+                doc_ticket: None,
+                namespace_id: None,
+                auto_accept_firewall: false,
+                created_at: Utc::now(),
+            }],
+        };
         let bytes = serde_json::to_vec(&s).unwrap();
         let loaded: PersistedState = serde_json::from_slice(&bytes).unwrap();
         assert!(loaded.is_direct());
-        let d = loaded.require_direct().unwrap();
+        let d = loaded.require_direct_network(None).unwrap();
         assert!(
             d.network_secret.is_empty(),
             "secrets must not live in state.json"
@@ -408,6 +480,53 @@ mod tests {
         let bytes = serde_json::to_vec(&s).unwrap();
         let loaded: PersistedState = serde_json::from_slice(&bytes).unwrap();
         assert!(loaded.is_managed());
-        assert_eq!(loaded.network_name(), "default");
+        assert_eq!(loaded.primary_network_name(), Some("default"));
+    }
+
+    #[test]
+    fn require_direct_network_multi() {
+        let s = PersistedState::Direct {
+            networks: vec![
+                DirectState {
+                    network_name: "gaming".into(),
+                    network_secret: String::new(),
+                    topic_hash: "aa".repeat(32),
+                    network_id: Uuid::from_u128(1),
+                    coordinator: true,
+                    open: false,
+                    assigned_ipv4: "100.64.0.1".parse().unwrap(),
+                    collision_index: 0,
+                    hostname: "laptop".into(),
+                    coordinator_endpoint_id: None,
+                    doc_ticket: None,
+                    namespace_id: None,
+                    auto_accept_firewall: false,
+                    created_at: Utc::now(),
+                },
+                DirectState {
+                    network_name: "homelab".into(),
+                    network_secret: String::new(),
+                    topic_hash: "bb".repeat(32),
+                    network_id: Uuid::from_u128(2),
+                    coordinator: false,
+                    open: false,
+                    assigned_ipv4: "100.64.0.1".parse().unwrap(),
+                    collision_index: 0,
+                    hostname: "laptop".into(),
+                    coordinator_endpoint_id: None,
+                    doc_ticket: None,
+                    namespace_id: None,
+                    auto_accept_firewall: false,
+                    created_at: Utc::now(),
+                },
+            ],
+        };
+        assert!(s.require_direct_network(None).is_err());
+        assert_eq!(
+            s.require_direct_network(Some("homelab"))
+                .unwrap()
+                .network_name,
+            "homelab"
+        );
     }
 }

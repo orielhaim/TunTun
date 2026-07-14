@@ -39,6 +39,7 @@ pub fn apply_membership(
         &membership.device_profile,
         &membership.dns,
         &membership.network_name,
+        membership.network_id,
         self_endpoint_id,
         membership.version,
     );

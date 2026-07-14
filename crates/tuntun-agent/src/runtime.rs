@@ -1,9 +1,11 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::Instant;
 
 use anyhow::Context;
 use tuntun_common::TUNNEL_ALPN;
+use tuntun_core::direct::SecretResolver;
 use tuntun_core::ipc::{AgentIpcState, DataPlaneHandle, spawn_ipc_server};
 use tuntun_core::{CoreNode, CoreNodeConfig};
 use uuid::Uuid;
@@ -48,7 +50,18 @@ pub async fn run(
     };
 
     let is_direct = persisted.is_direct();
-    let network_id = persisted.network_id();
+    let network_id = persisted.primary_network_id().unwrap_or(Uuid::nil());
+
+    let secret_resolver: Option<SecretResolver> = if is_direct {
+        let secrets: HashMap<Uuid, String> = persisted
+            .direct_networks()
+            .iter()
+            .map(|d| (d.network_id, d.network_secret.clone()))
+            .collect();
+        Some(Arc::new(move |nid: Uuid| secrets.get(&nid).cloned()) as SecretResolver)
+    } else {
+        None
+    };
 
     let node = CoreNode::bootstrap(
         identity,
@@ -63,7 +76,6 @@ pub async fn run(
             kind: "agent",
             on_kill_ssh,
             enable_mdns: !args.no_mdns,
-            // Managed: keep-alive. Direct: on-demand unless --keep-alive.
             keep_alive: if is_direct { args.keep_alive } else { true },
         },
     )
@@ -129,6 +141,22 @@ pub async fn run(
     let dgram_pool =
         tuntun_core::ConnPool::with_shared_policy(node.endpoint.clone(), TUNNEL_ALPN, &node.pool);
 
+    let firewalls: HashMap<_, _> = node
+        .direct
+        .iter()
+        .map(|(id, rt)| (*id, rt.firewall.clone()))
+        .collect();
+    let spoofs: HashMap<_, _> = node
+        .direct
+        .iter()
+        .map(|(id, rt)| (*id, rt.spoof_tracker.clone()))
+        .collect();
+    let docs_map: HashMap<_, _> = node
+        .direct
+        .iter()
+        .map(|(id, rt)| (*id, rt.docs.clone()))
+        .collect();
+
     crate::accept::spawn(AcceptDeps {
         endpoint: node.endpoint.clone(),
         routes: node.routes.clone(),
@@ -142,16 +170,20 @@ pub async fn run(
         recording_store,
         signed: node.signed.clone(),
         hostname: hostname.clone(),
-        network_name: node.persisted.network_name().to_string(),
+        network_name: node
+            .persisted
+            .primary_network_name()
+            .unwrap_or("tuntun")
+            .to_string(),
         self_endpoint_id: node.endpoint_id_hex(),
         recorder_enabled: args.recorder,
         send: node.send.clone(),
         direct_auth: node.direct_auth.clone(),
-        network_secret: node.persisted.as_direct().map(|d| d.network_secret.clone()),
+        secret_resolver,
         state_dir: node.paths.dir.clone(),
-        docs: node.docs.clone(),
-        firewall: node.firewall.clone(),
-        spoof_tracker: node.spoof_tracker.clone(),
+        docs: docs_map,
+        firewalls,
+        spoofs,
         dgram_pool: dgram_pool.clone(),
     });
 
@@ -189,12 +221,17 @@ pub async fn run(
 
     crate::metrics::spawn_listeners(metrics.clone(), &args.metrics_bind, assigned_ipv4);
 
+    let outbound_firewalls: HashMap<_, _> = node
+        .direct
+        .iter()
+        .map(|(id, rt)| (*id, rt.firewall.clone()))
+        .collect();
     let outbound = spawn_outbound(
         tun.clone(),
         node.routes.clone(),
         dgram_pool,
         node.acl.clone(),
-        node.firewall.clone(),
+        outbound_firewalls,
         metrics.clone(),
     );
 
@@ -236,7 +273,7 @@ pub async fn run(
         send: node.send.clone(),
         data_plane,
     });
-    let _ipc_task = spawn_ipc_server(network_id, ipc_state);
+    let _ipc_task = spawn_ipc_server(ipc_state);
 
     #[cfg(unix)]
     crate::sd_notify::status("running");

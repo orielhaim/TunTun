@@ -3,16 +3,19 @@
 //! Multiple concurrent `endpoint.accept()` loops race and drop wrong-ALPN
 //! connections. The agent must use exactly one acceptor.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use iroh::Endpoint;
 use tuntun_common::ws::ClientMsg;
 use tuntun_common::{RECORDING_ALPN, SEND_ALPN, SSH_ALPN, TUNNEL_ALPN};
 use tuntun_core::direct::{
-    AUTH_ALPN, AuthCache, DOCS_ALPN, DocsMembership, GOSSIP_ALPN, run_psk_handshake_server,
+    AUTH_ALPN, AuthCache, DOCS_ALPN, DocsMembership, FirewallEngine, GOSSIP_ALPN, SecretResolver,
+    SpoofTracker, run_psk_handshake_server,
 };
 use tuntun_core::stream::{StreamHandler, TUNNEL_STREAM_ALPN, serve_stream_connection};
 use tuntun_core::{AclEngine, ConnPool, RoutingTable, SendManager, SignedClient};
+use uuid::Uuid;
 
 use crate::dataplane::TunSlot;
 use crate::metrics::AgentMetrics;
@@ -38,11 +41,11 @@ pub struct AcceptDeps {
     pub recorder_enabled: bool,
     pub send: SendManager,
     pub direct_auth: Option<AuthCache>,
-    pub network_secret: Option<String>,
+    pub secret_resolver: Option<SecretResolver>,
     pub state_dir: std::path::PathBuf,
-    pub docs: Option<DocsMembership>,
-    pub firewall: Option<tuntun_core::direct::FirewallEngine>,
-    pub spoof_tracker: Option<tuntun_core::direct::SpoofTracker>,
+    pub docs: HashMap<Uuid, DocsMembership>,
+    pub firewalls: HashMap<Uuid, FirewallEngine>,
+    pub spoofs: HashMap<Uuid, SpoofTracker>,
     pub dgram_pool: ConnPool,
 }
 
@@ -66,11 +69,11 @@ pub fn spawn(deps: AcceptDeps) {
             let recorder_enabled = deps.recorder_enabled;
             let send = deps.send.clone();
             let direct_auth = deps.direct_auth.clone();
-            let network_secret = deps.network_secret.clone();
+            let secret_resolver = deps.secret_resolver.clone();
             let state_dir = deps.state_dir.clone();
             let docs = deps.docs.clone();
-            let firewall = deps.firewall.clone();
-            let spoof_tracker = deps.spoof_tracker.clone();
+            let firewalls = deps.firewalls.clone();
+            let spoofs = deps.spoofs.clone();
             let dgram_pool = deps.dgram_pool.clone();
             tokio::spawn(async move {
                 let conn = match incoming.await {
@@ -82,17 +85,18 @@ pub fn spawn(deps: AcceptDeps) {
                 };
                 let alpn = conn.alpn();
                 if alpn == AUTH_ALPN {
-                    if let (Some(auth), Some(secret)) =
-                        (direct_auth.clone(), network_secret.clone())
+                    if let (Some(auth), Some(resolver)) =
+                        (direct_auth.clone(), secret_resolver.clone())
                     {
-                        match run_psk_handshake_server(&conn, &secret, &self_endpoint_id, &auth)
+                        match run_psk_handshake_server(&conn, resolver, &self_endpoint_id, &auth)
                             .await
                         {
-                            Ok(_peer) => {
+                            Ok((_peer, network_id)) => {
+                                let docs_ref = docs.get(&network_id);
                                 if let Err(e) = crate::cmds_direct::try_handle_post_auth(
                                     &conn,
                                     &state_dir,
-                                    docs.as_ref(),
+                                    docs_ref,
                                     &self_endpoint_id,
                                 )
                                 .await
@@ -108,14 +112,31 @@ pub fn spawn(deps: AcceptDeps) {
                         tracing::debug!("AUTH_ALPN ignored (not in Direct mode)");
                     }
                 } else if alpn == DOCS_ALPN {
-                    if let Some(docs) = docs {
-                        docs.accept_docs(conn).await;
+                    // Prefer docs for a network this peer already authed for.
+                    let peer = format!("{}", conn.remote_id());
+                    let preferred = direct_auth
+                        .as_ref()
+                        .and_then(|a| a.networks_for(&peer).into_iter().next());
+                    if let Some(nid) = preferred
+                        && let Some(d) = docs.get(&nid)
+                    {
+                        d.accept_docs(conn).await;
+                    } else if let Some((_, d)) = docs.iter().next() {
+                        d.accept_docs(conn).await;
                     } else {
                         tracing::debug!("DOCS_ALPN ignored (not in Direct mode)");
                     }
                 } else if alpn == GOSSIP_ALPN {
-                    if let Some(docs) = docs {
-                        docs.accept_gossip(conn).await;
+                    let peer = format!("{}", conn.remote_id());
+                    let preferred = direct_auth
+                        .as_ref()
+                        .and_then(|a| a.networks_for(&peer).into_iter().next());
+                    if let Some(nid) = preferred
+                        && let Some(d) = docs.get(&nid)
+                    {
+                        d.accept_gossip(conn).await;
+                    } else if let Some((_, d)) = docs.iter().next() {
+                        d.accept_gossip(conn).await;
                     } else {
                         tracing::debug!("GOSSIP_ALPN ignored (Direct docs not ready)");
                     }
@@ -132,10 +153,11 @@ pub fn spawn(deps: AcceptDeps) {
                         tun: tun_dev,
                         routes,
                         acl,
-                        firewall,
-                        spoof: spoof_tracker,
+                        firewalls,
+                        spoofs,
                         pool: Some(dgram_pool),
                         metrics,
+                        direct_auth,
                     })
                     .await;
                 } else if alpn == SSH_ALPN {

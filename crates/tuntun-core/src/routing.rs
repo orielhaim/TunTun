@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::net::Ipv4Addr;
 use std::sync::Arc;
 
@@ -5,9 +6,11 @@ use arc_swap::ArcSwap;
 use dashmap::DashMap;
 use ipnet::Ipv4Net;
 use iroh::EndpointId;
+use parking_lot::Mutex;
 use tuntun_common::{
     DeviceProfile, DnsConfig, ExitNodeInfo, HostnameRoute, PeerEntry, SubnetRoute,
 };
+use uuid::Uuid;
 
 pub struct PeerInfo {
     pub endpoint: EndpointId,
@@ -15,6 +18,8 @@ pub struct PeerInfo {
     pub hostname: String,
     pub ip: Ipv4Addr,
     pub tags: Vec<String>,
+    pub network_id: Uuid,
+    pub network_name: String,
 }
 
 /// Resolved hostname route (exact or wildcard).
@@ -26,8 +31,24 @@ pub struct HostnameRouteInfo {
     pub hostname: String,
 }
 
+#[derive(Clone)]
+struct NetworkSlice {
+    peers: Vec<PeerEntry>,
+    subnet_routes: Vec<SubnetRoute>,
+    hostname_routes: Vec<HostnameRoute>,
+    exit_nodes: Vec<ExitNodeInfo>,
+    profile: DeviceProfile,
+    dns: DnsConfig,
+    network_name: String,
+    self_endpoint_id: String,
+    /// Join index: lower = first-joined = outbound winner on IP clash.
+    join_index: u64,
+}
+
 pub struct Tables {
     pub by_ip: std::collections::HashMap<Ipv4Addr, Arc<PeerInfo>>,
+    /// All memberships including same IP across networks.
+    pub by_network_ip: std::collections::HashMap<(Uuid, Ipv4Addr), Arc<PeerInfo>>,
     pub by_endpoint: std::collections::HashMap<String, Arc<PeerInfo>>,
     pub by_hostname: std::collections::HashMap<String, Arc<PeerInfo>>,
     /// Longest-prefix-match candidates, sorted by prefix length descending.
@@ -56,6 +77,9 @@ pub struct RoutingTable {
     inner: Arc<ArcSwap<Tables>>,
     /// Synthetic IPs created at DNS resolve time (esp. wildcard hostname routes).
     dynamic_synth: Arc<DashMap<Ipv4Addr, Arc<PeerInfo>>>,
+    slices: Arc<Mutex<BTreeMap<Uuid, NetworkSlice>>>,
+    /// Manual IP overrides: (network_id, peer_key) → ip. peer_key is hostname or endpoint hex.
+    overrides: Arc<DashMap<(Uuid, String), Ipv4Addr>>,
 }
 
 impl Default for RoutingTable {
@@ -69,6 +93,7 @@ impl RoutingTable {
         Self {
             inner: Arc::new(ArcSwap::from_pointee(Tables {
                 by_ip: Default::default(),
+                by_network_ip: Default::default(),
                 by_endpoint: Default::default(),
                 by_hostname: Default::default(),
                 subnets: Default::default(),
@@ -84,10 +109,35 @@ impl RoutingTable {
                 version: 0,
             })),
             dynamic_synth: Arc::new(DashMap::new()),
+            slices: Arc::new(Mutex::new(BTreeMap::new())),
+            overrides: Arc::new(DashMap::new()),
         }
     }
 
+    /// Look up peer by (network, ip) for inbound / firewall context.
+    pub fn lookup_network_ip(&self, network_id: Uuid, ip: &Ipv4Addr) -> Option<Arc<PeerInfo>> {
+        self.inner
+            .load()
+            .by_network_ip
+            .get(&(network_id, *ip))
+            .cloned()
+    }
+
+    /// Set a manual outbound IP override for a peer in a network.
+    pub fn set_ip_override(&self, network_id: Uuid, peer_key: &str, ip: Ipv4Addr) {
+        self.overrides
+            .insert((network_id, peer_key.to_ascii_lowercase()), ip);
+        self.rebuild(None);
+    }
+
+    pub fn clear_ip_override(&self, network_id: Uuid, peer_key: &str) {
+        self.overrides
+            .remove(&(network_id, peer_key.to_ascii_lowercase()));
+        self.rebuild(None);
+    }
+
     /// Direct peer IP, subnet LPM, then selected exit node for internet.
+    /// On birthday collisions across networks, first-joined network wins.
     pub fn lookup_ip(&self, ip: &Ipv4Addr) -> Option<Arc<PeerInfo>> {
         let tables = self.inner.load();
         if let Some(peer) = tables.by_ip.get(ip).cloned() {
@@ -179,7 +229,7 @@ impl RoutingTable {
     }
 
     pub fn peers(&self) -> Vec<Arc<PeerInfo>> {
-        self.inner.load().by_endpoint.values().cloned().collect()
+        self.inner.load().by_network_ip.values().cloned().collect()
     }
 
     pub fn version(&self) -> u64 {
@@ -223,6 +273,22 @@ impl RoutingTable {
             .unwrap_or(lower.as_str())
             .trim_end_matches('.');
 
+        // Try hostname.network.suffix for every known network name in peer set.
+        for peer in tables.by_network_ip.values() {
+            if peer.hostname.is_empty() {
+                continue;
+            }
+            let host = peer.hostname.to_ascii_lowercase();
+            let fqdn = if peer.network_name.is_empty() {
+                host.clone()
+            } else {
+                format!("{host}.{}", peer.network_name)
+            };
+            if bare == host || bare == fqdn {
+                return Some(peer.ip);
+            }
+        }
+
         let network_suffix = if tables.network_name.is_empty() {
             None
         } else {
@@ -257,14 +323,15 @@ impl RoutingTable {
         } else {
             peer.hostname.to_ascii_lowercase()
         };
-        let fqdn = if tables.network_name.is_empty() {
+        let fqdn = if peer.network_name.is_empty() {
             format!("{host}.{}", tables.dns_suffix)
         } else {
-            format!("{host}.{}.{}", tables.network_name, tables.dns_suffix)
+            format!("{host}.{}.{}", peer.network_name, tables.dns_suffix)
         };
         Some(fqdn)
     }
 
+    /// Full table replace (Managed / single-network). Clears other network slices.
     #[allow(clippy::too_many_arguments)]
     pub fn replace(
         &self,
@@ -275,103 +342,253 @@ impl RoutingTable {
         profile: &DeviceProfile,
         dns: &DnsConfig,
         network_name: &str,
+        network_id: Uuid,
         self_endpoint_id: &str,
         version: u64,
     ) {
-        let mut by_ip = std::collections::HashMap::with_capacity(peers.len());
-        let mut by_endpoint = std::collections::HashMap::with_capacity(peers.len());
-        let mut by_hostname = std::collections::HashMap::with_capacity(peers.len());
-        for p in peers {
-            let Ok(ep) = p.endpoint_id.parse::<EndpointId>() else {
-                tracing::warn!(id = %p.endpoint_id, "skip peer with bad endpoint id");
-                continue;
-            };
-            let info = Arc::new(PeerInfo {
-                endpoint: ep,
-                endpoint_hex: p.endpoint_id.clone(),
-                hostname: p.hostname.clone(),
-                ip: p.ip,
-                tags: p.tags.clone(),
-            });
-            by_ip.insert(p.ip, info.clone());
-            by_endpoint.insert(p.endpoint_id.clone(), info.clone());
-            if !p.hostname.is_empty() {
-                by_hostname.insert(p.hostname.to_ascii_lowercase(), info);
-            }
-        }
-
-        let mut advertised = Vec::new();
-        let mut subnets = Vec::new();
-        for route in subnet_routes {
-            if route.via_endpoint_id == self_endpoint_id {
-                advertised.push(route.cidr);
-                continue;
-            }
-            let peer = peer_for_via(&by_endpoint, &route.via_endpoint_id, route.via_ip);
-            let Some(peer) = peer else { continue };
-            subnets.push((route.cidr, peer));
-        }
-
-        // If we ourselves are an exit node, advertise default.
-        for exit in exit_nodes {
-            if exit.endpoint_id == self_endpoint_id {
-                for cidr in &exit.allowed_cidrs {
-                    advertised.push(*cidr);
-                }
-            }
-        }
-
-        // Selected exit for this device → install as lowest-priority catch-all via subnets.
-        let mut exit_node = None;
-        if let Some(exit_id) = &profile.exit_node_endpoint_id
-            && let Some(exit) = exit_nodes.iter().find(|e| &e.endpoint_id == exit_id)
         {
-            let peer = peer_for_via(&by_endpoint, &exit.endpoint_id, exit.via_ip);
-            if let Some(peer) = peer {
-                for cidr in &exit.allowed_cidrs {
-                    // Don't override more-specific subnet routes.
-                    if !subnets.iter().any(|(n, _)| n == cidr) {
-                        subnets.push((*cidr, peer.clone()));
-                    }
-                }
-                exit_node = Some(peer);
-            }
+            let mut slices = self.slices.lock();
+            slices.clear();
+            slices.insert(
+                network_id,
+                NetworkSlice {
+                    peers: peers.to_vec(),
+                    subnet_routes: subnet_routes.to_vec(),
+                    hostname_routes: hostname_routes.to_vec(),
+                    exit_nodes: exit_nodes.to_vec(),
+                    profile: profile.clone(),
+                    dns: dns.clone(),
+                    network_name: network_name.to_ascii_lowercase(),
+                    self_endpoint_id: self_endpoint_id.to_string(),
+                    join_index: 0,
+                },
+            );
         }
-        subnets.sort_by_key(|subnet| std::cmp::Reverse(subnet.0.prefix_len()));
+        self.rebuild(Some(version));
+    }
 
-        let mut hostname_exact = std::collections::HashMap::new();
+    /// Replace peers for one Direct network; other networks kept. First-joined wins outbound.
+    #[allow(clippy::too_many_arguments)]
+    pub fn replace_network(
+        &self,
+        network_id: Uuid,
+        join_index: u64,
+        peers: &[PeerEntry],
+        dns: &DnsConfig,
+        network_name: &str,
+        self_endpoint_id: &str,
+        version: u64,
+    ) {
+        {
+            let mut slices = self.slices.lock();
+            slices.insert(
+                network_id,
+                NetworkSlice {
+                    peers: peers.to_vec(),
+                    subnet_routes: vec![],
+                    hostname_routes: vec![],
+                    exit_nodes: vec![],
+                    profile: DeviceProfile::default(),
+                    dns: dns.clone(),
+                    network_name: network_name.to_ascii_lowercase(),
+                    self_endpoint_id: self_endpoint_id.to_string(),
+                    join_index,
+                },
+            );
+        }
+        self.rebuild(Some(version));
+    }
+
+    pub fn remove_network(&self, network_id: Uuid) {
+        self.slices.lock().remove(&network_id);
+        self.rebuild(None);
+    }
+
+    fn rebuild(&self, version: Option<u64>) {
+        let slices: Vec<(Uuid, NetworkSlice)> = {
+            let g = self.slices.lock();
+            let mut v: Vec<_> = g.iter().map(|(k, s)| (*k, s.clone())).collect();
+            v.sort_by_key(|(_, s)| s.join_index);
+            v
+        };
+
+        let version = version.unwrap_or_else(|| self.inner.load().version.saturating_add(1));
+        let mut by_ip: std::collections::HashMap<Ipv4Addr, Arc<PeerInfo>> =
+            std::collections::HashMap::new();
+        let mut by_network_ip: std::collections::HashMap<(Uuid, Ipv4Addr), Arc<PeerInfo>> =
+            std::collections::HashMap::new();
+        let mut by_endpoint: std::collections::HashMap<String, Arc<PeerInfo>> =
+            std::collections::HashMap::new();
+        let mut by_hostname: std::collections::HashMap<String, Arc<PeerInfo>> =
+            std::collections::HashMap::new();
+        let mut subnets = Vec::new();
+        let mut advertised = Vec::new();
+        let mut hostname_exact: std::collections::HashMap<String, Arc<HostnameRouteInfo>> =
+            std::collections::HashMap::new();
         let mut hostname_wildcards = Vec::new();
         let mut advertised_hostnames = Vec::new();
-        let mut synthetic_hosts = std::collections::HashMap::new();
+        let mut synthetic_hosts: std::collections::HashMap<Ipv4Addr, String> =
+            std::collections::HashMap::new();
+        let mut exit_node = None;
+        let mut dns_suffix = "tuntun".to_string();
+        let mut magic_ip = Ipv4Addr::new(100, 100, 100, 53);
+        let mut primary_network_name = String::new();
 
-        for route in hostname_routes {
-            let hostname = route.hostname.to_ascii_lowercase();
-            let peer = peer_for_via(&by_endpoint, &route.via_endpoint_id, route.via_ip);
-            let Some(peer) = peer else { continue };
-            let info = Arc::new(HostnameRouteInfo {
-                peer: peer.clone(),
-                is_wildcard: route.is_wildcard,
-                target_ip: route.target_ip,
-                hostname: hostname.clone(),
-            });
-            if route.via_endpoint_id == self_endpoint_id {
-                advertised_hostnames.push(info.clone());
-                continue;
+        for (network_id, slice) in &slices {
+            if primary_network_name.is_empty() {
+                primary_network_name = slice.network_name.clone();
             }
-            if !route.is_wildcard {
-                let synth = synthetic_ip_for(&hostname);
-                by_ip.insert(synth, peer);
-                synthetic_hosts.insert(synth, hostname.clone());
-                hostname_exact.insert(hostname, info);
-            } else {
-                hostname_wildcards.push(info);
+            dns_suffix = slice.dns.suffix.clone();
+            magic_ip = slice.dns.magic_ip;
+
+            let mut local_by_endpoint: std::collections::HashMap<String, Arc<PeerInfo>> =
+                std::collections::HashMap::new();
+            for p in &slice.peers {
+                let Ok(ep) = p.endpoint_id.parse::<EndpointId>() else {
+                    tracing::warn!(id = %p.endpoint_id, "skip peer with bad endpoint id");
+                    continue;
+                };
+                let mut ip = p.ip;
+                // Apply override by hostname or endpoint hex.
+                for key in [
+                    p.hostname.to_ascii_lowercase(),
+                    p.endpoint_id.to_ascii_lowercase(),
+                ] {
+                    if key.is_empty() {
+                        continue;
+                    }
+                    if let Some(ov) = self.overrides.get(&(*network_id, key)) {
+                        ip = *ov;
+                        break;
+                    }
+                }
+                let info = Arc::new(PeerInfo {
+                    endpoint: ep,
+                    endpoint_hex: p.endpoint_id.clone(),
+                    hostname: p.hostname.clone(),
+                    ip,
+                    tags: p.tags.clone(),
+                    network_id: *network_id,
+                    network_name: slice.network_name.clone(),
+                });
+                by_network_ip.insert((*network_id, ip), info.clone());
+                // First-joined wins on outbound by_ip.
+                if let Some(existing) = by_ip.get(&ip) {
+                    if existing.endpoint_hex != info.endpoint_hex {
+                        tracing::warn!(
+                            %ip,
+                            winner_network = %existing.network_name,
+                            winner_peer = %existing.hostname,
+                            loser_network = %info.network_name,
+                            loser_peer = %info.hostname,
+                            "IP collision across Direct networks; first-joined wins outbound \
+                             (use `tuntun direct override-ip` to resolve)"
+                        );
+                    }
+                } else {
+                    by_ip.insert(ip, info.clone());
+                }
+                by_endpoint
+                    .entry(p.endpoint_id.clone())
+                    .or_insert_with(|| info.clone());
+                local_by_endpoint.insert(p.endpoint_id.clone(), info.clone());
+                if !p.hostname.is_empty() {
+                    let key = if slice.network_name.is_empty() {
+                        p.hostname.to_ascii_lowercase()
+                    } else {
+                        format!("{}.{}", p.hostname.to_ascii_lowercase(), slice.network_name)
+                    };
+                    by_hostname
+                        .entry(p.hostname.to_ascii_lowercase())
+                        .or_insert_with(|| info.clone());
+                    by_hostname.insert(key, info);
+                }
+            }
+
+            for route in &slice.subnet_routes {
+                if route.via_endpoint_id == slice.self_endpoint_id {
+                    advertised.push(route.cidr);
+                    continue;
+                }
+                let peer = peer_for_via(
+                    &local_by_endpoint,
+                    &route.via_endpoint_id,
+                    route.via_ip,
+                    *network_id,
+                    &slice.network_name,
+                );
+                let Some(peer) = peer else { continue };
+                subnets.push((route.cidr, peer));
+            }
+
+            for exit in &slice.exit_nodes {
+                if exit.endpoint_id == slice.self_endpoint_id {
+                    for cidr in &exit.allowed_cidrs {
+                        advertised.push(*cidr);
+                    }
+                }
+            }
+
+            if let Some(exit_id) = &slice.profile.exit_node_endpoint_id
+                && let Some(exit) = slice.exit_nodes.iter().find(|e| &e.endpoint_id == exit_id)
+            {
+                let peer = peer_for_via(
+                    &local_by_endpoint,
+                    &exit.endpoint_id,
+                    exit.via_ip,
+                    *network_id,
+                    &slice.network_name,
+                );
+                if let Some(peer) = peer {
+                    for cidr in &exit.allowed_cidrs {
+                        if !subnets.iter().any(|(n, _)| n == cidr) {
+                            subnets.push((*cidr, peer.clone()));
+                        }
+                    }
+                    if exit_node.is_none() {
+                        exit_node = Some(peer);
+                    }
+                }
+            }
+
+            for route in &slice.hostname_routes {
+                let hostname = route.hostname.to_ascii_lowercase();
+                let peer = peer_for_via(
+                    &local_by_endpoint,
+                    &route.via_endpoint_id,
+                    route.via_ip,
+                    *network_id,
+                    &slice.network_name,
+                );
+                let Some(peer) = peer else { continue };
+                let info = Arc::new(HostnameRouteInfo {
+                    peer: peer.clone(),
+                    is_wildcard: route.is_wildcard,
+                    target_ip: route.target_ip,
+                    hostname: hostname.clone(),
+                });
+                if route.via_endpoint_id == slice.self_endpoint_id {
+                    advertised_hostnames.push(info.clone());
+                    continue;
+                }
+                if !route.is_wildcard {
+                    let synth = synthetic_ip_for(&hostname);
+                    by_ip.entry(synth).or_insert_with(|| peer.clone());
+                    synthetic_hosts.insert(synth, hostname.clone());
+                    hostname_exact.insert(hostname, info);
+                } else {
+                    hostname_wildcards.push(info);
+                }
             }
         }
+
+        subnets.sort_by_key(|subnet| std::cmp::Reverse(subnet.0.prefix_len()));
         hostname_wildcards.sort_by_key(|route| std::cmp::Reverse(route.hostname.len()));
 
         self.dynamic_synth.clear();
         self.inner.store(Arc::new(Tables {
             by_ip,
+            by_network_ip,
             by_endpoint,
             by_hostname,
             subnets,
@@ -380,9 +597,9 @@ impl RoutingTable {
             hostname_wildcards,
             advertised_hostnames,
             synthetic_hosts,
-            dns_suffix: dns.suffix.clone(),
-            network_name: network_name.to_ascii_lowercase(),
-            magic_ip: dns.magic_ip,
+            dns_suffix,
+            network_name: primary_network_name,
+            magic_ip,
             exit_node,
             version,
         }));
@@ -410,6 +627,8 @@ fn peer_for_via(
     by_endpoint: &std::collections::HashMap<String, Arc<PeerInfo>>,
     via_endpoint_id: &str,
     via_ip: Ipv4Addr,
+    network_id: Uuid,
+    network_name: &str,
 ) -> Option<Arc<PeerInfo>> {
     if let Some(existing) = by_endpoint.get(via_endpoint_id) {
         return Some(existing.clone());
@@ -424,6 +643,8 @@ fn peer_for_via(
         hostname: String::new(),
         ip: via_ip,
         tags: Vec::new(),
+        network_id,
+        network_name: network_name.to_string(),
     }))
 }
 
@@ -474,6 +695,7 @@ mod tests {
             &profile(),
             &dns(),
             "office",
+            Uuid::nil(),
             &self_id,
             1,
         );
@@ -509,6 +731,7 @@ mod tests {
             &profile(),
             &dns(),
             "office",
+            Uuid::nil(),
             &self_id,
             1,
         );
@@ -534,6 +757,7 @@ mod tests {
             &profile(),
             &dns(),
             "office",
+            Uuid::nil(),
             &self_id,
             1,
         );
@@ -569,6 +793,7 @@ mod tests {
             &profile(),
             &dns(),
             "office",
+            Uuid::nil(),
             &self_id,
             1,
         );
@@ -599,6 +824,7 @@ mod tests {
             &profile(),
             &dns(),
             "office",
+            Uuid::nil(),
             &self_id,
             1,
         );
@@ -636,6 +862,7 @@ mod tests {
             &profile,
             &dns(),
             "office",
+            Uuid::nil(),
             &self_id,
             1,
         );

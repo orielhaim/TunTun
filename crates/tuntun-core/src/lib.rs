@@ -23,14 +23,16 @@ pub mod tunnel;
 pub mod ws_client;
 
 pub use agent_config::{TunTunConfig, load_dns, load_firewall};
-pub use secret_store::{AgentSecrets, SealPolicy, SealTier, load_agent, persist_agent};
+pub use secret_store::{
+    AgentSecrets, NetworkSecrets, SealPolicy, SealTier, load_agent, persist_agent,
+};
 
 pub use acl::{AclEngine, SelfIdentity};
 pub use acl_hook::AclHook;
 pub use control::{SignedClient, UnauthedClient};
 pub use identity::AgentIdentity;
 pub use iroh_pool::ConnPool;
-pub use node::{CoreNode, CoreNodeConfig, KillSshHook};
+pub use node::{CoreNode, CoreNodeConfig, DirectNetworkRuntime, KillSshHook};
 pub use routing::{PeerInfo, RoutingTable};
 pub use send::{SendConfig, SendManager, TransferDirection, TransferRecord, TransferStatus};
 pub use serve::{ServeAcl, ServeManager};

@@ -1,7 +1,9 @@
 //! Helpers to persist public state + sealed secrets together.
 
+use std::collections::BTreeMap;
+
 use crate::identity::AgentIdentity;
-use crate::secret_store::{self, AgentSecrets, SealPolicy, SealTier};
+use crate::secret_store::{self, AgentSecrets, NetworkSecrets, SealPolicy, SealTier};
 use crate::state::{PersistedState, StatePaths};
 
 /// Write `state.json` + `state.enc`.
@@ -11,14 +13,21 @@ pub fn persist_agent(
     state: PersistedState,
     policy: SealPolicy,
 ) -> anyhow::Result<SealTier> {
-    let network_secret = state.as_direct().map(|d| d.network_secret.clone());
-    let doc_ticket = state.as_direct().and_then(|d| d.doc_ticket.clone());
+    let mut networks = BTreeMap::new();
+    for d in state.direct_networks() {
+        networks.insert(
+            d.network_id,
+            NetworkSecrets {
+                network_secret: d.network_secret.clone(),
+                doc_ticket: d.doc_ticket.clone(),
+            },
+        );
+    }
     let auth = secret_store::load_auth(paths).ok().flatten();
 
     let secrets = AgentSecrets {
         identity_seed: identity.secret_bytes,
-        network_secret,
-        doc_ticket,
+        networks,
         auth,
     };
 

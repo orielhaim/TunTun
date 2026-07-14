@@ -4,9 +4,9 @@ use anyhow::{Context, bail};
 use clap::{Args, Subcommand};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tuntun_common::ssh::{encode_resize, escape_ssh_data};
+use tuntun_core::ipc::IpcClient;
 use tuntun_core::ipc::protocol::{IpcRequest, IpcResponse};
 use tuntun_core::ipc::transport;
-use tuntun_core::ipc::{IpcClient, discover_network_id};
 
 #[derive(Args, Debug)]
 #[command(args_conflicts_with_subcommands = true)]
@@ -74,10 +74,8 @@ pub async fn run_ssh(args: SshArgs) -> anyhow::Result<()> {
     }
 }
 
-async fn ipc_request(state_dir: Option<&str>, req: IpcRequest) -> anyhow::Result<IpcResponse> {
-    let (network_id, _) = discover_network_id(state_dir)?;
-    let client = IpcClient::for_network(network_id);
-    client.request(req).await
+async fn ipc_request(_state_dir: Option<&str>, req: IpcRequest) -> anyhow::Result<IpcResponse> {
+    IpcClient::connect().request(req).await
 }
 
 async fn run_sessions(
@@ -227,12 +225,12 @@ async fn run_connect(
     let term_type = std::env::var("TERM").unwrap_or_else(|_| "xterm-256color".into());
     let env_vars = collect_env();
 
-    let (network_id, _) = discover_network_id(state_dir.as_deref())?;
+    let _network_id = (); // fixed IPC path
     let mut auth_token: Option<String> = None;
 
     // Up to 2 attempts: initial + one after re-auth proof.
     for attempt in 0..2 {
-        let client = IpcClient::for_network(network_id);
+        let client = IpcClient::connect();
         let stream = transport::connect(client.path()).await.with_context(|| {
             format!(
                 "cannot connect to agent IPC at {} - is the agent running?",

@@ -151,24 +151,43 @@ pub enum IpcRequest {
 
     /// Direct: create invite code (coordinator).
     DirectInvite {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        network: Option<String>,
         #[serde(default)]
         reusable: bool,
         #[serde(default = "default_invite_expires")]
         expires: String,
     },
-    DirectRequests,
+    DirectRequests {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        network: Option<String>,
+    },
     DirectAccept {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        network: Option<String>,
         peer_id: String,
     },
     DirectDeny {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        network: Option<String>,
         peer_id: String,
     },
     DirectKick {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        network: Option<String>,
         peer_id: String,
     },
-    DirectFirewallShow,
-    DirectFirewallOff,
+    DirectFirewallShow {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        network: Option<String>,
+    },
+    DirectFirewallOff {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        network: Option<String>,
+    },
     DirectFirewallAdd {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        network: Option<String>,
         direction: String,
         action: String,
         #[serde(default = "default_fw_protocol")]
@@ -179,23 +198,55 @@ pub enum IpcRequest {
         peer: Option<String>,
     },
     DirectFirewallRemove {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        network: Option<String>,
         index: usize,
     },
-    DirectFirewallReset,
-    DirectFirewallFlushConntrack,
-    DirectFirewallPending,
-    DirectFirewallAcceptSuggestion,
-    DirectFirewallRejectSuggestion,
-    DirectPolicyShow,
+    DirectFirewallReset {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        network: Option<String>,
+    },
+    DirectFirewallFlushConntrack {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        network: Option<String>,
+    },
+    DirectFirewallPending {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        network: Option<String>,
+    },
+    DirectFirewallAcceptSuggestion {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        network: Option<String>,
+    },
+    DirectFirewallRejectSuggestion {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        network: Option<String>,
+    },
+    DirectPolicyShow {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        network: Option<String>,
+    },
     DirectPolicySet {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        network: Option<String>,
         /// TOML contents of a policy file (global rules + optional per-hostname).
         toml: String,
     },
-    DirectPolicyClear,
+    DirectPolicyClear {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        network: Option<String>,
+    },
     DirectKeepAlive {
         hostname: String,
         #[serde(default = "default_true")]
         enable: bool,
+    },
+    /// Manual IP override for birthday collisions.
+    DirectOverrideIp {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        network: Option<String>,
+        peer: String,
+        ip: String,
     },
     DirectConnect {
         contact_id: String,

@@ -205,13 +205,18 @@ async fn bring_up(
         crate::system_routes::apply(&cfg.ifname, &device_profile, &remote_subnets, has_exit);
     }
 
+    let firewalls: std::collections::HashMap<_, _> = node
+        .direct
+        .iter()
+        .map(|(id, rt)| (*id, rt.firewall.clone()))
+        .collect();
     let dgram_pool = ConnPool::with_shared_policy(node.endpoint.clone(), TUNNEL_ALPN, &node.pool);
     let outbound = spawn_outbound(
         tun.clone(),
         node.routes.clone(),
         dgram_pool,
         node.acl.clone(),
-        node.firewall.clone(),
+        firewalls,
         metrics.clone(),
     );
 
@@ -233,7 +238,7 @@ pub fn spawn_outbound(
     routes: RoutingTable,
     pool: ConnPool,
     acl: AclEngine,
-    firewall: Option<tuntun_core::direct::FirewallEngine>,
+    firewalls: std::collections::HashMap<uuid::Uuid, tuntun_core::direct::FirewallEngine>,
     metrics: AgentMetrics,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
@@ -242,7 +247,7 @@ pub fn spawn_outbound(
             routes,
             pool,
             acl,
-            firewall,
+            firewalls,
             metrics,
         })
         .await

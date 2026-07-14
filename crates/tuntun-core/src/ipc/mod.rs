@@ -9,7 +9,7 @@ pub mod protocol;
 pub mod server;
 pub mod transport;
 
-pub use client::{IpcClient, discover_network_id};
+pub use client::{IpcClient, discover_agent_state, discover_network_id};
 pub use dataplane::{DataPlaneCmdRx, DataPlaneHandle, recv_cmd};
 pub use protocol::*;
 pub use server::{AgentIpcState, spawn as spawn_ipc_server};

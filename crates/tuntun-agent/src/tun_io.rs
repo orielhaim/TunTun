@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::Context;
@@ -6,13 +7,13 @@ use iroh::endpoint::Connection;
 use tun_rs::{AsyncDevice, DeviceBuilder};
 use tuntun_common::policy::Direction;
 use tuntun_core::direct::{
-    EvalResult, FirewallEngine, PacketDirection, SpoofTracker, source_matches_peer,
+    AuthCache, EvalResult, FirewallEngine, PacketDirection, SpoofTracker, source_matches_peer,
 };
 use tuntun_core::{AclEngine, ConnPool, RoutingTable, iroh_pool::send_datagram};
+use uuid::Uuid;
 
 use crate::ip;
 use crate::metrics::AgentMetrics;
-
 pub fn build_tun(
     ifname: &str,
     ipv4: std::net::Ipv4Addr,
@@ -43,7 +44,8 @@ pub struct OutboundDeps {
     pub routes: RoutingTable,
     pub pool: ConnPool,
     pub acl: AclEngine,
-    pub firewall: Option<FirewallEngine>,
+    /// Per-network firewall engines (Direct). Empty/None in Managed.
+    pub firewalls: HashMap<Uuid, FirewallEngine>,
     pub metrics: AgentMetrics,
 }
 
@@ -53,7 +55,7 @@ pub async fn run_outbound(deps: OutboundDeps) -> anyhow::Result<()> {
         routes,
         pool,
         acl,
-        firewall,
+        firewalls,
         metrics,
     } = deps;
     let mut buf = vec![0u8; 65_536];
@@ -97,13 +99,13 @@ pub async fn run_outbound(deps: OutboundDeps) -> anyhow::Result<()> {
             continue;
         }
 
-        // Direct userspace firewall (packet path).
-        if let Some(fw) = &firewall {
+        if let Some(fw) = firewalls.get(&peer.network_id) {
             match fw.evaluate(
                 PacketDirection::Outbound,
                 packet,
                 Some(&peer.endpoint_hex),
                 Some(&peer.hostname),
+                Some(peer.network_id),
             ) {
                 EvalResult::Allow => {}
                 EvalResult::Deny => {
@@ -147,10 +149,11 @@ pub struct InboundDeps {
     pub tun: Arc<AsyncDevice>,
     pub routes: RoutingTable,
     pub acl: AclEngine,
-    pub firewall: Option<FirewallEngine>,
-    pub spoof: Option<SpoofTracker>,
+    pub firewalls: HashMap<Uuid, FirewallEngine>,
+    pub spoofs: HashMap<Uuid, SpoofTracker>,
     pub pool: Option<ConnPool>,
     pub metrics: AgentMetrics,
+    pub direct_auth: Option<AuthCache>,
 }
 
 pub async fn serve_tunnel_connection(deps: InboundDeps) {
@@ -159,10 +162,11 @@ pub async fn serve_tunnel_connection(deps: InboundDeps) {
         tun,
         routes,
         acl,
-        firewall,
-        spoof,
+        firewalls,
+        spoofs,
         pool,
         metrics,
+        direct_auth,
     } = deps;
     let remote_id = conn.remote_id();
     let remote_hex = format!("{remote_id}");
@@ -176,6 +180,12 @@ pub async fn serve_tunnel_connection(deps: InboundDeps) {
     if let Some(p) = &pool {
         p.touch_peer(remote_id);
     }
+    // Prefer network from auth cache; fall back to route table peer.
+    let inbound_network = direct_auth
+        .as_ref()
+        .and_then(|a| a.networks_for(&remote_hex).into_iter().next())
+        .or_else(|| routes.lookup_endpoint(&remote_hex).map(|p| p.network_id));
+
     loop {
         match conn.read_datagram().await {
             Ok(dg) => {
@@ -188,12 +198,17 @@ pub async fn serve_tunnel_connection(deps: InboundDeps) {
                     continue;
                 };
 
+                let peer_info = inbound_network
+                    .and_then(|nid| routes.lookup_network_ip(nid, &parsed.src))
+                    .or_else(|| routes.lookup_endpoint(&remote_hex));
+
                 // Anti-spoof: source IP must match this peer's mesh IP.
-                if let Some(peer_info) = routes.lookup_endpoint(&remote_hex)
+                if let Some(peer_info) = &peer_info
                     && !source_matches_peer(parsed.src, peer_info.ip)
                 {
                     metrics.dropped_inc("antispoof");
-                    if let Some(tracker) = &spoof
+                    if let Some(nid) = inbound_network.or(Some(peer_info.network_id))
+                        && let Some(tracker) = spoofs.get(&nid)
                         && tracker.record(&remote_hex)
                     {
                         let counts = tracker.drain_window_counts();
@@ -225,16 +240,18 @@ pub async fn serve_tunnel_connection(deps: InboundDeps) {
                     continue;
                 }
 
-                // Direct userspace firewall.
-                if let Some(fw) = &firewall {
-                    let hostname = routes
-                        .lookup_endpoint(&remote_hex)
-                        .map(|p| p.hostname.clone());
+                // Direct userspace firewall for the peer's network.
+                let peer_net = peer_info.as_ref().map(|p| p.network_id).or(inbound_network);
+                if let Some(nid) = peer_net
+                    && let Some(fw) = firewalls.get(&nid)
+                {
+                    let hostname = peer_info.as_ref().map(|p| p.hostname.clone());
                     match fw.evaluate(
                         PacketDirection::Inbound,
                         &dg,
                         Some(&remote_hex),
                         hostname.as_deref(),
+                        Some(nid),
                     ) {
                         EvalResult::Allow => {}
                         EvalResult::Deny => {

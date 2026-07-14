@@ -1,10 +1,6 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use anyhow::Context;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use uuid::Uuid;
-
 use super::dataplane::DataPlaneHandle;
 use super::protocol::{
     DnsStatusInfo, ExitNodeRouteInfo, HostnameRouteInfo, IpcRequest, IpcResponse,
@@ -16,6 +12,8 @@ use crate::node::CoreNode;
 use crate::send::SendManager;
 use crate::serve::ServeManager;
 use crate::tunnel::TunnelManager;
+use anyhow::Context;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 /// Live agent state shared with the IPC server.
 pub struct AgentIpcState {
@@ -40,10 +38,10 @@ impl AgentIpcState {
     }
 }
 
-/// Spawn the IPC listener for this agent. Returns the bound path.
-pub fn spawn(network_id: Uuid, state: Arc<AgentIpcState>) -> tokio::task::JoinHandle<()> {
+/// Spawn the IPC listener for this agent on the fixed path.
+pub fn spawn(state: Arc<AgentIpcState>) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
-        match IpcListener::bind(network_id).await {
+        match IpcListener::bind().await {
             Ok((listener, path)) => {
                 tracing::info!(path = %path.display(), "agent IPC ready");
                 loop {
@@ -357,121 +355,165 @@ async fn dispatch(req: IpcRequest, state: &AgentIpcState) -> IpcResponse {
             },
             Err(e) => IpcResponse::Error { message: e },
         },
-        IpcRequest::DirectInvite { reusable, expires } => {
-            match direct_invite(state, reusable, &expires) {
-                Ok(code) => IpcResponse::DirectInvite { code },
+        IpcRequest::DirectInvite {
+            network,
+            reusable,
+            expires,
+        } => match direct_invite(state, network.as_deref(), reusable, &expires) {
+            Ok(code) => IpcResponse::DirectInvite { code },
+            Err(e) => IpcResponse::Error {
+                message: e.to_string(),
+            },
+        },
+        IpcRequest::DirectRequests { network } => {
+            match direct_requests(state, network.as_deref()) {
+                Ok(requests) => IpcResponse::DirectPending { requests },
                 Err(e) => IpcResponse::Error {
                     message: e.to_string(),
                 },
             }
         }
-        IpcRequest::DirectRequests => match direct_requests(state) {
-            Ok(requests) => IpcResponse::DirectPending { requests },
-            Err(e) => IpcResponse::Error {
-                message: e.to_string(),
-            },
-        },
-        IpcRequest::DirectAccept { peer_id } => match direct_accept(state, &peer_id) {
-            Ok(msg) => IpcResponse::Ok { message: msg },
-            Err(e) => IpcResponse::Error {
-                message: e.to_string(),
-            },
-        },
-        IpcRequest::DirectDeny { peer_id } => match direct_deny(state, &peer_id) {
-            Ok(msg) => IpcResponse::Ok { message: msg },
-            Err(e) => IpcResponse::Error {
-                message: e.to_string(),
-            },
-        },
-        IpcRequest::DirectKick { peer_id } => match direct_kick(state, &peer_id).await {
-            Ok(msg) => IpcResponse::Ok { message: msg },
-            Err(e) => IpcResponse::Error {
-                message: e.to_string(),
-            },
-        },
-        IpcRequest::DirectFirewallShow => match direct_firewall_show(state) {
-            Ok(info) => info,
-            Err(e) => IpcResponse::Error {
-                message: e.to_string(),
-            },
-        },
-        IpcRequest::DirectFirewallOff => match direct_firewall_off(state) {
-            Ok(msg) => IpcResponse::Ok { message: msg },
-            Err(e) => IpcResponse::Error {
-                message: e.to_string(),
-            },
-        },
+        IpcRequest::DirectAccept { network, peer_id } => {
+            match direct_accept(state, network.as_deref(), &peer_id) {
+                Ok(msg) => IpcResponse::Ok { message: msg },
+                Err(e) => IpcResponse::Error {
+                    message: e.to_string(),
+                },
+            }
+        }
+        IpcRequest::DirectDeny { network, peer_id } => {
+            match direct_deny(state, network.as_deref(), &peer_id) {
+                Ok(msg) => IpcResponse::Ok { message: msg },
+                Err(e) => IpcResponse::Error {
+                    message: e.to_string(),
+                },
+            }
+        }
+        IpcRequest::DirectKick { network, peer_id } => {
+            match direct_kick(state, network.as_deref(), &peer_id).await {
+                Ok(msg) => IpcResponse::Ok { message: msg },
+                Err(e) => IpcResponse::Error {
+                    message: e.to_string(),
+                },
+            }
+        }
+        IpcRequest::DirectFirewallShow { network } => {
+            match direct_firewall_show(state, network.as_deref()) {
+                Ok(info) => info,
+                Err(e) => IpcResponse::Error {
+                    message: e.to_string(),
+                },
+            }
+        }
+        IpcRequest::DirectFirewallOff { network } => {
+            match direct_firewall_off(state, network.as_deref()) {
+                Ok(msg) => IpcResponse::Ok { message: msg },
+                Err(e) => IpcResponse::Error {
+                    message: e.to_string(),
+                },
+            }
+        }
         IpcRequest::DirectFirewallAdd {
+            network,
             direction,
             action,
             protocol,
             port,
             peer,
-        } => {
-            match direct_firewall_add(state, &direction, &action, &protocol, port.as_deref(), peer)
-            {
+        } => match direct_firewall_add(
+            state,
+            network.as_deref(),
+            &direction,
+            &action,
+            &protocol,
+            port.as_deref(),
+            peer,
+        ) {
+            Ok(msg) => IpcResponse::Ok { message: msg },
+            Err(e) => IpcResponse::Error {
+                message: e.to_string(),
+            },
+        },
+        IpcRequest::DirectFirewallRemove { network, index } => {
+            match direct_firewall_remove(state, network.as_deref(), index) {
                 Ok(msg) => IpcResponse::Ok { message: msg },
                 Err(e) => IpcResponse::Error {
                     message: e.to_string(),
                 },
             }
         }
-        IpcRequest::DirectFirewallRemove { index } => match direct_firewall_remove(state, index) {
-            Ok(msg) => IpcResponse::Ok { message: msg },
-            Err(e) => IpcResponse::Error {
-                message: e.to_string(),
-            },
-        },
-        IpcRequest::DirectFirewallReset => match direct_firewall_reset(state) {
-            Ok(msg) => IpcResponse::Ok { message: msg },
-            Err(e) => IpcResponse::Error {
-                message: e.to_string(),
-            },
-        },
-        IpcRequest::DirectFirewallFlushConntrack => match direct_firewall_flush(state) {
-            Ok(msg) => IpcResponse::Ok { message: msg },
-            Err(e) => IpcResponse::Error {
-                message: e.to_string(),
-            },
-        },
-        IpcRequest::DirectFirewallPending => match direct_firewall_pending(state) {
-            Ok(r) => r,
-            Err(e) => IpcResponse::Error {
-                message: e.to_string(),
-            },
-        },
-        IpcRequest::DirectFirewallAcceptSuggestion => match direct_firewall_accept(state) {
-            Ok(msg) => IpcResponse::Ok { message: msg },
-            Err(e) => IpcResponse::Error {
-                message: e.to_string(),
-            },
-        },
-        IpcRequest::DirectFirewallRejectSuggestion => {
-            match direct_firewall_reject_suggestion(state) {
+        IpcRequest::DirectFirewallReset { network } => {
+            match direct_firewall_reset(state, network.as_deref()) {
                 Ok(msg) => IpcResponse::Ok { message: msg },
                 Err(e) => IpcResponse::Error {
                     message: e.to_string(),
                 },
             }
         }
-        IpcRequest::DirectPolicyShow => match direct_policy_show(state).await {
-            Ok(r) => r,
-            Err(e) => IpcResponse::Error {
-                message: e.to_string(),
-            },
-        },
-        IpcRequest::DirectPolicySet { toml } => match direct_policy_set(state, &toml).await {
-            Ok(msg) => IpcResponse::Ok { message: msg },
-            Err(e) => IpcResponse::Error {
-                message: e.to_string(),
-            },
-        },
-        IpcRequest::DirectPolicyClear => match direct_policy_clear(state).await {
-            Ok(msg) => IpcResponse::Ok { message: msg },
-            Err(e) => IpcResponse::Error {
-                message: e.to_string(),
-            },
-        },
+        IpcRequest::DirectFirewallFlushConntrack { network } => {
+            match direct_firewall_flush(state, network.as_deref()) {
+                Ok(msg) => IpcResponse::Ok { message: msg },
+                Err(e) => IpcResponse::Error {
+                    message: e.to_string(),
+                },
+            }
+        }
+        IpcRequest::DirectFirewallPending { network } => {
+            match direct_firewall_pending(state, network.as_deref()) {
+                Ok(r) => r,
+                Err(e) => IpcResponse::Error {
+                    message: e.to_string(),
+                },
+            }
+        }
+        IpcRequest::DirectFirewallAcceptSuggestion { network } => {
+            match direct_firewall_accept(state, network.as_deref()) {
+                Ok(msg) => IpcResponse::Ok { message: msg },
+                Err(e) => IpcResponse::Error {
+                    message: e.to_string(),
+                },
+            }
+        }
+        IpcRequest::DirectFirewallRejectSuggestion { network } => {
+            match direct_firewall_reject_suggestion(state, network.as_deref()) {
+                Ok(msg) => IpcResponse::Ok { message: msg },
+                Err(e) => IpcResponse::Error {
+                    message: e.to_string(),
+                },
+            }
+        }
+        IpcRequest::DirectPolicyShow { network } => {
+            match direct_policy_show(state, network.as_deref()).await {
+                Ok(r) => r,
+                Err(e) => IpcResponse::Error {
+                    message: e.to_string(),
+                },
+            }
+        }
+        IpcRequest::DirectPolicySet { network, toml } => {
+            match direct_policy_set(state, network.as_deref(), &toml).await {
+                Ok(msg) => IpcResponse::Ok { message: msg },
+                Err(e) => IpcResponse::Error {
+                    message: e.to_string(),
+                },
+            }
+        }
+        IpcRequest::DirectPolicyClear { network } => {
+            match direct_policy_clear(state, network.as_deref()).await {
+                Ok(msg) => IpcResponse::Ok { message: msg },
+                Err(e) => IpcResponse::Error {
+                    message: e.to_string(),
+                },
+            }
+        }
+        IpcRequest::DirectOverrideIp { network, peer, ip } => {
+            match direct_override_ip(state, network.as_deref(), &peer, &ip) {
+                Ok(msg) => IpcResponse::Ok { message: msg },
+                Err(e) => IpcResponse::Error {
+                    message: e.to_string(),
+                },
+            }
+        }
         IpcRequest::DirectKeepAlive { hostname, enable } => {
             match direct_keep_alive(state, &hostname, enable) {
                 Ok(msg) => IpcResponse::Ok { message: msg },
@@ -550,17 +592,27 @@ async fn reload_config(state: &AgentIpcState) -> anyhow::Result<String> {
         anyhow::bail!("tuntun.toml invalid: {}", errs.join("; "));
     }
 
-    let network = state.node.persisted.network_name().to_string();
+    let network = state
+        .node
+        .persisted
+        .primary_network_name()
+        .unwrap_or("default")
+        .to_string();
+    let network_id = state
+        .node
+        .persisted
+        .primary_network_id()
+        .unwrap_or(uuid::Uuid::nil());
 
     // Firewall from tuntun.toml
     let fw_cfg = cfg.firewall_for_network(&network);
-    if let Some(engine) = &state.node.firewall {
+    if let Some(engine) = state.node.firewall() {
         engine.reload_local(&fw_cfg);
     }
 
     // DNS into membership + routes
     let dns = cfg.dns_for_network(&network);
-    if let Some(docs) = &state.node.docs {
+    if let Some(docs) = state.node.docs() {
         docs.set_dns(dns.clone());
         if let Some(auth) = state.node.direct_auth.as_ref() {
             let policy = (**state.node.acl.bundle.load()).clone();
@@ -588,6 +640,7 @@ async fn reload_config(state: &AgentIpcState) -> anyhow::Result<String> {
             &tuntun_common::DeviceProfile::default(),
             &dns,
             &network,
+            network_id,
             &state.node.endpoint_id_hex(),
             version,
         );
@@ -635,7 +688,12 @@ async fn start_serve(
     internal_hostname: Option<&str>,
     serve_id: Option<String>,
 ) -> anyhow::Result<super::protocol::ServeInfo> {
-    let network = state.node.persisted.network_name().to_string();
+    let network = state
+        .node
+        .persisted
+        .primary_network_name()
+        .unwrap_or("default")
+        .to_string();
     let hostname = state.hostname.clone();
     let internal_hostname = internal_hostname
         .map(str::to_string)
@@ -797,8 +855,7 @@ fn build_status(state: &AgentIpcState, include_peers: bool) -> StatusInfo {
     let od = state.node.pool.on_demand_stats();
     let (firewall_drops, conntrack) = state
         .node
-        .firewall
-        .as_ref()
+        .firewall()
         .map(|fw| {
             let s = fw.stats();
             (
@@ -810,8 +867,18 @@ fn build_status(state: &AgentIpcState, include_peers: bool) -> StatusInfo {
     StatusInfo {
         ip: state.node.self_ipv4.to_string(),
         hostname: state.hostname.clone(),
-        network_name: state.node.persisted.network_name().to_string(),
-        network_id: state.node.persisted.network_id().to_string(),
+        network_name: state
+            .node
+            .persisted
+            .primary_network_name()
+            .unwrap_or("default")
+            .to_string(),
+        network_id: state
+            .node
+            .persisted
+            .primary_network_id()
+            .unwrap_or(uuid::Uuid::nil())
+            .to_string(),
         organization_id: state
             .node
             .persisted
@@ -861,9 +928,8 @@ fn build_routes(state: &AgentIpcState) -> RoutesInfo {
     let self_id = state.node.endpoint_id_hex();
     let snap = crate::state::load_snapshot_cache(&state.node.paths);
     let membership = snap.as_ref().and_then(|s| {
-        s.memberships
-            .iter()
-            .find(|m| m.network_id == state.node.persisted.network_id())
+        let nid = state.node.persisted.primary_network_id()?;
+        s.memberships.iter().find(|m| m.network_id == nid)
     });
 
     let mut subnet_routes = Vec::new();
@@ -1378,16 +1444,24 @@ async fn poll_ssh_auth(
     Ok((status, proof_token))
 }
 
-fn require_direct_coord(state: &AgentIpcState) -> anyhow::Result<&crate::state::DirectState> {
-    let d = state.node.persisted.require_direct()?;
+fn require_direct_coord<'a>(
+    state: &'a AgentIpcState,
+    network: Option<&str>,
+) -> anyhow::Result<&'a crate::state::DirectState> {
+    let d = state.node.persisted.require_direct_network(network)?;
     if !d.coordinator {
         anyhow::bail!("only the coordinator can perform this action");
     }
     Ok(d)
 }
 
-fn direct_invite(state: &AgentIpcState, reusable: bool, expires: &str) -> anyhow::Result<String> {
-    let direct = require_direct_coord(state)?;
+fn direct_invite(
+    state: &AgentIpcState,
+    network: Option<&str>,
+    reusable: bool,
+    expires: &str,
+) -> anyhow::Result<String> {
+    let direct = require_direct_coord(state, network)?;
     let expires = crate::direct::admin::parse_expires(expires)?;
     let invite = crate::direct::InviteCode::new(
         direct.topic_hash.clone(),
@@ -1397,17 +1471,18 @@ fn direct_invite(state: &AgentIpcState, reusable: bool, expires: &str) -> anyhow
         expires,
         reusable,
     );
-    let mut used = crate::direct::admin::load_invite_ids(&state.node.paths)?;
+    let mut used = crate::direct::admin::load_invite_ids(&state.node.paths, direct.network_id)?;
     used.insert(invite.invite_id.clone());
-    crate::direct::admin::save_invite_ids(&state.node.paths, &used)?;
+    crate::direct::admin::save_invite_ids(&state.node.paths, direct.network_id, &used)?;
     crate::direct::encode_invite(&invite)
 }
 
 fn direct_requests(
     state: &AgentIpcState,
+    network: Option<&str>,
 ) -> anyhow::Result<Vec<super::protocol::DirectPendingInfo>> {
-    let _ = state.node.persisted.require_direct()?;
-    let list = crate::direct::admin::load_pending(&state.node.paths)?;
+    let direct = state.node.persisted.require_direct_network(network)?;
+    let list = crate::direct::admin::load_pending(&state.node.paths, direct.network_id)?;
     Ok(list
         .into_iter()
         .map(|p| super::protocol::DirectPendingInfo {
@@ -1419,15 +1494,20 @@ fn direct_requests(
         .collect())
 }
 
-fn direct_accept(state: &AgentIpcState, peer_id: &str) -> anyhow::Result<String> {
-    let _ = require_direct_coord(state)?;
-    let mut list = crate::direct::admin::load_pending(&state.node.paths)?;
+fn direct_accept(
+    state: &AgentIpcState,
+    network: Option<&str>,
+    peer_id: &str,
+) -> anyhow::Result<String> {
+    let direct = require_direct_coord(state, network)?;
+    let network_id = direct.network_id;
+    let mut list = crate::direct::admin::load_pending(&state.node.paths, network_id)?;
     let idx = list
         .iter()
         .position(|p| p.endpoint_id == peer_id || p.hostname == peer_id)
         .context("pending peer not found")?;
     let pending = list.remove(idx);
-    crate::direct::admin::save_pending(&state.node.paths, &list)?;
+    crate::direct::admin::save_pending(&state.node.paths, network_id, &list)?;
     let mut approved = crate::direct::load_approved(&state.node.paths)?;
     if !approved.iter().any(|id| id == &pending.endpoint_id) {
         approved.push(pending.endpoint_id.clone());
@@ -1439,39 +1519,53 @@ fn direct_accept(state: &AgentIpcState, peer_id: &str) -> anyhow::Result<String>
     ))
 }
 
-fn direct_deny(state: &AgentIpcState, peer_id: &str) -> anyhow::Result<String> {
-    let _ = state.node.persisted.require_direct()?;
-    let mut list = crate::direct::admin::load_pending(&state.node.paths)?;
+fn direct_deny(
+    state: &AgentIpcState,
+    network: Option<&str>,
+    peer_id: &str,
+) -> anyhow::Result<String> {
+    let direct = state.node.persisted.require_direct_network(network)?;
+    let network_id = direct.network_id;
+    let mut list = crate::direct::admin::load_pending(&state.node.paths, network_id)?;
     let before = list.len();
     list.retain(|p| p.endpoint_id != peer_id && p.hostname != peer_id);
     if list.len() == before {
         anyhow::bail!("pending peer not found");
     }
-    crate::direct::admin::save_pending(&state.node.paths, &list)?;
+    crate::direct::admin::save_pending(&state.node.paths, network_id, &list)?;
     Ok(format!("Denied {peer_id}"))
 }
 
-async fn direct_kick(state: &AgentIpcState, peer_id: &str) -> anyhow::Result<String> {
-    let _ = require_direct_coord(state)?;
-    if let Some(docs) = &state.node.docs {
-        docs.kick_peer(peer_id).await?;
-        docs.rebuild_from_doc().await.ok();
+async fn direct_kick(
+    state: &AgentIpcState,
+    network: Option<&str>,
+    peer_id: &str,
+) -> anyhow::Result<String> {
+    let direct = require_direct_coord(state, network)?;
+    if let Some(rt) = state.node.direct.get(&direct.network_id) {
+        rt.docs.kick_peer(peer_id).await?;
+        rt.docs.rebuild_from_doc().await.ok();
         Ok(format!("Kicked {peer_id}"))
     } else {
-        crate::direct::admin::queue_kick(&state.node.paths, peer_id)?;
+        crate::direct::admin::queue_kick(&state.node.paths, direct.network_id, peer_id)?;
         Ok(format!(
             "Queued kick for {peer_id} (docs not ready; will apply shortly)"
         ))
     }
 }
 
-fn direct_firewall_show(state: &AgentIpcState) -> anyhow::Result<IpcResponse> {
+fn direct_firewall_show(
+    state: &AgentIpcState,
+    network: Option<&str>,
+) -> anyhow::Result<IpcResponse> {
     use crate::direct::firewall::{action_display, direction_display, peer_filter_display};
 
-    let _ = state.node.persisted.require_direct()?;
-    let cfg = crate::direct::FirewallConfig::load(&state.node.paths)
-        .unwrap_or_else(|_| crate::direct::default_firewall());
-    let stats = state.node.firewall.as_ref().map(|e| e.stats());
+    let direct = state.node.persisted.require_direct_network(network)?;
+    let cfg = crate::agent_config::load_firewall_for(&state.node.paths, &direct.network_name);
+    let stats = state
+        .node
+        .firewall_for(direct.network_id)
+        .map(|e| e.stats());
     let rules = cfg
         .rules
         .iter()
@@ -1500,25 +1594,29 @@ fn direct_firewall_show(state: &AgentIpcState) -> anyhow::Result<IpcResponse> {
     })
 }
 
-fn reload_firewall_engine(state: &AgentIpcState, cfg: &crate::direct::FirewallConfig) {
-    if let Some(fw) = &state.node.firewall {
+fn reload_firewall_engine(
+    state: &AgentIpcState,
+    network_id: uuid::Uuid,
+    cfg: &crate::direct::FirewallConfig,
+) {
+    if let Some(fw) = state.node.firewall_for(network_id) {
         fw.reload_local(cfg);
     }
 }
 
-fn direct_firewall_off(state: &AgentIpcState) -> anyhow::Result<String> {
-    let _ = state.node.persisted.require_direct()?;
-    let mut cfg = crate::direct::FirewallConfig::load(&state.node.paths)
-        .unwrap_or_else(|_| crate::direct::default_firewall());
+fn direct_firewall_off(state: &AgentIpcState, network: Option<&str>) -> anyhow::Result<String> {
+    let direct = state.node.persisted.require_direct_network(network)?;
+    let mut cfg = crate::agent_config::load_firewall_for(&state.node.paths, &direct.network_name);
     cfg.enabled = false;
     cfg.version += 1;
-    cfg.save(&state.node.paths)?;
-    reload_firewall_engine(state, &cfg);
+    cfg.save(&state.node.paths, &direct.network_name)?;
+    reload_firewall_engine(state, direct.network_id, &cfg);
     Ok("Firewall disabled (allow all).".into())
 }
 
 fn direct_firewall_add(
     state: &AgentIpcState,
+    network: Option<&str>,
     direction: &str,
     action: &str,
     protocol: &str,
@@ -1530,9 +1628,8 @@ fn direct_firewall_add(
     };
     use tuntun_common::policy::Protocol;
 
-    let _ = state.node.persisted.require_direct()?;
-    let mut cfg = crate::direct::FirewallConfig::load(&state.node.paths)
-        .unwrap_or_else(|_| crate::direct::default_firewall());
+    let direct = state.node.persisted.require_direct_network(network)?;
+    let mut cfg = crate::agent_config::load_firewall_for(&state.node.paths, &direct.network_name);
     let direction = match direction {
         "in" | "inbound" => FirewallDirection::In,
         "out" | "outbound" => FirewallDirection::Out,
@@ -1561,39 +1658,46 @@ fn direct_firewall_add(
         ports,
         peer,
     });
-    cfg.save(&state.node.paths)?;
-    reload_firewall_engine(state, &cfg);
+    cfg.save(&state.node.paths, &direct.network_name)?;
+    reload_firewall_engine(state, direct.network_id, &cfg);
     Ok("Rule added.".into())
 }
 
-fn direct_firewall_remove(state: &AgentIpcState, index: usize) -> anyhow::Result<String> {
-    let _ = state.node.persisted.require_direct()?;
-    let mut cfg = crate::direct::FirewallConfig::load(&state.node.paths)?;
+fn direct_firewall_remove(
+    state: &AgentIpcState,
+    network: Option<&str>,
+    index: usize,
+) -> anyhow::Result<String> {
+    let direct = state.node.persisted.require_direct_network(network)?;
+    let mut cfg = crate::agent_config::load_firewall_for(&state.node.paths, &direct.network_name);
     cfg.remove_at(index)?;
-    cfg.save(&state.node.paths)?;
-    reload_firewall_engine(state, &cfg);
+    cfg.save(&state.node.paths, &direct.network_name)?;
+    reload_firewall_engine(state, direct.network_id, &cfg);
     Ok(format!("Removed rule {index}"))
 }
 
-fn direct_firewall_reset(state: &AgentIpcState) -> anyhow::Result<String> {
-    let _ = state.node.persisted.require_direct()?;
+fn direct_firewall_reset(state: &AgentIpcState, network: Option<&str>) -> anyhow::Result<String> {
+    let direct = state.node.persisted.require_direct_network(network)?;
     let cfg = crate::direct::default_firewall();
-    cfg.save(&state.node.paths)?;
-    reload_firewall_engine(state, &cfg);
+    cfg.save(&state.node.paths, &direct.network_name)?;
+    reload_firewall_engine(state, direct.network_id, &cfg);
     Ok("Firewall reset to defaults.".into())
 }
 
-fn direct_firewall_flush(state: &AgentIpcState) -> anyhow::Result<String> {
-    let _ = state.node.persisted.require_direct()?;
-    if let Some(fw) = &state.node.firewall {
+fn direct_firewall_flush(state: &AgentIpcState, network: Option<&str>) -> anyhow::Result<String> {
+    let direct = state.node.persisted.require_direct_network(network)?;
+    if let Some(fw) = state.node.firewall_for(direct.network_id) {
         fw.flush_conntrack();
     }
     Ok("Conntrack table flushed.".into())
 }
 
-fn direct_firewall_pending(state: &AgentIpcState) -> anyhow::Result<IpcResponse> {
-    let _ = state.node.persisted.require_direct()?;
-    let path = state.node.paths.firewall_pending_file();
+fn direct_firewall_pending(
+    state: &AgentIpcState,
+    network: Option<&str>,
+) -> anyhow::Result<IpcResponse> {
+    let direct = state.node.persisted.require_direct_network(network)?;
+    let path = state.node.paths.firewall_pending_file(direct.network_id);
     if !path.exists() {
         return Ok(IpcResponse::DirectFirewallPending { pending: None });
     }
@@ -1601,41 +1705,42 @@ fn direct_firewall_pending(state: &AgentIpcState) -> anyhow::Result<IpcResponse>
     Ok(IpcResponse::DirectFirewallPending { pending: Some(s) })
 }
 
-fn direct_firewall_accept(state: &AgentIpcState) -> anyhow::Result<String> {
-    let _ = state.node.persisted.require_direct()?;
-    let path = state.node.paths.firewall_pending_file();
+fn direct_firewall_accept(state: &AgentIpcState, network: Option<&str>) -> anyhow::Result<String> {
+    let direct = state.node.persisted.require_direct_network(network)?;
+    let path = state.node.paths.firewall_pending_file(direct.network_id);
     if !path.exists() {
         anyhow::bail!("no pending firewall suggestion");
     }
     let pending: crate::direct::policy_docs::PendingSuggestion =
         serde_json::from_slice(&std::fs::read(&path)?)?;
-    let hostname = state
-        .node
-        .persisted
-        .as_direct()
-        .map(|d| d.hostname.clone())
-        .unwrap_or_default();
+    let hostname = direct.hostname.clone();
     let rules = crate::direct::policy_docs::effective_suggested(&pending.policy, &hostname);
-    if let Some(fw) = &state.node.firewall {
+    if let Some(fw) = state.node.firewall_for(direct.network_id) {
         fw.set_suggested(rules);
     }
     let _ = std::fs::remove_file(&path);
     Ok("Accepted pending firewall suggestion.".into())
 }
 
-fn direct_firewall_reject_suggestion(state: &AgentIpcState) -> anyhow::Result<String> {
-    let _ = state.node.persisted.require_direct()?;
-    let path = state.node.paths.firewall_pending_file();
+fn direct_firewall_reject_suggestion(
+    state: &AgentIpcState,
+    network: Option<&str>,
+) -> anyhow::Result<String> {
+    let direct = state.node.persisted.require_direct_network(network)?;
+    let path = state.node.paths.firewall_pending_file(direct.network_id);
     let _ = std::fs::remove_file(&path);
-    if let Some(fw) = &state.node.firewall {
+    if let Some(fw) = state.node.firewall_for(direct.network_id) {
         fw.clear_suggested();
     }
     Ok("Rejected pending firewall suggestion.".into())
 }
 
-async fn direct_policy_show(state: &AgentIpcState) -> anyhow::Result<IpcResponse> {
-    let _ = state.node.persisted.require_direct()?;
-    let Some(docs) = &state.node.docs else {
+async fn direct_policy_show(
+    state: &AgentIpcState,
+    network: Option<&str>,
+) -> anyhow::Result<IpcResponse> {
+    let direct = state.node.persisted.require_direct_network(network)?;
+    let Some(docs) = state.node.docs_for(direct.network_id) else {
         return Ok(IpcResponse::DirectPolicy { json: None });
     };
     let policy = docs.read_suggested_policy().await?;
@@ -1652,11 +1757,14 @@ struct PolicyFile {
     hostname: std::collections::HashMap<String, Vec<crate::direct::firewall::FirewallRule>>,
 }
 
-async fn direct_policy_set(state: &AgentIpcState, toml_str: &str) -> anyhow::Result<String> {
-    let direct = require_direct_coord(state)?;
-    let _ = direct;
+async fn direct_policy_set(
+    state: &AgentIpcState,
+    network: Option<&str>,
+    toml_str: &str,
+) -> anyhow::Result<String> {
+    let direct = require_direct_coord(state, network)?;
     let file: PolicyFile = toml::from_str(toml_str).context("parse policy toml")?;
-    let Some(docs) = &state.node.docs else {
+    let Some(docs) = state.node.docs_for(direct.network_id) else {
         anyhow::bail!("docs membership not ready");
     };
     docs.publish_firewall_policy(file.global, file.hostname)
@@ -1664,9 +1772,12 @@ async fn direct_policy_set(state: &AgentIpcState, toml_str: &str) -> anyhow::Res
     Ok("Published firewall policy to network.".into())
 }
 
-async fn direct_policy_clear(state: &AgentIpcState) -> anyhow::Result<String> {
-    let _ = require_direct_coord(state)?;
-    let Some(docs) = &state.node.docs else {
+async fn direct_policy_clear(
+    state: &AgentIpcState,
+    network: Option<&str>,
+) -> anyhow::Result<String> {
+    let direct = require_direct_coord(state, network)?;
+    let Some(docs) = state.node.docs_for(direct.network_id) else {
         anyhow::bail!("docs membership not ready");
     };
     docs.clear_firewall_policy().await?;
@@ -1678,7 +1789,7 @@ fn direct_keep_alive(
     hostname: &str,
     enable: bool,
 ) -> anyhow::Result<String> {
-    let _ = state.node.persisted.require_direct()?;
+    let _ = state.node.persisted.require_direct_network(None)?;
     if enable {
         state.node.pool.add_keep_alive_host(hostname);
         if let Some(peer) = state.node.routes.lookup_hostname(hostname) {
@@ -1692,4 +1803,34 @@ fn direct_keep_alive(
         }
         Ok(format!("Keep-alive disabled for {hostname}"))
     }
+}
+
+fn direct_override_ip(
+    state: &AgentIpcState,
+    network: Option<&str>,
+    peer: &str,
+    ip: &str,
+) -> anyhow::Result<String> {
+    let direct = state.node.persisted.require_direct_network(network)?;
+    let ip: std::net::Ipv4Addr = ip.parse().context("invalid IPv4 address")?;
+    state
+        .node
+        .routes
+        .set_ip_override(direct.network_id, peer, ip);
+    let path = state.node.paths.ip_overrides_file();
+    let mut map: std::collections::BTreeMap<String, String> = if path.exists() {
+        serde_json::from_slice(&std::fs::read(&path)?).unwrap_or_default()
+    } else {
+        Default::default()
+    };
+    let key = format!("{}:{}", direct.network_id, peer.to_ascii_lowercase());
+    map.insert(key, ip.to_string());
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(&path, serde_json::to_vec_pretty(&map)?)?;
+    Ok(format!(
+        "Override: peer '{peer}' on network '{}' → {ip}",
+        direct.network_name
+    ))
 }

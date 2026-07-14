@@ -106,6 +106,10 @@ pub enum Command {
     KeepAlive(crate::cmds_direct::KeepAliveArgs),
     /// Upgrade a Direct network to Managed mode
     UpgradeToManaged(crate::cmds_direct::UpgradeArgs),
+    /// Leave one Direct network
+    Leave(crate::cmds_direct::LeaveArgs),
+    /// Override a peer IP for birthday collisions
+    OverrideIp(crate::cmds_direct::OverrideIpArgs),
 }
 
 #[derive(Subcommand, Debug)]
@@ -223,7 +227,7 @@ pub async fn run_enroll(args: EnrollArgs, state_dir: Option<&str>) -> anyhow::Re
         }
         anyhow::bail!(
             "already enrolled in Managed network '{}'; run `tuntun reset --yes` first",
-            existing.network_name()
+            existing.primary_network_name().unwrap_or("?")
         );
     }
 
@@ -423,10 +427,11 @@ pub async fn run_agent(args: RunArgs, state_dir: Option<&str>) -> anyhow::Result
                 "starting agent",
             );
         }
-        PersistedState::Direct(d) => {
+        PersistedState::Direct { networks } => {
+            let names: Vec<_> = networks.iter().map(|d| d.network_name.as_str()).collect();
             tracing::info!(
                 endpoint_id = %identity.endpoint_id_hex(),
-                network = %d.network_name,
+                networks = %names.join(","),
                 mode = "direct",
                 seal = %tier.as_str(),
                 "starting agent",
