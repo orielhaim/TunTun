@@ -181,6 +181,39 @@ pub enum IpcRequest {
     DirectFirewallRemove {
         index: usize,
     },
+    DirectFirewallReset,
+    DirectFirewallFlushConntrack,
+    DirectFirewallPending,
+    DirectFirewallAcceptSuggestion,
+    DirectFirewallRejectSuggestion,
+    DirectPolicyShow,
+    DirectPolicySet {
+        /// TOML contents of a policy file (global rules + optional per-hostname).
+        toml: String,
+    },
+    DirectPolicyClear,
+    DirectKeepAlive {
+        hostname: String,
+        #[serde(default = "default_true")]
+        enable: bool,
+    },
+    DirectConnect {
+        contact_id: String,
+    },
+    DirectConnectAllow {
+        contact_id: String,
+    },
+    DirectConnectPending,
+    DirectConnectAccept {
+        contact_id: String,
+    },
+    DirectConnectDeny {
+        contact_id: String,
+    },
+    DirectConnectRotate,
+
+    /// Reload firewall / DNS / logging / keep-alive from tuntun.toml without dropping connections.
+    Reload,
 }
 
 fn default_invite_expires() -> String {
@@ -203,6 +236,10 @@ fn default_https() -> String {
 
 fn default_fw_protocol() -> String {
     "tcp".into()
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -270,6 +307,30 @@ pub enum IpcResponse {
     DirectFirewall {
         enabled: bool,
         rules: Vec<DirectFirewallRuleInfo>,
+        #[serde(default)]
+        conntrack_entries: usize,
+        #[serde(default)]
+        packets_allowed: u64,
+        #[serde(default)]
+        packets_denied: u64,
+        #[serde(default)]
+        packets_rejected: u64,
+        #[serde(default)]
+        suggested_rules: usize,
+    },
+    DirectFirewallPending {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pending: Option<String>,
+    },
+    DirectPolicy {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        json: Option<String>,
+    },
+    DirectConnectPending {
+        requests: Vec<DirectConnectPendingInfo>,
+    },
+    DirectContact {
+        contact_id: String,
     },
     Ok {
         message: String,
@@ -277,6 +338,14 @@ pub enum IpcResponse {
     Error {
         message: String,
     },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DirectConnectPendingInfo {
+    pub contact_id: String,
+    pub endpoint_id: String,
+    pub hostname: String,
+    pub received_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -343,6 +412,20 @@ pub struct PeerLite {
     pub latency_ms: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub os: Option<String>,
+    /// connected | suspended | reconnecting
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conn_state: Option<String>,
+    /// direct | relay | unknown
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bytes_in: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bytes_out: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_seen_secs_ago: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keep_alive: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -361,6 +444,27 @@ pub struct StatusInfo {
     pub snapshot_version: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub peers: Option<Vec<PeerLite>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_plane_up: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keep_alive: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub firewall_drops: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conntrack_entries: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub on_demand: Option<OnDemandStatusInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OnDemandStatusInfo {
+    pub reconnect_attempts: u64,
+    pub reconnect_success: u64,
+    pub reconnect_fail: u64,
+    pub packets_buffered: u64,
+    pub packets_dropped_timeout: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -370,6 +474,8 @@ pub struct DnsStatusInfo {
     pub peer_dns_active: bool,
     pub cached_entries: usize,
     pub synthetic_base: String,
+    pub magic_ip: String,
+    pub bind: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

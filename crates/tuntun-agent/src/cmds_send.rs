@@ -1,4 +1,4 @@
-//! `tuntun send` CLI — P2P file transfer over the mesh.
+//! `tuntun send` CLI - P2P file transfer over the mesh.
 
 use anyhow::Context;
 use clap::{Args, Subcommand};

@@ -173,7 +173,7 @@ pub async fn run_login(args: LoginArgs) -> anyhow::Result<()> {
     } else {
         println!("✓ Logged in");
     }
-    println!("  tokens → {}", paths.auth_file().display());
+    println!("  tokens sealed in {}", paths.secrets_file().display());
     Ok(())
 }
 
@@ -187,10 +187,7 @@ pub async fn run_logout(args: LogoutArgs) -> anyhow::Result<()> {
 #[allow(dead_code)]
 pub fn load_tokens(state_dir: Option<&str>) -> anyhow::Result<Option<CliAuthTokens>> {
     let paths = StatePaths::resolve(state_dir);
-    if !paths.auth_file().exists() {
-        return Ok(None);
-    }
-    Ok(Some(CliAuthTokens::load(&paths)?))
+    tuntun_core::secret_store::load_auth(&paths)
 }
 
 async fn poll_for_token(

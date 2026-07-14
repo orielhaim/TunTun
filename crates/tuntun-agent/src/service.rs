@@ -104,10 +104,24 @@ pub fn start(state_dir: Option<&str>) -> anyhow::Result<()> {
             }
             anyhow::bail!("starting the system service needs root: sudo tuntun service start");
         }
+        println!("Starting tuntun service…");
         // Always refresh the unit so state dir / RestartSec stay current.
         install_inner(state_dir, false)?;
         run_cmd("systemctl", &["start", SERVICE_NAME])?;
         let _ = run_cmd("systemctl", &["enable", SERVICE_NAME]);
+        if Command::new("systemctl")
+            .args(["is-active", "--quiet", SERVICE_NAME])
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+        {
+            println!("Service is running.");
+            println!(
+                "Next: `tuntun create` or `tuntun enroll` if this host is not on a network yet."
+            );
+        } else {
+            println!("Service start issued; check status with: systemctl status tuntun");
+        }
     }
     #[cfg(target_os = "macos")]
     {
@@ -128,20 +142,23 @@ pub fn start(state_dir: Option<&str>) -> anyhow::Result<()> {
         if !is_root() {
             anyhow::bail!("starting the service needs root: sudo tuntun service start");
         }
+        println!("Starting tuntun service…");
         run_cmd(
             "launchctl",
             &["bootstrap", "system", &plist.display().to_string()],
         )
         .or_else(|_| run_cmd("launchctl", &["load", "-w", &plist.display().to_string()]))?;
+        println!("Service is running.");
     }
     #[cfg(windows)]
     {
         let _ = state_dir;
+        println!("Starting tuntun service…");
         if let Err(e) = run_cmd("sc", &["start", SERVICE_NAME]) {
             anyhow::bail!("{e}\nIf the service is missing, run elevated: tuntun service install");
         }
+        println!("Service is running.");
     }
-    println!("Service started.");
     Ok(())
 }
 
@@ -395,6 +412,7 @@ pub fn render_systemd_unit(exe: &str, state_dir: Option<&str>) -> String {
          Restart=always\n\
          RestartSec=2\n\
          KillMode=mixed\n\
+         TimeoutStartSec=30\n\
          TimeoutStopSec=30\n\
          StateDirectory=tuntun\n\
          Environment=TUNTUN_STATE_DIR={dir}\n\
@@ -519,6 +537,7 @@ mod tests {
         assert!(unit.contains("After=network-online.target"));
         assert!(unit.contains("ExecStart=/usr/bin/tuntun run"));
         assert!(unit.contains("Type=notify-reload"));
+        assert!(unit.contains("TimeoutStartSec=30"));
         assert!(unit.contains("ExecReload=/bin/kill -HUP $MAINPID"));
         assert!(unit.contains("TUNTUN_STATE_DIR=/var/lib/tuntun"));
         assert!(unit.contains("StateDirectory=tuntun"));

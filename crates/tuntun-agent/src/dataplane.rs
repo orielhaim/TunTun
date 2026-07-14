@@ -181,12 +181,13 @@ async fn bring_up(
         #[cfg(windows)]
         cfg.wintun_file.as_deref(),
     )?);
+    let _ = crate::magic_dns::ensure_magic_dns_addr(&cfg.ifname, cfg.dns_cfg.magic_ip);
     {
         let mut slot = tun_slot.write().await;
         *slot = Some(tun.clone());
     }
 
-    let dns_guard = match crate::system_dns::configure(cfg.assigned_ipv4, &cfg.dns_cfg.suffix) {
+    let dns_guard = match crate::system_dns::configure(cfg.dns_cfg.magic_ip, &cfg.dns_cfg.suffix) {
         Ok(g) => {
             peer_dns_active.store(true, std::sync::atomic::Ordering::SeqCst);
             Some(g)
@@ -204,12 +205,13 @@ async fn bring_up(
         crate::system_routes::apply(&cfg.ifname, &device_profile, &remote_subnets, has_exit);
     }
 
-    let dgram_pool = ConnPool::new(node.endpoint.clone(), TUNNEL_ALPN);
+    let dgram_pool = ConnPool::with_shared_policy(node.endpoint.clone(), TUNNEL_ALPN, &node.pool);
     let outbound = spawn_outbound(
         tun.clone(),
         node.routes.clone(),
         dgram_pool,
         node.acl.clone(),
+        node.firewall.clone(),
         metrics.clone(),
     );
 
@@ -231,10 +233,20 @@ pub fn spawn_outbound(
     routes: RoutingTable,
     pool: ConnPool,
     acl: AclEngine,
+    firewall: Option<tuntun_core::direct::FirewallEngine>,
     metrics: AgentMetrics,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
-        if let Err(e) = run_outbound(tun, routes, pool, acl, metrics).await {
+        if let Err(e) = run_outbound(crate::tun_io::OutboundDeps {
+            tun,
+            routes,
+            pool,
+            acl,
+            firewall,
+            metrics,
+        })
+        .await
+        {
             tracing::error!(?e, "outbound crashed");
         }
     })

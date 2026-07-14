@@ -47,7 +47,7 @@ struct RunArgs {
     cert: Option<PathBuf>,
     #[arg(long, env = "TUNTUN_RELAY_KEY")]
     key: Option<PathBuf>,
-    /// Persist iroh identity across restarts
+    /// Persist identity across restarts
     #[arg(long, env = "TUNTUN_RELAY_STATE_DIR")]
     state_dir: Option<PathBuf>,
     /// Allow any auth token when AuthStore is empty (dev only)

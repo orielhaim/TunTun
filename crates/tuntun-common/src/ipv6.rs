@@ -4,7 +4,7 @@ use std::net::Ipv6Addr;
 
 use crate::ProtocolError;
 
-/// ULA prefix `fd7a:7475:7475::/48` — mnemonic for "tuntun" (ASCII 0x7475).
+/// ULA prefix `fd7a:7475:7475::/48` - mnemonic for "tuntun" (ASCII 0x7475).
 pub const TENANT_IPV6_PREFIX: [u8; 6] = [0xfd, 0x7a, 0x74, 0x75, 0x74, 0x75];
 pub const TENANT_IPV6_PREFIX_LEN: u8 = 48;
 

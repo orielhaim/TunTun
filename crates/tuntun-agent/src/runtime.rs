@@ -53,7 +53,7 @@ pub async fn run(
     let node = CoreNode::bootstrap(
         identity,
         persisted,
-        paths,
+        paths.clone(),
         CoreNodeConfig {
             hostname: hostname.clone(),
             agent_version: env!("CARGO_PKG_VERSION"),
@@ -62,19 +62,28 @@ pub async fn run(
             advertise_recording_alpn: args.recorder,
             kind: "agent",
             on_kill_ssh,
+            enable_mdns: !args.no_mdns,
+            // Managed: keep-alive. Direct: on-demand unless --keep-alive.
+            keep_alive: if is_direct { args.keep_alive } else { true },
         },
     )
     .await?;
+
+    if let Err(e) = crate::auto_update::on_agent_start(&node.paths) {
+        tracing::warn!(?e, "auto-update pending check failed");
+    }
+    crate::auto_update::spawn(node.paths.clone());
 
     #[cfg(windows)]
     let wintun_file = args.wintun_file.clone();
 
     let (assigned_ipv4, prefix, mtu, dns_cfg) = if is_direct {
+        let _ = tuntun_core::TunTunConfig::ensure(&node.paths);
         (
             node.self_ipv4,
             10u8,
             1280u16,
-            tuntun_common::DnsConfig::default(),
+            tuntun_core::load_dns(&node.paths),
         )
     } else {
         let membership_snap = tuntun_core::state::load_snapshot_cache(&node.paths)
@@ -100,6 +109,7 @@ pub async fn run(
         #[cfg(windows)]
         wintun_file.as_deref(),
     )?);
+    let _ = crate::magic_dns::ensure_magic_dns_addr(&args.ifname, dns_cfg.magic_ip);
     let tun_slot: TunSlot = Arc::new(tokio::sync::RwLock::new(Some(tun.clone())));
 
     crate::forward::ensure_ip_forwarding(!node.routes.advertised_subnets().is_empty());
@@ -116,6 +126,9 @@ pub async fn run(
     }
 
     let stream_handler = crate::stream_proxy::stream_handler(node.routes.clone());
+    let dgram_pool =
+        tuntun_core::ConnPool::with_shared_policy(node.endpoint.clone(), TUNNEL_ALPN, &node.pool);
+
     crate::accept::spawn(AcceptDeps {
         endpoint: node.endpoint.clone(),
         routes: node.routes.clone(),
@@ -137,11 +150,14 @@ pub async fn run(
         network_secret: node.persisted.as_direct().map(|d| d.network_secret.clone()),
         state_dir: node.paths.dir.clone(),
         docs: node.docs.clone(),
+        firewall: node.firewall.clone(),
+        spoof_tracker: node.spoof_tracker.clone(),
+        dgram_pool: dgram_pool.clone(),
     });
 
-    let dns_bind = tuntun_core::dns_stub::bind_addr(assigned_ipv4);
+    let dns_bind = tuntun_core::dns_stub::bind_addr(dns_cfg.magic_ip);
     let _dns_task = tuntun_core::dns_stub::spawn(dns_bind, node.routes.clone(), dns_cfg.clone());
-    let dns_guard = match crate::system_dns::configure(assigned_ipv4, &dns_cfg.suffix) {
+    let dns_guard = match crate::system_dns::configure(dns_cfg.magic_ip, &dns_cfg.suffix) {
         Ok(g) => Some(g),
         Err(e) => {
             tracing::warn!(?e, "PeerDNS system configuration skipped");
@@ -173,12 +189,12 @@ pub async fn run(
 
     crate::metrics::spawn_listeners(metrics.clone(), &args.metrics_bind, assigned_ipv4);
 
-    let dgram_pool = tuntun_core::ConnPool::new(node.endpoint.clone(), TUNNEL_ALPN);
     let outbound = spawn_outbound(
         tun.clone(),
         node.routes.clone(),
         dgram_pool,
         node.acl.clone(),
+        node.firewall.clone(),
         metrics.clone(),
     );
 
@@ -212,13 +228,18 @@ pub async fn run(
         started_at,
         dns_upstream: dns_cfg.upstream.iter().map(|ip| ip.to_string()).collect(),
         synthetic_base: dns_cfg.synthetic_base.to_string(),
+        magic_ip: dns_cfg.magic_ip.to_string(),
         peer_dns_active,
+        peer_rtt: Arc::new(dashmap::DashMap::new()),
         serves: node.serves.clone(),
         tunnels: node.tunnels.clone(),
         send: node.send.clone(),
         data_plane,
     });
     let _ipc_task = spawn_ipc_server(network_id, ipc_state);
+
+    #[cfg(unix)]
+    crate::sd_notify::status("running");
 
     if !args.disable_gossip {
         let gossip = iroh_gossip::Gossip::builder().spawn(node.endpoint.clone());

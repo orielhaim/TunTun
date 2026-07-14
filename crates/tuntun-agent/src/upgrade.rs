@@ -1,4 +1,4 @@
-//! Graceful process upgrade via Cloudflare `ecdysis` (Unix only).
+//! Graceful process upgrade via `ecdysis` (Unix only).
 //!
 //! SIGHUP (or `systemctl reload`) forks+execs the new binary. Existing work
 //! drains in the parent after the child signals ready.

@@ -18,7 +18,7 @@ use crate::dataplane::TunSlot;
 use crate::metrics::AgentMetrics;
 use crate::recorder::{RecordingStore, serve_recording_connection};
 use crate::ssh::{SshServeDeps, SshSessionRegistry, serve_ssh_connection};
-use crate::tun_io::serve_tunnel_connection;
+use crate::tun_io::{InboundDeps, serve_tunnel_connection};
 
 pub struct AcceptDeps {
     pub endpoint: Endpoint,
@@ -41,6 +41,9 @@ pub struct AcceptDeps {
     pub network_secret: Option<String>,
     pub state_dir: std::path::PathBuf,
     pub docs: Option<DocsMembership>,
+    pub firewall: Option<tuntun_core::direct::FirewallEngine>,
+    pub spoof_tracker: Option<tuntun_core::direct::SpoofTracker>,
+    pub dgram_pool: ConnPool,
 }
 
 pub fn spawn(deps: AcceptDeps) {
@@ -66,6 +69,9 @@ pub fn spawn(deps: AcceptDeps) {
             let network_secret = deps.network_secret.clone();
             let state_dir = deps.state_dir.clone();
             let docs = deps.docs.clone();
+            let firewall = deps.firewall.clone();
+            let spoof_tracker = deps.spoof_tracker.clone();
+            let dgram_pool = deps.dgram_pool.clone();
             tokio::spawn(async move {
                 let conn = match incoming.await {
                     Ok(c) => c,
@@ -83,14 +89,15 @@ pub fn spawn(deps: AcceptDeps) {
                             .await
                         {
                             Ok(_peer) => {
-                                if let Err(e) = crate::cmds_direct::try_handle_join_on_auth_conn(
+                                if let Err(e) = crate::cmds_direct::try_handle_post_auth(
                                     &conn,
                                     &state_dir,
                                     docs.as_ref(),
+                                    &self_endpoint_id,
                                 )
                                 .await
                                 {
-                                    tracing::debug!(?e, "post-auth join handle");
+                                    tracing::debug!(?e, "post-auth handle");
                                 }
                             }
                             Err(e) => {
@@ -120,7 +127,17 @@ pub fn spawn(deps: AcceptDeps) {
                         conn.close(1u32.into(), b"dataplane_down");
                         return;
                     };
-                    serve_tunnel_connection(conn, tun_dev, routes, acl, metrics).await;
+                    serve_tunnel_connection(InboundDeps {
+                        conn,
+                        tun: tun_dev,
+                        routes,
+                        acl,
+                        firewall,
+                        spoof: spoof_tracker,
+                        pool: Some(dgram_pool),
+                        metrics,
+                    })
+                    .await;
                 } else if alpn == SSH_ALPN {
                     serve_ssh_connection(
                         conn,

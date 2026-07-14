@@ -134,12 +134,23 @@ pub struct HostnameRoute {
     pub target_ip: Option<Ipv4Addr>,
 }
 
+fn default_magic_ip() -> Ipv4Addr {
+    Ipv4Addr::new(100, 100, 100, 53)
+}
+
+fn default_synthetic_base() -> Ipv4Addr {
+    Ipv4Addr::new(100, 100, 0, 1)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DnsConfig {
     pub suffix: String,
     #[serde(default)]
     pub upstream: Vec<std::net::IpAddr>,
+    #[serde(default = "default_synthetic_base")]
     pub synthetic_base: Ipv4Addr,
+    #[serde(default = "default_magic_ip")]
+    pub magic_ip: Ipv4Addr,
 }
 
 impl Default for DnsConfig {
@@ -151,7 +162,8 @@ impl Default for DnsConfig {
                 std::net::IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)),
             ],
             // CGNAT-style pool reserved for PeerDNS hostname routes.
-            synthetic_base: Ipv4Addr::new(100, 100, 0, 1),
+            synthetic_base: default_synthetic_base(),
+            magic_ip: default_magic_ip(),
         }
     }
 }
@@ -302,9 +314,6 @@ pub struct EndpointSnapshot {
     pub org_ca_pem: Option<String>,
     pub version: u64,
 }
-
-/// Legacy alias kept for incremental migration in agent code paths.
-pub type NetworkSnapshot = NetworkMembershipSnapshot;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SnapshotDelta {

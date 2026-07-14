@@ -1,5 +1,6 @@
 pub mod acl;
 pub mod acl_hook;
+pub mod agent_config;
 pub mod control;
 pub mod coordinator;
 pub mod direct;
@@ -11,6 +12,7 @@ pub mod node;
 pub mod ping;
 pub mod recording;
 pub mod routing;
+pub mod secret_store;
 pub mod send;
 pub mod serve;
 pub mod ssh;
@@ -19,6 +21,9 @@ pub mod stream;
 pub mod sync;
 pub mod tunnel;
 pub mod ws_client;
+
+pub use agent_config::{TunTunConfig, load_dns, load_firewall};
+pub use secret_store::{AgentSecrets, SealPolicy, SealTier, load_agent, persist_agent};
 
 pub use acl::{AclEngine, SelfIdentity};
 pub use acl_hook::AclHook;

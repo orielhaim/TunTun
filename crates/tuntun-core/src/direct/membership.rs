@@ -11,6 +11,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::Context;
+use arc_swap::ArcSwap;
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use futures_util::StreamExt;
@@ -26,6 +27,7 @@ use iroh_docs::{AuthorId, DocTicket, NamespaceId};
 use iroh_gossip::net::Gossip;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
+use tuntun_common::DnsConfig;
 
 use crate::acl::AclEngine;
 use crate::direct::auth::AuthCache;
@@ -86,8 +88,13 @@ struct DocsInner {
     author: AuthorId,
     members: Mutex<HashMap<String, MembershipEntry>>,
     network_name: String,
+    network_secret: String,
+    hostname: String,
+    auto_accept_firewall: bool,
     self_endpoint_id: String,
     paths: StatePaths,
+    firewall: Option<crate::direct::FirewallEngine>,
+    dns: Arc<ArcSwap<DnsConfig>>,
 }
 
 /// Inputs for [`DocsMembership::bootstrap`].
@@ -102,6 +109,10 @@ pub struct DocsBootstrap<'a> {
     pub acl: AclEngine,
     pub auth: AuthCache,
     pub policy: tuntun_common::policy::PolicyBundle,
+    /// Optional firewall engine for coordinator policy suggestions.
+    pub firewall: Option<crate::direct::FirewallEngine>,
+    /// PeerDNS config (from tuntun.toml or defaults).
+    pub dns: DnsConfig,
 }
 
 impl DocsMembership {
@@ -150,6 +161,8 @@ impl DocsMembership {
             acl,
             auth,
             policy,
+            firewall,
+            dns,
         } = cfg;
         paths.ensure()?;
         let docs_dir = paths.dir.join("docs");
@@ -205,8 +218,13 @@ impl DocsMembership {
                 author,
                 members: Mutex::new(HashMap::new()),
                 network_name: direct.network_name.clone(),
+                network_secret: direct.network_secret.clone(),
+                hostname: direct.hostname.clone(),
+                auto_accept_firewall: direct.auto_accept_firewall,
                 self_endpoint_id: self_endpoint_id.to_string(),
                 paths: paths.clone_paths(),
+                firewall,
+                dns: Arc::new(ArcSwap::from_pointee(dns)),
             }),
         };
 
@@ -217,6 +235,9 @@ impl DocsMembership {
 
         membership.rebuild_from_doc().await?;
         membership.apply_to_routes(&routes, &acl, &auth, &policy);
+        if let Err(e) = membership.sync_firewall_policy().await {
+            tracing::debug!(?e, "initial firewall policy sync");
+        }
         if let Err(e) = membership.apply_pending_kicks().await {
             tracing::warn!(?e, "apply pending kicks");
         }
@@ -243,6 +264,9 @@ impl DocsMembership {
                                     continue;
                                 }
                                 bg.apply_to_routes(&routes_bg, &acl_bg, &auth_bg, &policy_bg);
+                                if let Err(e) = bg.sync_firewall_policy().await {
+                                    tracing::debug!(?e, "docs firewall policy sync");
+                                }
                             }
                             Some(Ok(LiveEvent::NeighborUp(pk))) => {
                                 tracing::debug!(peer = %pk, "docs neighbor up");
@@ -405,9 +429,9 @@ impl DocsMembership {
         policy: &tuntun_common::policy::PolicyBundle,
     ) {
         let members = self.snapshot_members();
+        // Include self so PeerDNS resolves this node's hostname.
         let peers: Vec<tuntun_common::PeerEntry> = members
             .iter()
-            .filter(|m| m.endpoint_id != self.inner.self_endpoint_id)
             .filter(|m| m.status != "kicked")
             .map(|m| tuntun_common::PeerEntry {
                 ip: m.ipv4,
@@ -417,13 +441,14 @@ impl DocsMembership {
             })
             .collect();
         let version = members.len() as u64;
+        let dns = (**self.inner.dns.load()).clone();
         routes.replace(
             &peers,
             &[],
             &[],
             &[],
             &tuntun_common::DeviceProfile::default(),
-            &tuntun_common::DnsConfig::default(),
+            &dns,
             &self.inner.network_name,
             &self.inner.self_endpoint_id,
             version,
@@ -440,6 +465,15 @@ impl DocsMembership {
         }
     }
 
+    /// Hot-reload PeerDNS settings without rebuilding membership.
+    pub fn set_dns(&self, dns: DnsConfig) {
+        self.inner.dns.store(Arc::new(dns));
+    }
+
+    pub fn dns_config(&self) -> DnsConfig {
+        (**self.inner.dns.load()).clone()
+    }
+
     /// Drain pending kick file written by CLI.
     pub async fn apply_pending_kicks(&self) -> anyhow::Result<()> {
         let kick_path = self.inner.paths.dir.join("direct_pending_kick.json");
@@ -451,6 +485,199 @@ impl DocsMembership {
             self.kick_peer(id).await?;
         }
         let _ = std::fs::remove_file(&kick_path);
+        Ok(())
+    }
+
+    /// Load coordinator firewall policy from docs; verify and apply or stage as pending.
+    pub async fn sync_firewall_policy(&self) -> anyhow::Result<()> {
+        let Some(suggested) = self.read_suggested_policy().await? else {
+            return Ok(());
+        };
+        let payload = crate::direct::policy_docs::canonical_payload(
+            suggested.meta.version,
+            &suggested.meta.timestamp,
+            &suggested.global,
+            &suggested.by_hostname,
+        )?;
+        if !crate::direct::policy_docs::verify_policy(
+            &self.inner.network_secret,
+            &payload,
+            &suggested.meta.signature,
+        ) {
+            tracing::warn!("firewall policy signature invalid; ignoring");
+            return Ok(());
+        }
+
+        let rules =
+            crate::direct::policy_docs::effective_suggested(&suggested, &self.inner.hostname);
+
+        if self.inner.auto_accept_firewall {
+            if let Some(fw) = &self.inner.firewall {
+                fw.set_suggested(rules);
+            }
+            let _ = std::fs::remove_file(self.inner.paths.firewall_pending_file());
+        } else {
+            let pending = crate::direct::policy_docs::PendingSuggestion {
+                received_at: Utc::now().to_rfc3339(),
+                policy: suggested,
+            };
+            let json = serde_json::to_vec_pretty(&pending)?;
+            std::fs::write(self.inner.paths.firewall_pending_file(), json)?;
+        }
+        Ok(())
+    }
+
+    pub async fn read_suggested_policy(
+        &self,
+    ) -> anyhow::Result<Option<crate::direct::policy_docs::SuggestedPolicy>> {
+        use crate::direct::policy_docs::{POLICY_GLOBAL_KEY, POLICY_META_KEY, policy_hostname_key};
+
+        let meta_bytes = self.get_key_bytes(POLICY_META_KEY.as_bytes()).await?;
+        let Some(meta_bytes) = meta_bytes else {
+            return Ok(None);
+        };
+        let meta: crate::direct::policy_docs::PolicyMeta = serde_json::from_slice(&meta_bytes)?;
+
+        let global = match self.get_key_bytes(POLICY_GLOBAL_KEY.as_bytes()).await? {
+            Some(b) => serde_json::from_slice(&b).unwrap_or_default(),
+            None => vec![],
+        };
+
+        let mut by_hostname = HashMap::new();
+        let host_key = policy_hostname_key(&self.inner.hostname);
+        if let Some(b) = self.get_key_bytes(host_key.as_bytes()).await?
+            && let Ok(rules) = serde_json::from_slice(&b)
+        {
+            by_hostname.insert(self.inner.hostname.clone(), rules);
+        }
+
+        // Also load any hostname-specific keys we find under policy/v1/hostname/
+        let stream = self
+            .inner
+            .doc
+            .get_many(Query::single_latest_per_key().key_prefix("policy/v1/hostname/"))
+            .await
+            .context("get_many policy hostname")?;
+        tokio::pin!(stream);
+        while let Some(item) = stream.next().await {
+            let entry = item?;
+            let key = String::from_utf8_lossy(entry.key());
+            let Some(host) = key.strip_prefix("policy/v1/hostname/") else {
+                continue;
+            };
+            if host == self.inner.hostname {
+                continue; // already loaded
+            }
+            let hash = entry.content_hash();
+            let bytes = self
+                .inner
+                .blobs
+                .get_bytes(hash)
+                .await
+                .map_err(|e| anyhow::anyhow!("policy host blob: {e}"))?;
+            if let Ok(rules) = serde_json::from_slice::<Vec<_>>(&bytes) {
+                by_hostname.insert(host.to_string(), rules);
+            }
+        }
+
+        Ok(Some(crate::direct::policy_docs::SuggestedPolicy {
+            meta,
+            global,
+            by_hostname,
+        }))
+    }
+
+    async fn get_key_bytes(&self, key: &[u8]) -> anyhow::Result<Option<Bytes>> {
+        let stream = self
+            .inner
+            .doc
+            .get_many(Query::single_latest_per_key().key_exact(key))
+            .await
+            .context("get_key")?;
+        tokio::pin!(stream);
+        let Some(item) = stream.next().await else {
+            return Ok(None);
+        };
+        let entry = item?;
+        let hash = entry.content_hash();
+        let bytes = self
+            .inner
+            .blobs
+            .get_bytes(hash)
+            .await
+            .map_err(|e| anyhow::anyhow!("get key blob: {e}"))?;
+        Ok(Some(bytes))
+    }
+
+    /// Coordinator: publish a suggested firewall policy into the membership doc.
+    pub async fn publish_firewall_policy(
+        &self,
+        global: Vec<crate::direct::firewall::FirewallRule>,
+        by_hostname: HashMap<String, Vec<crate::direct::firewall::FirewallRule>>,
+    ) -> anyhow::Result<()> {
+        use crate::direct::policy_docs::{
+            POLICY_GLOBAL_KEY, POLICY_META_KEY, PolicyMeta, canonical_payload, policy_hostname_key,
+            sign_policy,
+        };
+
+        let version = Utc::now().timestamp() as u64;
+        let timestamp = Utc::now().to_rfc3339();
+        let payload = canonical_payload(version, &timestamp, &global, &by_hostname)?;
+        let signature = sign_policy(&self.inner.network_secret, &payload);
+        let meta = PolicyMeta {
+            version,
+            timestamp,
+            signature,
+        };
+
+        set_str(
+            &self.inner.doc,
+            self.inner.author,
+            Bytes::from(POLICY_META_KEY),
+            &serde_json::to_string(&meta)?,
+        )
+        .await?;
+        set_str(
+            &self.inner.doc,
+            self.inner.author,
+            Bytes::from(POLICY_GLOBAL_KEY),
+            &serde_json::to_string(&global)?,
+        )
+        .await?;
+        for (host, rules) in &by_hostname {
+            set_str(
+                &self.inner.doc,
+                self.inner.author,
+                Bytes::from(policy_hostname_key(host)),
+                &serde_json::to_string(rules)?,
+            )
+            .await?;
+        }
+        Ok(())
+    }
+
+    /// Coordinator: clear published firewall policy keys.
+    pub async fn clear_firewall_policy(&self) -> anyhow::Result<()> {
+        use crate::direct::policy_docs::{POLICY_GLOBAL_KEY, POLICY_META_KEY};
+
+        // Overwrite with empty tombstones (iroh-docs has no delete in all versions).
+        set_str(
+            &self.inner.doc,
+            self.inner.author,
+            Bytes::from(POLICY_META_KEY),
+            "",
+        )
+        .await?;
+        set_str(
+            &self.inner.doc,
+            self.inner.author,
+            Bytes::from(POLICY_GLOBAL_KEY),
+            "[]",
+        )
+        .await?;
+        if let Some(fw) = &self.inner.firewall {
+            fw.clear_suggested();
+        }
         Ok(())
     }
 

@@ -4,7 +4,7 @@ use anyhow::Context;
 use clap::Args;
 use tuntun_core::ipc::protocol::{IpcRequest, IpcResponse, PingProbe, PingSummary, StatusInfo};
 use tuntun_core::ipc::{IpcClient, discover_network_id};
-use tuntun_core::{AgentIdentity, PersistedState, StatePaths};
+use tuntun_core::{PersistedState, StatePaths};
 
 use crate::output::{self, Output};
 
@@ -37,6 +37,21 @@ pub struct PingArgs {
 pub struct DnsStatusArgs {
     #[arg(long)]
     pub json: bool,
+    #[arg(long, env = "TUNTUN_STATE_DIR")]
+    pub state_dir: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct ValidateArgs {
+    /// Path to tuntun.toml (defaults to state dir)
+    #[arg(long)]
+    pub config: Option<String>,
+    #[arg(long, env = "TUNTUN_STATE_DIR")]
+    pub state_dir: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct ReloadArgs {
     #[arg(long, env = "TUNTUN_STATE_DIR")]
     pub state_dir: Option<String>,
 }
@@ -104,7 +119,7 @@ pub async fn run_status(args: StatusArgs) -> anyhow::Result<()> {
         print_service_lines(&out, &service, agent_running);
         if agent_running {
             out.writeln(out.dim(
-                "  Idle — run `sudo tuntun create` / `enroll` / `join` (agent loads automatically).",
+                "  Idle - run `sudo tuntun create` / `enroll` / `join` (agent loads automatically).",
             ));
         } else {
             out.writeln(out.dim(
@@ -210,8 +225,9 @@ struct OfflineStatus {
 }
 
 fn offline_status(paths: &StatePaths, persisted: &PersistedState) -> OfflineStatus {
-    let endpoint_id = AgentIdentity::load_from(&paths.key_file())
-        .map(|id| id.endpoint_id_hex())
+    let policy = tuntun_core::SealPolicy::from_env_and_flag(false);
+    let endpoint_id = tuntun_core::load_agent(paths, policy)
+        .map(|(id, _, _)| id.endpoint_id_hex())
         .unwrap_or_default();
     match persisted {
         PersistedState::Direct(d) => OfflineStatus {
@@ -273,12 +289,12 @@ fn print_offline_status(
     let system = StatePaths::system_dir();
     if service.installed && state_dir != system.as_path() {
         out.writeln(out.yellow(&format!(
-            "  note       service uses {} — CLI state is separate; recreate with sudo or set TUNTUN_STATE_DIR",
+            "  note       service uses {} - CLI state is separate; recreate with sudo or set TUNTUN_STATE_DIR",
             system.display()
         )));
     } else if service.active {
         out.writeln(
-            out.dim("  Service is up but IPC is down — try `sudo tuntun service restart`."),
+            out.dim("  Service is up but IPC is down - try `sudo tuntun service restart`."),
         );
     } else {
         out.writeln(out.dim("  Start with `sudo tuntun service start` or `tuntun run`."));
@@ -301,6 +317,18 @@ fn print_status(
         out.dim(&format!("· {}", info.network_name))
     ));
     out.writeln(format!("  mode       {mode}"));
+    if let Some(up) = info.data_plane_up {
+        out.writeln(format!(
+            "  data plane {}",
+            if up { out.green("up") } else { out.dim("down") }
+        ));
+    }
+    if let Some(ka) = info.keep_alive {
+        out.writeln(format!(
+            "  keep-alive {}",
+            if ka { "on" } else { "off (on-demand)" }
+        ));
+    }
     out.writeln(format!(
         "  endpoint   {}",
         out.dim(&output::short_endpoint(&info.endpoint_id))
@@ -311,6 +339,13 @@ fn print_status(
         info.peers_online, info.peers_total
     ));
     out.writeln(format!("  relay      {}", info.relay_status));
+    if let Some(drops) = info.firewall_drops {
+        out.writeln(format!(
+            "  firewall   {} drops · {} conntrack",
+            drops,
+            info.conntrack_entries.unwrap_or(0)
+        ));
+    }
     out.writeln(format!(
         "  uptime     {}  ·  agent v{}  ·  snap {}",
         output::format_uptime(info.uptime_secs),
@@ -322,20 +357,27 @@ fn print_status(
         out.writeln("");
         out.writeln(out.bold("Peers"));
         out.writeln(format!(
-            "  {:<4} {:<20} {:<15} {:<14} {}",
-            "", "HOSTNAME", "IP", "ENDPOINT", "LATENCY"
+            "  {:<4} {:<18} {:<14} {:<10} {:<8} {:<10} {}",
+            "", "HOSTNAME", "IP", "STATE", "PATH", "RTT", "BYTES"
         ));
         for p in peers {
             let online = out.online_dot(p.online.unwrap_or(false));
             let lat = p
                 .latency_ms
-                .map(|ms| format!("{ms:.1} ms"))
+                .map(|ms| format!("{ms:.0}ms"))
                 .unwrap_or_else(|| out.dim("-"));
+            let state = p.conn_state.as_deref().unwrap_or("-");
+            let path = p.path.as_deref().unwrap_or("-");
+            let bytes = match (p.bytes_in, p.bytes_out) {
+                (Some(i), Some(o)) => format!("↓{} ↑{}", fmt_bytes(i), fmt_bytes(o)),
+                _ => out.dim("-"),
+            };
             out.writeln(format!(
-                "  {online:<4} {:<20} {:<15} {:<14} {lat}",
-                truncate(&p.hostname, 20),
+                "  {online:<4} {:<18} {:<14} {:<10} {:<8} {lat:<10} {bytes}",
+                truncate(&p.hostname, 18),
                 p.ip,
-                output::short_endpoint(&p.endpoint_id),
+                truncate(state, 10),
+                truncate(path, 8),
             ));
         }
     }
@@ -436,7 +478,45 @@ pub async fn run_dns_status(args: DnsStatusArgs) -> anyhow::Result<()> {
     ));
     out.writeln(format!("cache     {} entries", info.cached_entries));
     out.writeln(format!("synthetic {}", info.synthetic_base));
+    out.writeln(format!("magic     {}", info.magic_ip));
+    out.writeln(format!("bind      {}", info.bind));
     Ok(())
+}
+
+pub async fn run_validate(args: ValidateArgs) -> anyhow::Result<()> {
+    use tuntun_core::TunTunConfig;
+
+    let paths = StatePaths::resolve(args.state_dir.as_deref());
+    let cfg = if let Some(path) = &args.config {
+        TunTunConfig::load_path(std::path::Path::new(path))?
+    } else {
+        TunTunConfig::ensure(&paths)?
+    };
+    match cfg.validate() {
+        Ok(()) => {
+            println!("tuntun.toml: ok");
+            Ok(())
+        }
+        Err(errs) => {
+            for e in &errs {
+                eprintln!("error: {e}");
+            }
+            anyhow::bail!("{} validation error(s)", errs.len());
+        }
+    }
+}
+
+pub async fn run_reload(args: ReloadArgs) -> anyhow::Result<()> {
+    let ipc = client(args.state_dir.as_deref()).await?;
+    let resp = ipc.request(IpcRequest::Reload).await?;
+    match resp {
+        IpcResponse::Ok { message } => {
+            println!("{message}");
+            Ok(())
+        }
+        IpcResponse::Error { message } => anyhow::bail!("{message}"),
+        other => anyhow::bail!("unexpected response: {other:?}"),
+    }
 }
 
 pub async fn run_route_list(args: RouteListArgs) -> anyhow::Result<()> {
@@ -885,6 +965,21 @@ fn truncate(s: &str, max: usize) -> String {
     } else {
         let t: String = s.chars().take(max.saturating_sub(1)).collect();
         format!("{t}…")
+    }
+}
+
+fn fmt_bytes(n: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = KB * 1024;
+    const GB: u64 = MB * 1024;
+    if n >= GB {
+        format!("{:.1}G", n as f64 / GB as f64)
+    } else if n >= MB {
+        format!("{:.1}M", n as f64 / MB as f64)
+    } else if n >= KB {
+        format!("{:.1}K", n as f64 / KB as f64)
+    } else {
+        format!("{n}B")
     }
 }
 

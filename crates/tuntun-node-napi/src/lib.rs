@@ -152,8 +152,8 @@ pub async fn enroll(cfg: EnrollConfig) -> Result<EnrollResult> {
         organization_id: resp.organization_id.clone(),
         enrolled_at: chrono::Utc::now(),
     });
-    identity.save_to(&paths.key_file()).map_err(err)?;
-    persisted.save(&paths).map_err(err)?;
+    let policy = tuntun_core::SealPolicy::from_env_and_flag(false);
+    tuntun_core::persist_agent(&paths, &identity, persisted, policy).map_err(err)?;
     tuntun_core::state::save_snapshot_cache(&paths, &resp.snapshot).map_err(err)?;
 
     Ok(EnrollResult {
@@ -191,8 +191,9 @@ impl TunTunNode {
         init::init_logging_once();
 
         let paths = StatePaths::resolve(cfg.state_dir.as_deref());
-        let identity = match AgentIdentity::load_from(&paths.key_file()) {
-            Ok(id) => id,
+        let policy = tuntun_core::SealPolicy::from_env_and_flag(false);
+        let identity = match tuntun_core::load_agent(&paths, policy) {
+            Ok((id, _, _)) => id,
             Err(_) => {
                 if let (Some(api_key), Some(org_id), Some(network_id)) = (
                     cfg.api_key.as_deref(),
@@ -219,9 +220,11 @@ impl TunTunNode {
                         runtime: cfg.runtime.clone(),
                     })
                     .await?;
-                    AgentIdentity::load_from(&paths.key_file()).map_err(|_| {
-                        Error::from_reason("enrolment succeeded but identity was not persisted")
-                    })?
+                    tuntun_core::load_agent(&paths, policy)
+                        .map(|(id, _, _)| id)
+                        .map_err(|_| {
+                            Error::from_reason("enrolment succeeded but identity was not persisted")
+                        })?
                 } else {
                     return Err(Error::from_reason(
                         "no persisted identity; run `enroll()` first or pass api_key credentials",
@@ -229,7 +232,7 @@ impl TunTunNode {
                 }
             }
         };
-        let persisted = PersistedState::load(&paths).map_err(err)?;
+        let (_, persisted, _) = tuntun_core::load_agent(&paths, policy).map_err(err)?;
 
         let standalone = cfg.standalone.unwrap_or(false);
         let hostname = cfg

@@ -1,6 +1,8 @@
 use anyhow::Context;
 use clap::{Args, Parser, Subcommand};
-use tuntun_core::{AgentIdentity, ManagedState, PersistedState, StatePaths};
+use tuntun_core::{
+    AgentIdentity, ManagedState, PersistedState, SealPolicy, StatePaths, load_agent, persist_agent,
+};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -72,6 +74,10 @@ pub enum Command {
     /// Linux default: download + graceful reload (SIGHUP / ecdysis).
     /// Pass `--restart` for a hard service restart. Windows always restarts.
     Update(crate::cmds_update::UpdateArgs),
+    /// Validate `tuntun.toml`. Exit non-zero on errors.
+    Validate(crate::cmds::ValidateArgs),
+    /// Reload firewall / DNS / logging / keep-alive from `tuntun.toml` without dropping connections
+    Reload(crate::cmds::ReloadArgs),
 
     // --- Direct mode ---
     /// Create a Direct (P2P) network - no control plane
@@ -93,6 +99,11 @@ pub enum Command {
     /// Manage the local Direct firewall
     #[command(subcommand)]
     Firewall(crate::cmds_direct::FirewallCommand),
+    /// Coordinator firewall policy
+    #[command(subcommand)]
+    Policy(crate::cmds_direct::PolicyCommand),
+    /// Keep a Direct peer connection always open
+    KeepAlive(crate::cmds_direct::KeepAliveArgs),
     /// Upgrade a Direct network to Managed mode
     UpgradeToManaged(crate::cmds_direct::UpgradeArgs),
 }
@@ -129,6 +140,9 @@ pub struct EnrollArgs {
     /// How long to wait for quick-enroll approval (seconds).
     #[arg(long, default_value_t = 600)]
     pub wait_secs: u64,
+    /// Store secrets in plaintext (no TPM/Keychain/derived seal).
+    #[arg(long, env = "TUNTUN_NO_ENCRYPT_STATE")]
+    pub no_encrypt_state: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -159,6 +173,15 @@ pub struct RunArgs {
     pub disable_gossip: bool,
     #[arg(long, env = "TUNTUN_RECORDER")]
     pub recorder: bool,
+    /// Disable mDNS LAN address lookup (Direct mode).
+    #[arg(long, env = "TUNTUN_NO_MDNS")]
+    pub no_mdns: bool,
+    /// Keep peer connections always open (disables on-demand). Default off in Direct.
+    #[arg(long, env = "TUNTUN_KEEP_ALIVE")]
+    pub keep_alive: bool,
+    /// Store secrets in plaintext (no TPM/Keychain/derived seal). For containers/CI only.
+    #[arg(long, env = "TUNTUN_NO_ENCRYPT_STATE")]
+    pub no_encrypt_state: bool,
     #[arg(long, hide = true)]
     pub service: bool,
     #[cfg(windows)]
@@ -282,15 +305,16 @@ pub async fn run_enroll(args: EnrollArgs, state_dir: Option<&str>) -> anyhow::Re
         organization_id: resp.organization_id,
         enrolled_at: chrono::Utc::now(),
     });
-    identity.save_to(&paths.key_file())?;
-    persisted.save(&paths)?;
+    let policy = SealPolicy::from_env_and_flag(args.no_encrypt_state);
+    let tier = persist_agent(&paths, &identity, persisted, policy)?;
     tuntun_core::state::save_snapshot_cache(&paths, &resp.snapshot)?;
 
     println!(
-        "Enrolled. endpoint_id={} ip={} network={}",
+        "Enrolled. endpoint_id={} ip={} network={} (secrets: {})",
         identity.endpoint_id_hex(),
         membership.assigned_ipv4,
         resp.network_name,
+        tier.as_str(),
     );
     crate::service::reload_after_config(state_dir)?;
     if let Err(e) = crate::cmds::wait_until_agent(state_dir, 20).await {
@@ -376,15 +400,18 @@ pub async fn run_agent(args: RunArgs, state_dir: Option<&str>) -> anyhow::Result
     let paths = paths(state_dir);
     paths.ensure()?;
 
+    #[cfg(unix)]
+    crate::sd_notify::ready("waiting for create/enroll/join");
+
     wait_for_network_state(&paths).await?;
 
-    let identity = AgentIdentity::load_from(&paths.key_file()).with_context(|| {
+    let policy = SealPolicy::from_env_and_flag(args.no_encrypt_state);
+    let (identity, persisted, tier) = load_agent(&paths, policy).with_context(|| {
         format!(
             "no persisted identity in {}; run `tuntun enroll` or `tuntun create` first",
             paths.dir.display()
         )
     })?;
-    let persisted = PersistedState::load(&paths)?;
     match &persisted {
         PersistedState::Managed(m) => {
             tracing::info!(
@@ -392,6 +419,7 @@ pub async fn run_agent(args: RunArgs, state_dir: Option<&str>) -> anyhow::Result
                 network = %m.network_name,
                 control = %m.control_url,
                 mode = "managed",
+                seal = %tier.as_str(),
                 "starting agent",
             );
         }
@@ -400,6 +428,7 @@ pub async fn run_agent(args: RunArgs, state_dir: Option<&str>) -> anyhow::Result
                 endpoint_id = %identity.endpoint_id_hex(),
                 network = %d.network_name,
                 mode = "direct",
+                seal = %tier.as_str(),
                 "starting agent",
             );
         }
@@ -410,9 +439,8 @@ pub async fn run_agent(args: RunArgs, state_dir: Option<&str>) -> anyhow::Result
 async fn wait_for_network_state(paths: &StatePaths) -> anyhow::Result<()> {
     let mut logged = false;
     loop {
-        if paths.key_file().is_file()
-            && let Ok(Some(_)) = PersistedState::try_load(paths)
-        {
+        let has_secrets = paths.secrets_file().is_file();
+        if has_secrets && let Ok(Some(_)) = PersistedState::try_load(paths) {
             return Ok(());
         }
         if !logged {

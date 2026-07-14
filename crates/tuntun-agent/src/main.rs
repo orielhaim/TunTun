@@ -1,4 +1,5 @@
 mod accept;
+mod auto_update;
 mod cli;
 mod cmds;
 mod cmds_direct;
@@ -10,12 +11,15 @@ mod dataplane;
 mod forward;
 mod gossip_presence;
 mod ip;
+mod magic_dns;
 mod metrics;
 #[cfg(target_os = "linux")]
 mod offload;
 mod output;
 mod recorder;
 mod runtime;
+#[cfg(unix)]
+mod sd_notify;
 mod service;
 mod ssh;
 mod stream_proxy;
@@ -57,6 +61,8 @@ async fn main() -> anyhow::Result<()> {
             | crate::cli::Command::Down
             | crate::cli::Command::Service(_)
             | crate::cli::Command::Update(_)
+            | crate::cli::Command::Validate(_)
+            | crate::cli::Command::Reload(_)
     );
     if !quiet || std::env::var_os("RUST_LOG").is_some() {
         crate::cli::init_logging(&cli);
@@ -100,6 +106,8 @@ async fn main() -> anyhow::Result<()> {
         crate::cli::Command::Login(a) => crate::cmds_login::run_login(a).await,
         crate::cli::Command::Logout(a) => crate::cmds_login::run_logout(a).await,
         crate::cli::Command::Update(a) => crate::cmds_update::run(a).await,
+        crate::cli::Command::Validate(a) => crate::cmds::run_validate(a).await,
+        crate::cli::Command::Reload(a) => crate::cmds::run_reload(a).await,
         crate::cli::Command::Create(a) => {
             crate::cmds_direct::run_create(a, cli.state_dir.as_deref()).await
         }
@@ -126,6 +134,12 @@ async fn main() -> anyhow::Result<()> {
         }
         crate::cli::Command::Firewall(a) => {
             crate::cmds_direct::run_firewall(a, cli.state_dir.as_deref()).await
+        }
+        crate::cli::Command::Policy(a) => {
+            crate::cmds_direct::run_policy(a, cli.state_dir.as_deref()).await
+        }
+        crate::cli::Command::KeepAlive(a) => {
+            crate::cmds_direct::run_keep_alive(a, cli.state_dir.as_deref()).await
         }
         crate::cli::Command::UpgradeToManaged(a) => {
             crate::cmds_direct::run_upgrade(a, cli.state_dir.as_deref()).await

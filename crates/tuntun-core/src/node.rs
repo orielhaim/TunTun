@@ -9,7 +9,6 @@ use tuntun_common::{SEND_ALPN, TUNNEL_ALPN};
 use crate::acl::{AclEngine, SelfIdentity};
 use crate::acl_hook::AclHook;
 use crate::control::{SignedClient, basic_metadata};
-use crate::direct::firewall::FirewallConfig;
 use crate::direct::{
     AUTH_ALPN, AuthCache, DirectAuthHook, DocsBootstrap, DocsMembership, MembershipEntry,
     derive_ipv4, firewall_to_policy, spawn_discovery,
@@ -42,6 +41,10 @@ pub struct CoreNodeConfig {
     pub kind: &'static str, // "agent" | "sdk"
     /// Optional hook when CP requests killing an SSH session (session_id string).
     pub on_kill_ssh: Option<KillSshHook>,
+    /// Enable mDNS LAN address lookup (Direct default: true).
+    pub enable_mdns: bool,
+    /// Keep all peer connections open (Managed default: true; Direct default: false = on-demand).
+    pub keep_alive: bool,
 }
 
 impl Default for CoreNodeConfig {
@@ -54,6 +57,8 @@ impl Default for CoreNodeConfig {
             advertise_recording_alpn: false,
             kind: "sdk",
             on_kill_ssh: None,
+            enable_mdns: true,
+            keep_alive: true,
         }
     }
 }
@@ -78,6 +83,10 @@ pub struct CoreNode {
     pub direct_auth: Option<AuthCache>,
     /// Direct-mode iroh-docs membership (None in Managed).
     pub docs: Option<DocsMembership>,
+    /// Direct-mode userspace firewall (None in Managed).
+    pub firewall: Option<crate::direct::FirewallEngine>,
+    /// Ingress anti-spoof tracker (Direct only).
+    pub spoof_tracker: Option<crate::direct::SpoofTracker>,
 }
 
 impl CoreNode {
@@ -212,6 +221,7 @@ impl CoreNode {
         );
 
         let _ = persisted;
+        pool.set_keep_alive(cfg.keep_alive);
         Ok(Self {
             identity,
             persisted: PersistedState::Managed(managed),
@@ -228,6 +238,8 @@ impl CoreNode {
             signed: Some(signed),
             direct_auth: None,
             docs: None,
+            firewall: None,
+            spoof_tracker: None,
         })
     }
 
@@ -248,8 +260,11 @@ impl CoreNode {
 
         let routes = RoutingTable::new();
         let version = Arc::new(ArcSwap::from_pointee(1u64));
-        let fw = FirewallConfig::load(&paths).unwrap_or_else(|_| crate::direct::default_firewall());
+        let fw = crate::agent_config::load_firewall(&paths);
         let policy = firewall_to_policy(&fw, &my_id_hex, self_ipv4);
+        let firewall =
+            crate::direct::FirewallEngine::from_config(&fw, self_ipv4, my_id_hex.clone());
+        let spoof_tracker = crate::direct::SpoofTracker::new();
         let acl = AclEngine::new(
             SelfIdentity {
                 endpoint_hex: my_id_hex.clone(),
@@ -265,10 +280,12 @@ impl CoreNode {
         auth.insert(my_id_hex.clone());
 
         let secret = SecretKey::from_bytes(&identity.secret_bytes);
-        let endpoint = Endpoint::builder(presets::N0)
+        let builder = Endpoint::builder(presets::N0)
             .secret_key(secret)
             .alpns(alpns)
-            .hooks(DirectAuthHook::new(acl.clone(), auth.clone()))
+            .hooks(DirectAuthHook::new(acl.clone(), auth.clone()));
+        let builder = crate::direct::apply_mdns(builder, cfg.enable_mdns);
+        let endpoint = builder
             .bind()
             .await
             .context("bind iroh endpoint (direct)")?;
@@ -280,6 +297,8 @@ impl CoreNode {
 
         let serves = ServeManager::new(self_ipv4, routes.clone());
         let pool = ConnPool::new(endpoint.clone(), TUNNEL_STREAM_ALPN);
+        // Direct default: on-demand (keep_alive=false) unless --keep-alive.
+        pool.set_keep_alive(cfg.keep_alive);
         let tunnels = TunnelManager::new(pool.clone());
 
         let blobs_dir = paths.dir.join("blobs");
@@ -320,6 +339,8 @@ impl CoreNode {
             acl: acl.clone(),
             auth: auth.clone(),
             policy,
+            firewall: Some(firewall.clone()),
+            dns: crate::load_dns(&paths),
         })
         .await
         .context("bootstrap iroh-docs membership")?;
@@ -332,7 +353,12 @@ impl CoreNode {
                 direct.namespace_id = Some(ns);
             }
             direct.assigned_ipv4 = self_ipv4;
-            PersistedState::Direct(direct.clone()).save(&paths)?;
+            crate::secret_store::persist_agent(
+                &paths,
+                &identity,
+                PersistedState::Direct(direct.clone()),
+                crate::secret_store::SealPolicy::from_env_and_flag(false),
+            )?;
         }
 
         let mut seeds = Vec::new();
@@ -345,6 +371,9 @@ impl CoreNode {
             }
         }
         let _discovery = spawn_discovery(direct.topic_hash.clone(), my_id_hex.clone(), seeds);
+
+        let contact = crate::direct::contact_id_from_endpoint(&endpoint.id());
+        tracing::info!(%contact, "direct contact id");
 
         let _ = (cfg, persisted);
         Ok(Self {
@@ -366,6 +395,8 @@ impl CoreNode {
             signed: None,
             direct_auth: Some(auth),
             docs: Some(docs),
+            firewall: Some(firewall),
+            spoof_tracker: Some(spoof_tracker),
         })
     }
 

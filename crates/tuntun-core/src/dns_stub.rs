@@ -1,4 +1,4 @@
-//! PeerDNS stub resolver - answers A queries for mesh names and hostname routes,
+//! PeerDNS stub resolver - answers A/AAAA/PTR/SOA/NS for mesh names and hostname routes,
 //! forwards everything else to upstream resolvers.
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -9,7 +9,10 @@ use anyhow::Context;
 use hickory_proto::op::{
     DEFAULT_MAX_PAYLOAD_LEN, Edns, Message, MessageType, OpCode, ResponseCode,
 };
-use hickory_proto::rr::{Name, RData, Record, RecordType, rdata::A};
+use hickory_proto::rr::{
+    Name, RData, Record, RecordType,
+    rdata::{A, NS, PTR, SOA},
+};
 use hickory_proto::serialize::binary::{BinDecodable, BinEncodable};
 use tokio::net::UdpSocket;
 use tuntun_common::DnsConfig;
@@ -52,19 +55,28 @@ async fn bind_udp_with_retry(bind: SocketAddr) -> anyhow::Result<UdpSocket> {
 }
 
 async fn run(bind: SocketAddr, routes: RoutingTable, dns: DnsConfig) -> anyhow::Result<()> {
-    // On Windows the TUN IP is often not bindable for a few hundred ms after
-    // adapter create. Prefer 0.0.0.0:53 first - it still receives packets to
-    // the overlay IP - then fall back to the TUN address with retries.
+    // Prefer 0.0.0.0:53 so packets to the magic IP (and TUN IP) are received.
+    // Fall back to the configured bind (magic IP) with retries.
     let any = SocketAddr::from((Ipv4Addr::UNSPECIFIED, bind.port()));
     let sock = match UdpSocket::bind(any).await {
         Ok(s) => {
-            tracing::info!(%any, via = %bind, suffix = %dns.suffix, "PeerDNS stub listening");
+            tracing::info!(
+                %any,
+                via = %bind,
+                magic = %dns.magic_ip,
+                suffix = %dns.suffix,
+                "PeerDNS stub listening"
+            );
             s
         }
         Err(e) => {
-            tracing::debug!(?e, %any, "PeerDNS wildcard bind failed; trying TUN IP");
-            let s = bind_udp_with_retry(bind).await?;
-            tracing::info!(%bind, suffix = %dns.suffix, "PeerDNS stub listening");
+            tracing::debug!(?e, %any, "PeerDNS wildcard bind failed; trying magic IP");
+            let magic_bind = SocketAddr::from((dns.magic_ip, bind.port()));
+            let s = match bind_udp_with_retry(magic_bind).await {
+                Ok(s) => s,
+                Err(_) => bind_udp_with_retry(bind).await?,
+            };
+            tracing::info!(%bind, magic = %dns.magic_ip, suffix = %dns.suffix, "PeerDNS stub listening");
             s
         }
     };
@@ -73,8 +85,6 @@ async fn run(bind: SocketAddr, routes: RoutingTable, dns: DnsConfig) -> anyhow::
     loop {
         let (n, peer) = match sock.recv_from(&mut buf).await {
             Ok(v) => v,
-            // Windows surfaces ICMP port-unreachable as WSAECONNRESET (10054) on
-            // the next recv. That is normal for UDP and must not kill PeerDNS.
             Err(e) if is_transient_udp_recv_error(&e) => {
                 tracing::debug!(?e, %bind, "PeerDNS ignoring transient UDP recv error");
                 continue;
@@ -131,7 +141,12 @@ async fn handle_query(
             .lookup_hostname_route(name_str.trim_end_matches('.'))
             .is_some();
 
-    if our_zone && (qtype == RecordType::A || qtype == RecordType::AAAA) {
+    if our_zone
+        && matches!(
+            qtype,
+            RecordType::A | RecordType::AAAA | RecordType::SOA | RecordType::NS
+        )
+    {
         let mut response = Message::response(query.metadata.id, OpCode::Query);
         response.metadata.recursion_desired = query.metadata.recursion_desired;
         response.metadata.authoritative = true;
@@ -139,17 +154,73 @@ async fn handle_query(
         response.queries = query.queries.clone();
         echo_edns(&query, &mut response);
 
-        if qtype == RecordType::A {
-            if let Some(ip) = routes.resolve_dns_a(&name_str) {
-                let rr = Record::from_rdata(qname.clone(), TTL_SECS, RData::A(A(ip)));
-                response.add_answer(rr);
-                response.metadata.response_code = ResponseCode::NoError;
-            } else {
-                response.metadata.response_code = ResponseCode::NXDomain;
+        match qtype {
+            RecordType::A => {
+                if let Some(ip) = routes.resolve_dns_a(&name_str) {
+                    let rr = Record::from_rdata(qname.clone(), TTL_SECS, RData::A(A(ip)));
+                    response.add_answer(rr);
+                    response.metadata.response_code = ResponseCode::NoError;
+                } else {
+                    response.metadata.response_code = ResponseCode::NXDomain;
+                }
             }
-        } else {
-            // No AAAA yet - NODATA (NOERROR, empty answer) for our zone.
+            RecordType::AAAA => {
+                // No AAAA yet - NODATA for our zone.
+                response.metadata.response_code = ResponseCode::NoError;
+            }
+            RecordType::SOA => {
+                if let Some(soa) = zone_soa(qname, suffix, routes) {
+                    response.add_answer(soa);
+                    response.metadata.response_code = ResponseCode::NoError;
+                } else {
+                    response.metadata.response_code = ResponseCode::NXDomain;
+                }
+            }
+            RecordType::NS => {
+                if let Some(ns) = zone_ns(qname, suffix) {
+                    response.add_answer(ns);
+                    response.metadata.response_code = ResponseCode::NoError;
+                } else {
+                    response.metadata.response_code = ResponseCode::NXDomain;
+                }
+            }
+            _ => unreachable!(),
+        }
+
+        let out = response.to_bytes().context("encode dns")?;
+        sock.send_to(&out, peer).await?;
+        return Ok(());
+    }
+
+    // PTR for in-addr.arpa reverse of mesh peers.
+    if qtype == RecordType::PTR
+        && let Some(ip) = parse_in_addr_arpa(qname)
+    {
+        let mut response = Message::response(query.metadata.id, OpCode::Query);
+        response.metadata.recursion_desired = query.metadata.recursion_desired;
+        response.metadata.authoritative = true;
+        response.metadata.recursion_available = true;
+        response.queries = query.queries.clone();
+        echo_edns(&query, &mut response);
+
+        if let Some(fqdn) = routes.resolve_dns_ptr(ip) {
+            let ptr_name = Name::from_utf8(format!("{fqdn}."))
+                .unwrap_or_else(|_| Name::from_utf8("invalid.").expect("literal"));
+            let rr = Record::from_rdata(qname.clone(), TTL_SECS, RData::PTR(PTR(ptr_name)));
+            response.add_answer(rr);
             response.metadata.response_code = ResponseCode::NoError;
+        } else if routes.is_magic_dns_destination(&ip) {
+            let ns = Name::from_utf8(format!("ns.{suffix}."))
+                .unwrap_or_else(|_| Name::from_utf8("ns.tuntun.").expect("literal"));
+            let rr = Record::from_rdata(qname.clone(), TTL_SECS, RData::PTR(PTR(ns)));
+            response.add_answer(rr);
+            response.metadata.response_code = ResponseCode::NoError;
+        } else {
+            // Not our reverse zone - forward.
+            if let Some(answer) = forward_upstream(bytes, query.metadata.id, upstream).await? {
+                sock.send_to(&answer, peer).await?;
+            }
+            return Ok(());
         }
 
         let out = response.to_bytes().context("encode dns")?;
@@ -161,6 +232,44 @@ async fn handle_query(
         sock.send_to(&answer, peer).await?;
     }
     Ok(())
+}
+
+fn zone_soa(qname: &Name, suffix: &str, routes: &RoutingTable) -> Option<Record> {
+    if !name_in_suffix(qname, suffix) {
+        return None;
+    }
+    let mname = Name::from_utf8(format!("ns.{suffix}.")).ok()?;
+    let rname = Name::from_utf8(format!("hostmaster.{suffix}.")).ok()?;
+    let serial = routes.version().max(1) as u32;
+    let soa = SOA::new(mname, rname, serial, 300, 60, 86400, TTL_SECS);
+    Some(Record::from_rdata(qname.clone(), TTL_SECS, RData::SOA(soa)))
+}
+
+fn zone_ns(qname: &Name, suffix: &str) -> Option<Record> {
+    if !name_in_suffix(qname, suffix) {
+        return None;
+    }
+    let ns = Name::from_utf8(format!("ns.{suffix}.")).ok()?;
+    Some(Record::from_rdata(
+        qname.clone(),
+        TTL_SECS,
+        RData::NS(NS(ns)),
+    ))
+}
+
+/// Parse `d.c.b.a.in-addr.arpa.` → `a.b.c.d`.
+fn parse_in_addr_arpa(qname: &Name) -> Option<Ipv4Addr> {
+    let s = qname.to_string().trim_end_matches('.').to_ascii_lowercase();
+    let rest = s.strip_suffix(".in-addr.arpa")?;
+    let parts: Vec<&str> = rest.split('.').collect();
+    if parts.len() != 4 {
+        return None;
+    }
+    let a: u8 = parts[3].parse().ok()?;
+    let b: u8 = parts[2].parse().ok()?;
+    let c: u8 = parts[1].parse().ok()?;
+    let d: u8 = parts[0].parse().ok()?;
+    Some(Ipv4Addr::new(a, b, c, d))
 }
 
 /// RFC 6891: if the request carried OPT, the response must include OPT.
@@ -224,9 +333,9 @@ async fn forward_upstream(
     Ok(None)
 }
 
-/// Bind address for the stub on the TUN IP.
-pub fn bind_addr(tun_ip: Ipv4Addr) -> SocketAddr {
-    SocketAddr::from((tun_ip, 53))
+/// Bind address for the stub - prefers the PeerDNS magic IP.
+pub fn bind_addr(magic_or_tun_ip: Ipv4Addr) -> SocketAddr {
+    SocketAddr::from((magic_or_tun_ip, 53))
 }
 
 #[cfg(test)]
@@ -244,6 +353,20 @@ mod tests {
             &Name::from_str("evil-tuntun.com.").unwrap(),
             "tuntun"
         ));
+    }
+
+    #[test]
+    fn parse_reverse_arpa() {
+        let n = Name::from_str("53.100.100.100.in-addr.arpa.").unwrap();
+        assert_eq!(
+            parse_in_addr_arpa(&n),
+            Some(Ipv4Addr::new(100, 100, 100, 53))
+        );
+        let peer = Name::from_str("10.64.100.100.in-addr.arpa.").unwrap();
+        assert_eq!(
+            parse_in_addr_arpa(&peer),
+            Some(Ipv4Addr::new(100, 100, 64, 10))
+        );
     }
 
     #[test]

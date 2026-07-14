@@ -5,13 +5,14 @@ use std::net::Ipv4Addr;
 use anyhow::Context;
 use clap::{Args, Subcommand};
 use tuntun_core::direct::admin::{PendingJoin, push_pending};
-use tuntun_core::direct::firewall::default_firewall;
 use tuntun_core::direct::{
     AUTH_ALPN, DocsMembership, MembershipEntry, decode_invite, derive_ipv4, load_approved,
     network_id_from_topic, run_psk_handshake_client, save_approved, topic_from_name_secret,
 };
 use tuntun_core::ipc::protocol::{IpcRequest, IpcResponse};
-use tuntun_core::{AgentIdentity, DirectState, PersistedState, StatePaths};
+use tuntun_core::{
+    AgentIdentity, DirectState, PersistedState, SealPolicy, StatePaths, load_agent, persist_agent,
+};
 
 #[derive(Args, Debug)]
 pub struct CreateArgs {
@@ -27,6 +28,9 @@ pub struct CreateArgs {
     /// If omitted, a random secret is generated and printed.
     #[arg(long)]
     pub secret: Option<String>,
+    /// Store secrets in plaintext (no TPM/Keychain/derived seal).
+    #[arg(long, env = "TUNTUN_NO_ENCRYPT_STATE")]
+    pub no_encrypt_state: bool,
 }
 
 #[derive(Args, Debug)]
@@ -34,6 +38,12 @@ pub struct JoinArgs {
     pub invite_code: String,
     #[arg(long, env = "TUNTUN_HOSTNAME")]
     pub hostname: Option<String>,
+    /// Automatically accept coordinator firewall policy suggestions.
+    #[arg(long)]
+    pub auto_accept_firewall: bool,
+    /// Store secrets in plaintext (no TPM/Keychain/derived seal).
+    #[arg(long, env = "TUNTUN_NO_ENCRYPT_STATE")]
+    pub no_encrypt_state: bool,
 }
 
 #[derive(Args, Debug)]
@@ -71,7 +81,42 @@ pub struct KickArgs {
 
 #[derive(Args, Debug)]
 pub struct ConnectArgs {
-    pub contact_id: String,
+    /// Contact id to dial, or a subcommand name when using allow/pending/…
+    #[arg(required = false)]
+    pub contact_id: Option<String>,
+    #[command(subcommand)]
+    pub cmd: Option<ConnectCommand>,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ConnectCommand {
+    /// Pre-approve a contact id
+    Allow { contact_id: String },
+    /// List pending inbound connect requests
+    Pending,
+    /// Accept a pending connect request
+    Accept { contact_id: String },
+    /// Deny a pending connect request
+    Deny { contact_id: String },
+    /// Rotate local identity / contact id (requires agent restart)
+    Rotate,
+}
+
+#[derive(Args, Debug)]
+pub struct KeepAliveArgs {
+    pub hostname: String,
+    #[arg(long)]
+    pub off: bool,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum PolicyCommand {
+    /// Show published coordinator policy
+    Show,
+    /// Publish a policy TOML file
+    Set { file: String },
+    /// Clear published policy
+    Clear,
 }
 
 #[derive(Args, Debug)]
@@ -84,7 +129,7 @@ pub struct UpgradeArgs {
 
 #[derive(Subcommand, Debug)]
 pub enum FirewallCommand {
-    /// Show current local firewall rules
+    /// Show current local firewall rules and conntrack stats
     Show,
     /// Disable the local firewall (allow all)
     Off,
@@ -92,13 +137,23 @@ pub enum FirewallCommand {
     Add(FirewallAddArgs),
     /// Remove a rule by index
     Remove { index: usize },
+    /// Reset to default policy
+    Reset,
+    /// Flush the conntrack table
+    FlushConntrack,
+    /// Show pending coordinator policy suggestion
+    Pending,
+    /// Accept pending coordinator suggestion
+    Accept,
+    /// Reject pending coordinator suggestion
+    RejectSuggestion,
 }
 
 #[derive(Args, Debug)]
 pub struct FirewallAddArgs {
     /// `in` or `out`
     pub direction: String,
-    /// `allow` or `deny`
+    /// `allow`, `deny`, or `reject`
     pub action: String,
     #[arg(short = 'p', long, default_value = "tcp")]
     pub protocol: String,
@@ -119,25 +174,24 @@ fn hostname_arg(explicit: Option<String>) -> String {
         .unwrap_or_else(|| "tuntun-node".into())
 }
 
-pub async fn try_handle_join_on_auth_conn(
+pub async fn try_handle_post_auth(
     conn: &iroh::endpoint::Connection,
     state_dir: &std::path::Path,
     docs: Option<&DocsMembership>,
+    self_endpoint_id: &str,
 ) -> anyhow::Result<()> {
     let paths = StatePaths {
         dir: state_dir.to_path_buf(),
     };
-    let Ok(persisted) = PersistedState::load(&paths) else {
+    let policy = SealPolicy::from_env_and_flag(false);
+    let Ok((_identity, persisted, _)) = load_agent(&paths, policy) else {
         return Ok(());
     };
     let Ok(direct) = persisted.require_direct() else {
         return Ok(());
     };
-    if !direct.coordinator {
-        return Ok(());
-    }
 
-    // Join client opens a second bi after PSK; wait briefly.
+    // Client opens a bi after PSK; wait briefly.
     let Ok(Ok((mut send, mut recv))) =
         tokio::time::timeout(std::time::Duration::from_secs(5), conn.accept_bi()).await
     else {
@@ -147,11 +201,45 @@ pub async fn try_handle_join_on_auth_conn(
     recv.read_exact(&mut len_buf).await?;
     let n = u32::from_be_bytes(len_buf) as usize;
     if n > 64 * 1024 {
-        anyhow::bail!("join request too large");
+        anyhow::bail!("post-auth request too large");
     }
     let mut body = vec![0u8; n];
     recv.read_exact(&mut body).await?;
-    let resp = handle_join_request_bytes(&paths, direct, docs, &body).await?;
+
+    let req: serde_json::Value = serde_json::from_slice(&body).unwrap_or_default();
+    let msg_type = req.get("type").and_then(|v| v.as_str()).unwrap_or("");
+
+    let resp = match msg_type {
+        "join_request" if direct.coordinator => {
+            handle_join_request_bytes(&paths, direct, docs, &body).await?
+        }
+        "connect_request" => {
+            let allowlist = tuntun_core::direct::connect::load_allowlist_from_dir(state_dir);
+            let (_accepted, resp_bytes) = tuntun_core::direct::connect::handle_inbound_connect(
+                state_dir,
+                &format!("{}", conn.remote_id()),
+                &body,
+                &allowlist,
+                &direct.hostname,
+                direct.assigned_ipv4,
+            )
+            .await?;
+            let _ = self_endpoint_id;
+            resp_bytes
+        }
+        "connect_accepted" => {
+            // Peer notified us they accepted; install route if present.
+            if let (Some(ipv4), Some(hostname)) = (
+                req.get("ipv4").and_then(|v| v.as_str()),
+                req.get("hostname").and_then(|v| v.as_str()),
+            ) {
+                tracing::info!(%hostname, %ipv4, "remote accepted connect");
+            }
+            return Ok(());
+        }
+        _ => return Ok(()),
+    };
+
     let len = (resp.len() as u32).to_be_bytes();
     send.write_all(&len).await?;
     send.write_all(&resp).await?;
@@ -200,11 +288,9 @@ pub async fn run_create(args: CreateArgs, state_dir: Option<&str>) -> anyhow::Re
     let my_id = identity.endpoint_id_hex();
     let assigned_ipv4 = derive_ipv4(&my_id, 0);
 
-    default_firewall().save(&paths)?;
-
     let persisted = PersistedState::Direct(DirectState {
         network_name: network_name.clone(),
-        network_secret,
+        network_secret: network_secret.clone(),
         topic_hash,
         network_id,
         coordinator: true,
@@ -215,14 +301,24 @@ pub async fn run_create(args: CreateArgs, state_dir: Option<&str>) -> anyhow::Re
         coordinator_endpoint_id: Some(my_id.clone()),
         doc_ticket: None,
         namespace_id: None,
+        auto_accept_firewall: false,
         created_at: chrono::Utc::now(),
     });
-    identity.save_to(&paths.key_file())?;
-    persisted.save(&paths)?;
+    let policy = SealPolicy::from_env_and_flag(args.no_encrypt_state);
+    let tier = persist_agent(&paths, &identity, persisted, policy)?;
+    {
+        use tuntun_core::TunTunConfig;
+        let mut cfg = TunTunConfig::from_persisted(&paths)?;
+        cfg.upsert_direct(&network_name, &hostname, args.open, false);
+        cfg.save(&paths)?;
+    }
 
     println!(
-        "Created Direct network '{}'. endpoint_id={} ip={}",
-        network_name, my_id, assigned_ipv4
+        "Created Direct network '{}'. endpoint_id={} ip={} (secrets: {})",
+        network_name,
+        my_id,
+        assigned_ipv4,
+        tier.as_str()
     );
     println!("State directory: {}", paths.dir.display());
     crate::service::reload_after_config(state_dir)?;
@@ -236,7 +332,7 @@ pub async fn run_create(args: CreateArgs, state_dir: Option<&str>) -> anyhow::Re
 }
 
 /// When a system service is installed, create/join must write the same state dir
-/// the service reads — otherwise `systemctl` looks healthy while the CLI sees a
+/// the service reads - otherwise `systemctl` looks healthy while the CLI sees a
 /// different (offline) network.
 fn ensure_service_state_aligned(state_dir: Option<&str>, paths: &StatePaths) -> anyhow::Result<()> {
     let probe = crate::service::probe();
@@ -372,9 +468,9 @@ pub async fn run_join(args: JoinArgs, state_dir: Option<&str>) -> anyhow::Result
     endpoint.close().await;
 
     let network_id = network_id_from_topic(&invite.topic);
-    default_firewall().save(&paths)?;
+    let network_name = invite.network_name.clone();
     let persisted = PersistedState::Direct(DirectState {
-        network_name: invite.network_name.clone(),
+        network_name: network_name.clone(),
         network_secret: invite.secret,
         topic_hash: invite.topic,
         network_id,
@@ -386,14 +482,24 @@ pub async fn run_join(args: JoinArgs, state_dir: Option<&str>) -> anyhow::Result
         coordinator_endpoint_id: Some(invite.coordinator),
         doc_ticket: Some(doc_ticket),
         namespace_id: None,
+        auto_accept_firewall: args.auto_accept_firewall,
         created_at: chrono::Utc::now(),
     });
-    identity.save_to(&paths.key_file())?;
-    persisted.save(&paths)?;
+    let policy = SealPolicy::from_env_and_flag(args.no_encrypt_state);
+    let tier = persist_agent(&paths, &identity, persisted, policy)?;
+    {
+        use tuntun_core::TunTunConfig;
+        let mut cfg = TunTunConfig::from_persisted(&paths)?;
+        cfg.upsert_direct(&network_name, &hostname, false, false);
+        cfg.save(&paths)?;
+    }
 
     println!(
-        "Joined Direct network '{}'. endpoint_id={} ip={}",
-        invite.network_name, my_id, assigned_ipv4
+        "Joined Direct network '{}'. endpoint_id={} ip={} (secrets: {})",
+        network_name,
+        my_id,
+        assigned_ipv4,
+        tier.as_str()
     );
     crate::service::reload_after_config(state_dir)?;
     if let Err(e) = crate::cmds::wait_until_agent(state_dir, 20).await {
@@ -569,22 +675,45 @@ pub async fn run_kick(args: KickArgs, state_dir: Option<&str>) -> anyhow::Result
 }
 
 pub async fn run_connect(args: ConnectArgs, state_dir: Option<&str>) -> anyhow::Result<()> {
-    let paths = paths(state_dir);
-    // Ephemeral 2-peer: store a minimal Direct state if none exists.
-    if PersistedState::load(&paths).is_err() {
-        anyhow::bail!(
-            "connect requires an existing Direct or Managed agent; create a network first \
-             (`tuntun create`) or enroll, then use mesh dial. Ephemeral contact-id mesh \
-             will dial {} after `tuntun run`.",
-            args.contact_id
-        );
+    let ipc = crate::cmds::ipc_or_err(state_dir).await?;
+    let req = if let Some(cmd) = args.cmd {
+        match cmd {
+            ConnectCommand::Allow { contact_id } => IpcRequest::DirectConnectAllow { contact_id },
+            ConnectCommand::Pending => IpcRequest::DirectConnectPending,
+            ConnectCommand::Accept { contact_id } => IpcRequest::DirectConnectAccept { contact_id },
+            ConnectCommand::Deny { contact_id } => IpcRequest::DirectConnectDeny { contact_id },
+            ConnectCommand::Rotate => IpcRequest::DirectConnectRotate,
+        }
+    } else if let Some(contact_id) = args.contact_id {
+        IpcRequest::DirectConnect { contact_id }
+    } else {
+        anyhow::bail!("usage: tuntun connect <tt_…> | allow|pending|accept|deny|rotate");
+    };
+    match ipc.request(req).await? {
+        IpcResponse::Ok { message } => {
+            println!("{message}");
+            Ok(())
+        }
+        IpcResponse::DirectConnectPending { requests } => {
+            if requests.is_empty() {
+                println!("(no pending connect requests)");
+            }
+            for r in requests {
+                println!(
+                    "{}  {}  {}  {}",
+                    r.contact_id, r.hostname, r.endpoint_id, r.received_at
+                );
+            }
+            Ok(())
+        }
+        IpcResponse::DirectContact { contact_id } => {
+            println!("New contact id: {contact_id}");
+            println!("Restart the agent (`tuntun run`) for the new identity to take effect.");
+            Ok(())
+        }
+        IpcResponse::Error { message } => anyhow::bail!("{message}"),
+        other => anyhow::bail!("unexpected response: {other:?}"),
     }
-    println!(
-        "Contact {} - ensure both peers are running (`tuntun run`). \
-         Use `tuntun ping {}` once membership includes the peer.",
-        args.contact_id, args.contact_id
-    );
-    Ok(())
 }
 
 pub async fn run_firewall(cmd: FirewallCommand, state_dir: Option<&str>) -> anyhow::Result<()> {
@@ -600,15 +729,38 @@ pub async fn run_firewall(cmd: FirewallCommand, state_dir: Option<&str>) -> anyh
             peer: a.peer,
         },
         FirewallCommand::Remove { index } => IpcRequest::DirectFirewallRemove { index },
+        FirewallCommand::Reset => IpcRequest::DirectFirewallReset,
+        FirewallCommand::FlushConntrack => IpcRequest::DirectFirewallFlushConntrack,
+        FirewallCommand::Pending => IpcRequest::DirectFirewallPending,
+        FirewallCommand::Accept => IpcRequest::DirectFirewallAcceptSuggestion,
+        FirewallCommand::RejectSuggestion => IpcRequest::DirectFirewallRejectSuggestion,
     };
     match ipc.request(req).await? {
-        IpcResponse::DirectFirewall { enabled, rules } => {
+        IpcResponse::DirectFirewall {
+            enabled,
+            rules,
+            conntrack_entries,
+            packets_allowed,
+            packets_denied,
+            packets_rejected,
+            suggested_rules,
+        } => {
             println!("enabled={enabled}");
+            println!(
+                "conntrack={conntrack_entries} allowed={packets_allowed} denied={packets_denied} rejected={packets_rejected} suggested={suggested_rules}"
+            );
             for r in rules {
                 println!(
                     "{}: {} {} {} ports={:?} peer={:?}",
                     r.index, r.direction, r.action, r.protocol, r.ports, r.peer
                 );
+            }
+            Ok(())
+        }
+        IpcResponse::DirectFirewallPending { pending } => {
+            match pending {
+                Some(s) => println!("{s}"),
+                None => println!("(no pending suggestion)"),
             }
             Ok(())
         }
@@ -621,14 +773,60 @@ pub async fn run_firewall(cmd: FirewallCommand, state_dir: Option<&str>) -> anyh
     }
 }
 
+pub async fn run_policy(cmd: PolicyCommand, state_dir: Option<&str>) -> anyhow::Result<()> {
+    let ipc = crate::cmds::ipc_or_err(state_dir).await?;
+    let req = match cmd {
+        PolicyCommand::Show => IpcRequest::DirectPolicyShow,
+        PolicyCommand::Set { file } => {
+            let toml = std::fs::read_to_string(&file)
+                .with_context(|| format!("read policy file {file}"))?;
+            IpcRequest::DirectPolicySet { toml }
+        }
+        PolicyCommand::Clear => IpcRequest::DirectPolicyClear,
+    };
+    match ipc.request(req).await? {
+        IpcResponse::DirectPolicy { json } => {
+            match json {
+                Some(s) => println!("{s}"),
+                None => println!("(no published policy)"),
+            }
+            Ok(())
+        }
+        IpcResponse::Ok { message } => {
+            println!("{message}");
+            Ok(())
+        }
+        IpcResponse::Error { message } => anyhow::bail!("{message}"),
+        other => anyhow::bail!("unexpected response: {other:?}"),
+    }
+}
+
+pub async fn run_keep_alive(args: KeepAliveArgs, state_dir: Option<&str>) -> anyhow::Result<()> {
+    let ipc = crate::cmds::ipc_or_err(state_dir).await?;
+    match ipc
+        .request(IpcRequest::DirectKeepAlive {
+            hostname: args.hostname,
+            enable: !args.off,
+        })
+        .await?
+    {
+        IpcResponse::Ok { message } => {
+            println!("{message}");
+            Ok(())
+        }
+        IpcResponse::Error { message } => anyhow::bail!("{message}"),
+        other => anyhow::bail!("unexpected response: {other:?}"),
+    }
+}
+
 pub async fn run_upgrade(args: UpgradeArgs, state_dir: Option<&str>) -> anyhow::Result<()> {
     let paths = paths(state_dir);
-    let persisted = PersistedState::load(&paths)?;
+    let policy = SealPolicy::from_env_and_flag(false);
+    let (identity, persisted, _) = load_agent(&paths, policy)?;
     let direct = persisted.require_direct()?.clone();
     if !direct.coordinator {
         anyhow::bail!("only the coordinator should run upgrade-to-managed first");
     }
-    let identity = AgentIdentity::load_from(&paths.key_file())?;
 
     // Prefer live docs cache if present from a previous run; else empty members list.
     let members_path = paths.dir.join("direct_members_cache.json");
@@ -682,7 +880,7 @@ pub async fn run_upgrade(args: UpgradeArgs, state_dir: Option<&str>) -> anyhow::
         organization_id: resp.organization_id,
         enrolled_at: chrono::Utc::now(),
     });
-    managed.save(&paths)?;
+    persist_agent(&paths, &identity, managed, policy)?;
     tuntun_core::state::save_snapshot_cache(&paths, &resp.snapshot)?;
 
     let notice = serde_json::json!({

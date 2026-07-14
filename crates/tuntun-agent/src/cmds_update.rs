@@ -1,7 +1,9 @@
-//! `tuntun update` — download a newer release from GitHub and replace this binary.
+//! `tuntun update` - download a newer release from GitHub and replace this binary.
 //!
-//! On Linux/macOS the default is a graceful reload (SIGHUP / `systemctl reload`),
+//! On Linux the default is a graceful reload (SIGHUP / `systemctl reload`),
 //! which triggers ecdysis in the running agent. Pass `--restart` for a hard restart.
+
+use std::path::Path;
 
 use anyhow::{Context, Result};
 use clap::Args;
@@ -26,6 +28,17 @@ pub struct UpdateArgs {
     /// Install a specific release tag (e.g. v0.3.1)
     #[arg(long)]
     pub version: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub enum UpdateOutcome {
+    UpToDate {
+        version: String,
+    },
+    Updated {
+        from_version: String,
+        to_version: String,
+    },
 }
 
 pub async fn run(args: UpdateArgs) -> Result<()> {
@@ -92,21 +105,61 @@ fn run_blocking(args: UpdateArgs) -> Result<()> {
     Ok(())
 }
 
-fn apply_service_reload(force_restart: bool) -> Result<()> {
+/// Quiet update for the auto-update loop. Optionally backs up the current binary
+/// to `previous_bin` before replacing it.
+pub fn apply_update_quiet(previous_bin: Option<&Path>) -> Result<UpdateOutcome> {
+    let current = cargo_crate_version!();
+    let target = self_update::get_target();
+
+    let mut builder = self_update::backends::github::Update::configure();
+    builder
+        .repo_owner(REPO_OWNER)
+        .repo_name(REPO_NAME)
+        .bin_name(BIN_NAME)
+        .bin_path_in_archive(format!("tuntun-{{{{ version }}}}-{target}/{{{{ bin }}}}"))
+        .current_version(current)
+        .no_confirm(true)
+        .show_download_progress(false)
+        .show_output(false);
+
+    let updater = builder.build().context("configure GitHub updater")?;
+
+    let Some(_release) = updater.is_update_available().context("check for update")? else {
+        return Ok(UpdateOutcome::UpToDate {
+            version: current.to_string(),
+        });
+    };
+
+    if let Some(dest) = previous_bin {
+        let exe = std::env::current_exe().context("current_exe")?;
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::copy(&exe, dest)
+            .with_context(|| format!("backup {} → {}", exe.display(), dest.display()))?;
+    }
+
+    let status = updater.update().context("download and install update")?;
+    Ok(UpdateOutcome::Updated {
+        from_version: current.to_string(),
+        to_version: status.version().to_string(),
+    })
+}
+
+pub fn apply_service_reload(force_restart: bool) -> Result<()> {
     let probe = crate::service::probe();
     if !probe.installed {
-        println!("Service not installed; binary updated in place.");
-        println!("Restart a running agent manually if needed.");
+        tracing::info!("service not installed; binary updated in place");
         return Ok(());
     }
 
     #[cfg(target_os = "linux")]
     {
         if force_restart {
-            println!("Restarting tuntun service…");
+            tracing::info!("restarting tuntun service");
             crate::service::restart(None)?;
         } else if std::path::Path::new("/etc/systemd/system/tuntun.service").exists() {
-            println!("Reloading tuntun service (graceful)…");
+            tracing::info!("reloading tuntun service (graceful)");
             if crate::service::is_root() {
                 let _ = crate::service::refresh_unit(None);
             }
@@ -115,13 +168,10 @@ fn apply_service_reload(force_restart: bool) -> Result<()> {
                 .status()
                 .context("systemctl reload")?;
             if !status.success() {
-                anyhow::bail!(
-                    "systemctl reload failed ({status}); try `sudo tuntun service install && sudo tuntun update --restart`"
-                );
+                anyhow::bail!("systemctl reload failed ({status})");
             }
-            println!("Reload signaled (SIGHUP). The agent will upgrade without a hard stop.");
         } else {
-            println!("Service unit missing; start with: sudo tuntun service start");
+            tracing::warn!("service unit missing; start with: tuntun service start");
         }
         Ok(())
     }
@@ -129,7 +179,7 @@ fn apply_service_reload(force_restart: bool) -> Result<()> {
     #[cfg(target_os = "macos")]
     {
         let _ = force_restart;
-        println!("Restarting tuntun service…");
+        tracing::info!("restarting tuntun service");
         crate::service::restart(None)?;
         Ok(())
     }
@@ -137,7 +187,7 @@ fn apply_service_reload(force_restart: bool) -> Result<()> {
     #[cfg(windows)]
     {
         let _ = force_restart;
-        println!("Restarting tuntun service…");
+        tracing::info!("restarting tuntun service");
         crate::service::restart(None)?;
         Ok(())
     }
@@ -145,7 +195,6 @@ fn apply_service_reload(force_restart: bool) -> Result<()> {
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
     {
         let _ = force_restart;
-        println!("Restart the agent process to pick up the new binary.");
         Ok(())
     }
 }

@@ -44,6 +44,8 @@ pub struct Tables {
     pub synthetic_hosts: std::collections::HashMap<Ipv4Addr, String>,
     pub dns_suffix: String,
     pub network_name: String,
+    /// PeerDNS magic listener IP (local, not mesh-forwarded).
+    pub magic_ip: Ipv4Addr,
     /// Selected exit node peer (when device_profile chooses one).
     pub exit_node: Option<Arc<PeerInfo>>,
     pub version: u64,
@@ -77,6 +79,7 @@ impl RoutingTable {
                 synthetic_hosts: Default::default(),
                 dns_suffix: "tuntun".into(),
                 network_name: String::new(),
+                magic_ip: Ipv4Addr::new(100, 100, 100, 53),
                 exit_node: None,
                 version: 0,
             })),
@@ -187,6 +190,14 @@ impl RoutingTable {
         self.inner.load().dns_suffix.clone()
     }
 
+    pub fn magic_ip(&self) -> Ipv4Addr {
+        self.inner.load().magic_ip
+    }
+
+    pub fn is_magic_dns_destination(&self, ip: &Ipv4Addr) -> bool {
+        *ip == self.inner.load().magic_ip
+    }
+
     pub fn network_name(&self) -> String {
         self.inner.load().network_name.clone()
     }
@@ -235,6 +246,23 @@ impl RoutingTable {
         }
 
         None
+    }
+
+    /// Reverse lookup: mesh IP → `hostname[.network].suffix`.
+    pub fn resolve_dns_ptr(&self, ip: Ipv4Addr) -> Option<String> {
+        let tables = self.inner.load();
+        let peer = tables.by_ip.get(&ip)?;
+        let host = if peer.hostname.is_empty() {
+            return None;
+        } else {
+            peer.hostname.to_ascii_lowercase()
+        };
+        let fqdn = if tables.network_name.is_empty() {
+            format!("{host}.{}", tables.dns_suffix)
+        } else {
+            format!("{host}.{}.{}", tables.network_name, tables.dns_suffix)
+        };
+        Some(fqdn)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -354,6 +382,7 @@ impl RoutingTable {
             synthetic_hosts,
             dns_suffix: dns.suffix.clone(),
             network_name: network_name.to_ascii_lowercase(),
+            magic_ip: dns.magic_ip,
             exit_node,
             version,
         }));

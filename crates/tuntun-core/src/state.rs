@@ -1,5 +1,5 @@
 use std::net::Ipv4Addr;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::Context;
 use chrono::{DateTime, Utc};
@@ -76,23 +76,40 @@ impl StatePaths {
         }
     }
 
-    pub fn key_file(&self) -> PathBuf {
-        self.dir.join("agent.key")
-    }
     pub fn state_file(&self) -> PathBuf {
         self.dir.join("state.json")
     }
     pub fn cache_file(&self) -> PathBuf {
         self.dir.join("routing_cache.json")
     }
-    pub fn auth_file(&self) -> PathBuf {
-        self.dir.join("auth.json")
-    }
     pub fn membership_file(&self) -> PathBuf {
         self.dir.join("direct_membership.json")
     }
-    pub fn firewall_file(&self) -> PathBuf {
-        self.dir.join("direct_firewall.json")
+    /// Unified agent configuration (TOML)
+    pub fn config_toml_file(&self) -> PathBuf {
+        self.dir.join("tuntun.toml")
+    }
+    /// Encrypted secrets (identity, network PSK, tickets, auth).
+    pub fn secrets_file(&self) -> PathBuf {
+        self.dir.join("state.enc")
+    }
+    /// Seal metadata for `state.enc` (tier, wrapped DEK / salt).
+    pub fn secrets_meta_file(&self) -> PathBuf {
+        self.dir.join("state.enc.meta")
+    }
+    /// Auto-update pending marker + previous binary live under this dir.
+    pub fn update_dir(&self) -> PathBuf {
+        self.dir.join("update")
+    }
+    pub fn update_pending_file(&self) -> PathBuf {
+        self.update_dir().join("pending.json")
+    }
+    pub fn update_previous_bin(&self) -> PathBuf {
+        self.update_dir().join("tuntun.prev")
+    }
+    /// Pending coordinator firewall suggestion.
+    pub fn firewall_pending_file(&self) -> PathBuf {
+        self.dir.join("firewall_pending.json")
     }
     pub fn invites_file(&self) -> PathBuf {
         self.dir.join("direct_invites.json")
@@ -162,7 +179,8 @@ pub struct ManagedState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DirectState {
     pub network_name: String,
-    /// Hex-encoded 32-byte network secret (PSK).
+    /// Hex-encoded 32-byte network secret (PSK). In-memory only - sealed in `state.enc`.
+    #[serde(skip)]
     pub network_secret: String,
     /// Hex topic id = blake3(network_name || secret).
     pub topic_hash: String,
@@ -179,12 +197,15 @@ pub struct DirectState {
     /// Optional coordinator endpoint id (hex) known at join time.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coordinator_endpoint_id: Option<String>,
-    /// iroh-docs write ticket (string). Set on create (coordinator) or join.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// iroh-docs write ticket. In-memory only - sealed in `state.enc`.
+    #[serde(skip)]
     pub doc_ticket: Option<String>,
     /// iroh-docs namespace id (hex). Network document identity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub namespace_id: Option<String>,
+    /// Auto-accept coordinator firewall policy suggestions.
+    #[serde(default)]
+    pub auto_accept_firewall: bool,
     pub created_at: DateTime<Utc>,
 }
 
@@ -196,11 +217,17 @@ pub enum PersistedState {
 }
 
 impl PersistedState {
-    pub fn save(&self, paths: &StatePaths) -> anyhow::Result<()> {
+    /// Write public (non-secret) fields to `state.json`.
+    pub fn save_public(&self, paths: &StatePaths) -> anyhow::Result<()> {
         paths.ensure()?;
         let json = serde_json::to_vec_pretty(self)?;
         std::fs::write(paths.state_file(), json)?;
         Ok(())
+    }
+
+    /// Alias: public state only. Secrets go through [`crate::secret_store`].
+    pub fn save(&self, paths: &StatePaths) -> anyhow::Result<()> {
+        self.save_public(paths)
     }
 
     pub fn load(paths: &StatePaths) -> anyhow::Result<Self> {
@@ -215,6 +242,18 @@ impl PersistedState {
             return Ok(None);
         }
         Ok(Some(Self::load(paths)?))
+    }
+
+    /// Merge secrets from `state.enc` into this in-memory state.
+    pub fn apply_secrets(&mut self, secrets: &crate::secret_store::AgentSecrets) {
+        if let PersistedState::Direct(d) = self {
+            if let Some(s) = &secrets.network_secret {
+                d.network_secret = s.clone();
+            }
+            if secrets.doc_ticket.is_some() {
+                d.doc_ticket = secrets.doc_ticket.clone();
+            }
+        }
     }
 
     pub fn mode(&self) -> NodeMode {
@@ -288,25 +327,17 @@ pub struct CliAuthTokens {
 }
 
 impl CliAuthTokens {
+    /// Persist auth tokens into `state.enc` (creates a sealed vault if needed).
     pub fn save(&self, paths: &StatePaths) -> anyhow::Result<()> {
-        paths.ensure()?;
-        let json = serde_json::to_vec_pretty(self)?;
-        std::fs::write(paths.auth_file(), json)?;
-        Ok(())
+        crate::secret_store::store_auth(paths, self.clone())
     }
 
     pub fn load(paths: &StatePaths) -> anyhow::Result<Self> {
-        let s = std::fs::read(paths.auth_file())
-            .with_context(|| format!("read {}", paths.auth_file().display()))?;
-        Ok(serde_json::from_slice(&s)?)
+        crate::secret_store::load_auth(paths)?.context("no auth tokens in state.enc")
     }
 
     pub fn clear(paths: &StatePaths) -> anyhow::Result<()> {
-        let path = paths.auth_file();
-        if path.exists() {
-            std::fs::remove_file(&path).with_context(|| format!("remove {}", path.display()))?;
-        }
-        Ok(())
+        crate::secret_store::clear_auth(paths)
     }
 
     pub fn access_token_valid(&self) -> bool {
@@ -332,11 +363,6 @@ pub fn load_snapshot_cache(paths: &StatePaths) -> Option<tuntun_common::Endpoint
     serde_json::from_slice(&s).ok()
 }
 
-pub fn key_file(paths: &StatePaths) -> &Path {
-    // Convenience for load_from / save_to.
-    Box::leak(paths.key_file().into_boxed_path())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -356,11 +382,18 @@ mod tests {
             coordinator_endpoint_id: None,
             doc_ticket: None,
             namespace_id: None,
+            auto_accept_firewall: false,
             created_at: Utc::now(),
         });
         let bytes = serde_json::to_vec(&s).unwrap();
         let loaded: PersistedState = serde_json::from_slice(&bytes).unwrap();
         assert!(loaded.is_direct());
+        let d = loaded.require_direct().unwrap();
+        assert!(
+            d.network_secret.is_empty(),
+            "secrets must not live in state.json"
+        );
+        assert!(d.doc_ticket.is_none());
     }
 
     #[test]
