@@ -348,10 +348,15 @@ fn unwrap_dek(wrap_key: &[u8; 32], wrapped: &[u8]) -> anyhow::Result<[u8; 32]> {
 }
 
 fn random_salt() -> [u8; 16] {
-    let mut salt = [0u8; 16];
     use aes_gcm::aead::rand_core::RngCore;
-    OsRng.fill_bytes(&mut salt);
-    salt
+    use std::mem::MaybeUninit;
+
+    let mut salt = MaybeUninit::<[u8; 16]>::uninit();
+    // SAFETY: OsRng fills all 16 bytes before assume_init.
+    unsafe {
+        OsRng.fill_bytes(&mut *salt.as_mut_ptr());
+        salt.assume_init()
+    }
 }
 
 /// Delete sealed secret files.
@@ -463,11 +468,11 @@ mod tests {
 
     #[test]
     fn derived_wrap_roundtrip() {
-        let salt = [7u8; 16];
+        let salt = random_salt();
         let key = derived::derive_wrap_key(&salt).unwrap();
-        let dek = [9u8; 32];
-        let wrapped = wrap_dek(&key, &dek).unwrap();
+        let dek = Aes256Gcm::generate_key(OsRng);
+        let wrapped = wrap_dek(&key, dek.as_slice()).unwrap();
         let out = unwrap_dek(&key, &wrapped).unwrap();
-        assert_eq!(out, dek);
+        assert_eq!(out.as_slice(), dek.as_slice());
     }
 }
