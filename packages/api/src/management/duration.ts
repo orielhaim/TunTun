@@ -158,14 +158,28 @@ function parsePostgresIntervalTime(value: string): number | null {
 }
 
 function parseCompactDuration(value: string): number | null {
-  const re = /(\d+)(w|d|h|m|s)/gi;
+  if (value.length === 0 || value.length > 64) return null;
+
   let total = 0;
   let matched = false;
+  let i = 0;
+  const n = value.length;
 
-  for (const match of value.matchAll(re)) {
-    matched = true;
-    const amount = Number(match[1]);
-    const unit = match[2]?.toLowerCase();
+  while (i < n) {
+    const digitStart = i;
+    while (i < n) {
+      const code = value.charCodeAt(i);
+      if (code < 48 || code > 57) break;
+      i += 1;
+    }
+    if (i === digitStart || i >= n) return null;
+
+    const amount = Number(value.slice(digitStart, i));
+    if (!Number.isFinite(amount) || amount <= 0) return null;
+
+    const unit = value.charAt(i).toLowerCase();
+    i += 1;
+
     const multiplier =
       unit === "w"
         ? 604_800
@@ -178,7 +192,9 @@ function parseCompactDuration(value: string): number | null {
               : unit === "s"
                 ? 1
                 : 0;
-    if (multiplier === 0 || amount <= 0) return null;
+    if (multiplier === 0) return null;
+
+    matched = true;
     total += amount * multiplier;
   }
 
