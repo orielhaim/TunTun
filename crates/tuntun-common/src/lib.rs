@@ -296,6 +296,9 @@ pub struct NetworkMembershipSnapshot {
     /// Tags assigned to *this* endpoint (needed for dst tag ACL / SSH policy).
     #[serde(default)]
     pub self_tags: Vec<String>,
+    /// This endpoint's hostname (for PeerDNS self-resolution; peers list excludes self).
+    #[serde(default)]
+    pub self_hostname: String,
     pub policy: policy::PolicyBundle,
     pub gossip_bootstrap: Vec<EndpointIdHex>,
     pub gossip_topic_hex: String,

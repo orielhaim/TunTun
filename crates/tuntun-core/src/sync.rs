@@ -30,9 +30,28 @@ pub fn apply_membership(
     version: &Arc<ArcSwap<u64>>,
     org_version: u64,
     self_endpoint_id: &str,
+    self_hostname: &str,
 ) {
+    // Control plane excludes this endpoint from ipv4_peers (no mesh self-route).
+    // Inject self so PeerDNS can resolve our own hostname → assigned mesh IP.
+    let hostname = if !membership.self_hostname.is_empty() {
+        membership.self_hostname.as_str()
+    } else {
+        self_hostname
+    };
+    let mut peers = Vec::with_capacity(membership.ipv4_peers.len() + 1);
+    peers.extend_from_slice(&membership.ipv4_peers);
+    if !hostname.is_empty() && !peers.iter().any(|p| p.endpoint_id == self_endpoint_id) {
+        peers.push(tuntun_common::PeerEntry {
+            ip: membership.assigned_ipv4,
+            endpoint_id: self_endpoint_id.to_string(),
+            hostname: hostname.to_string(),
+            tags: membership.self_tags.clone(),
+        });
+    }
+
     routes.replace(
-        &membership.ipv4_peers,
+        &peers,
         &membership.subnet_routes,
         &membership.hostname_routes,
         &membership.exit_nodes,
@@ -61,6 +80,7 @@ pub fn spawn_ws_processor(
     paths: StatePaths,
     network_id: Uuid,
     self_endpoint_id: String,
+    self_hostname: String,
     agent_version: &'static str,
     serves: Option<crate::serve::ServeManager>,
     tunnels: Option<crate::tunnel::TunnelManager>,
@@ -91,6 +111,7 @@ pub fn spawn_ws_processor(
                                     &version,
                                     snap.version,
                                     &self_endpoint_id,
+                                    &self_hostname,
                                 );
                                 save_snapshot_cache(&paths, &snap).ok();
                                 tracing::info!(
@@ -312,6 +333,7 @@ pub fn spawn_ws_processor(
     });
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn spawn_poll_fallback(
     client: SignedClient,
     version: Arc<ArcSwap<u64>>,
@@ -320,6 +342,7 @@ pub fn spawn_poll_fallback(
     acl: AclEngine,
     network_id: Uuid,
     self_endpoint_id: String,
+    self_hostname: String,
 ) {
     tokio::spawn(async move {
         let mut ticker = tokio::time::interval(Duration::from_secs(poll_secs));
@@ -338,6 +361,7 @@ pub fn spawn_poll_fallback(
                             &version,
                             snap.version,
                             &self_endpoint_id,
+                            &self_hostname,
                         );
                         tracing::info!(
                             v = m.version,

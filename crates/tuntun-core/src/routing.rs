@@ -806,6 +806,35 @@ mod tests {
     }
 
     #[test]
+    fn peer_dns_resolves_self() {
+        let table = RoutingTable::new();
+        let self_id = "a".repeat(64);
+        let self_ip: Ipv4Addr = "10.7.0.3".parse().unwrap();
+        // Managed snapshots exclude self from peers; inject like apply_membership.
+        table.replace(
+            &[peer(&self_id, "10.7.0.3", "desktop-t85djls")],
+            &[],
+            &[],
+            &[],
+            &profile(),
+            &dns(),
+            "default",
+            Uuid::nil(),
+            &self_id,
+            1,
+        );
+        assert_eq!(table.resolve_dns_a("desktop-t85djls.tuntun"), Some(self_ip));
+        assert_eq!(
+            table.resolve_dns_a("desktop-t85djls.default.tuntun"),
+            Some(self_ip)
+        );
+        assert_eq!(
+            table.resolve_dns_ptr(self_ip).as_deref(),
+            Some("desktop-t85djls.default.tuntun")
+        );
+    }
+
+    #[test]
     fn peer_dns_resolves_peer_and_hostname_route() {
         let table = RoutingTable::new();
         let self_id = "a".repeat(64);

@@ -194,6 +194,7 @@ impl CoreNode {
             &version,
             snapshot.version,
             &my_id_hex,
+            &cfg.hostname,
         );
 
         let secret = SecretKey::from_bytes(&identity.secret_bytes);
@@ -240,6 +241,7 @@ impl CoreNode {
             paths.clone_paths(),
             managed.network_id,
             my_id_hex.clone(),
+            cfg.hostname.clone(),
             cfg.agent_version,
             Some(serves.clone()),
             Some(tunnels.clone()),
@@ -254,6 +256,7 @@ impl CoreNode {
             acl.clone(),
             managed.network_id,
             my_id_hex.clone(),
+            cfg.hostname.clone(),
         );
 
         let _ = persisted;

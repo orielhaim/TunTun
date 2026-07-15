@@ -31,10 +31,12 @@ pub async fn build_endpoint_snapshot(
         None
     };
 
-    let membership_rows: Vec<(Uuid, String, PgIp, i32, i64)> = sqlx::query_as(
-        "SELECT nm.network_id, n.name, nm.assigned_ip::inet, n.mtu, n.version \
+    let membership_rows: Vec<(Uuid, String, PgIp, i32, i64, String)> = sqlx::query_as(
+        "SELECT nm.network_id, n.name, nm.assigned_ip::inet, n.mtu, n.version, \
+            COALESCE(NULLIF(e.metadata->>'hostname', ''), left(e.endpoint_id, 8)) AS hostname \
          FROM network_memberships nm \
          JOIN networks n ON n.id = nm.network_id \
+         JOIN devices e ON e.endpoint_id = nm.endpoint_id \
          WHERE nm.endpoint_id = $1 AND nm.status = 'active'",
     )
     .bind(endpoint_id)
@@ -42,7 +44,9 @@ pub async fn build_endpoint_snapshot(
     .await?;
 
     let mut memberships = Vec::with_capacity(membership_rows.len());
-    for (network_id, network_name, assigned_ip, mtu, network_version) in membership_rows {
+    for (network_id, network_name, assigned_ip, mtu, network_version, self_hostname) in
+        membership_rows
+    {
         let assigned_ipv4 = pg_inet::to_ipv4_addr(assigned_ip)?;
         let prefix = network_prefix(pool, network_id).await?;
         let ipv4_peers = load_ipv4_peers(pool, network_id, endpoint_id, &network_name).await?;
@@ -85,6 +89,7 @@ pub async fn build_endpoint_snapshot(
             active_serves,
             tunnel_config,
             self_tags,
+            self_hostname,
             policy,
             gossip_bootstrap: bootstrap,
             gossip_topic_hex,

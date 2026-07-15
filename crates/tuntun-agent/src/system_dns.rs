@@ -30,6 +30,7 @@ pub struct DnsGuard {
 }
 
 impl DnsGuard {
+    #[allow(dead_code)]
     fn noop() -> Self {
         Self { _restore: None }
     }
@@ -123,8 +124,17 @@ mod macos {
 #[cfg(target_os = "windows")]
 mod windows {
     use super::*;
+    use std::os::windows::process::CommandExt;
 
-    pub fn configure(dns_ip: Ipv4Addr, _suffix: &str) -> anyhow::Result<DnsGuard> {
+    /// Hide console window when spawning PowerShell/netsh from a service/agent.
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+    const NRPT_DISPLAY_NAME: &str = "TunTun PeerDNS";
+
+    pub fn configure(dns_ip: Ipv4Addr, suffix: &str) -> anyhow::Result<DnsGuard> {
+        let dns_ip_s = dns_ip.to_string();
+
+        // Interface DNS (used when tuntun0 wins the metric race).
         let status = std::process::Command::new("netsh")
             .args([
                 "interface",
@@ -133,8 +143,9 @@ mod windows {
                 "dns",
                 "name=tuntun0",
                 "static",
-                &dns_ip.to_string(),
+                &dns_ip_s,
             ])
+            .creation_flags(CREATE_NO_WINDOW)
             .status();
         match status {
             Ok(s) if s.success() => {
@@ -143,6 +154,70 @@ mod windows {
             Ok(s) => tracing::warn!(?s, "netsh DNS set returned non-zero"),
             Err(e) => tracing::warn!(?e, "netsh DNS set failed"),
         }
-        Ok(DnsGuard::noop())
+
+        // Split DNS via NRPT so *.suffix queries always hit PeerDNS regardless of
+        // which NIC wins the interface metric (netsh alone cannot express this).
+        let namespace = if suffix.starts_with('.') {
+            suffix.to_string()
+        } else {
+            format!(".{suffix}")
+        };
+        let nrpt_ok = add_nrpt_rule(&namespace, &dns_ip_s);
+        if nrpt_ok {
+            tracing::info!(%dns_ip, %namespace, "configured Windows NRPT for PeerDNS");
+        }
+
+        Ok(DnsGuard {
+            _restore: Some(Box::new(move || {
+                remove_nrpt_rule();
+                let _ = std::process::Command::new("netsh")
+                    .args(["interface", "ip", "delete", "dns", "name=tuntun0", "all"])
+                    .creation_flags(CREATE_NO_WINDOW)
+                    .status();
+            })),
+        })
+    }
+
+    fn add_nrpt_rule(namespace: &str, dns_ip: &str) -> bool {
+        // Replace any prior TunTun rule so restarts don't accumulate duplicates.
+        remove_nrpt_rule();
+        let script = format!(
+            "Add-DnsClientNrptRule -Namespace '{namespace}' -NameServers '{dns_ip}' \
+             -DisplayName '{NRPT_DISPLAY_NAME}' | Out-Null"
+        );
+        match run_powershell(&script) {
+            Ok(true) => true,
+            Ok(false) => {
+                tracing::warn!("Add-DnsClientNrptRule returned non-zero (need admin?)");
+                false
+            }
+            Err(e) => {
+                tracing::warn!(?e, "Add-DnsClientNrptRule failed");
+                false
+            }
+        }
+    }
+
+    fn remove_nrpt_rule() {
+        let script = format!(
+            "Get-DnsClientNrptRule | Where-Object {{ $_.DisplayName -eq '{NRPT_DISPLAY_NAME}' }} \
+             | Remove-DnsClientNrptRule -Force -ErrorAction SilentlyContinue"
+        );
+        let _ = run_powershell(&script);
+    }
+
+    fn run_powershell(script: &str) -> std::io::Result<bool> {
+        let status = std::process::Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                script,
+            ])
+            .creation_flags(CREATE_NO_WINDOW)
+            .status()?;
+        Ok(status.success())
     }
 }
