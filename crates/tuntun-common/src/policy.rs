@@ -226,7 +226,7 @@ pub fn evaluate(bundle: &PolicyBundle, ctx: &EvalCtx<'_>, direction: Direction) 
     )
 }
 
-/// IPv6 ACL: fail-closed; checks org bundle then each network bundle.
+/// IPv6 ACL: empty rule set = allow (open); non-empty with no match = deny.
 pub fn evaluate_ipv6(
     org_bundle: &PolicyBundle,
     network_bundles: &[PolicyBundle],
@@ -258,6 +258,10 @@ fn evaluate_rules<F>(rules: &[PolicyRule], mut matcher: F, direction: Direction)
 where
     F: FnMut(&PolicyRule, Direction) -> bool,
 {
+    if rules.is_empty() {
+        return Action::Allow;
+    }
+
     let mut sorted: Vec<&PolicyRule> = rules.iter().collect();
     sorted.sort_by_key(|rule| std::cmp::Reverse(rule.priority));
 
@@ -360,7 +364,57 @@ mod tests {
     use std::net::Ipv6Addr;
 
     #[test]
-    fn ipv6_fail_closed_by_default() {
+    fn empty_policy_allows_by_default() {
+        let ctx = EvalCtx {
+            self_endpoint_hex: "aa",
+            self_ip: Ipv4Addr::new(10, 7, 0, 1),
+            self_tags: &[],
+            self_network: "",
+            peer_endpoint_hex: "bb",
+            peer_ip: Some(Ipv4Addr::new(10, 7, 0, 2)),
+            peer_tags: &[],
+            peer_network: "",
+            dst_port: Some(80),
+            protocol: Protocol::Tcp,
+        };
+        assert_eq!(
+            evaluate(&PolicyBundle::default(), &ctx, Direction::Outbound),
+            Action::Allow
+        );
+    }
+
+    #[test]
+    fn explicit_rules_deny_unmatched() {
+        let ctx = EvalCtx {
+            self_endpoint_hex: "aa",
+            self_ip: Ipv4Addr::new(10, 7, 0, 1),
+            self_tags: &[],
+            self_network: "",
+            peer_endpoint_hex: "bb",
+            peer_ip: Some(Ipv4Addr::new(10, 7, 0, 2)),
+            peer_tags: &[],
+            peer_network: "",
+            dst_port: Some(80),
+            protocol: Protocol::Tcp,
+        };
+        let bundle = PolicyBundle {
+            rules: vec![PolicyRule {
+                src: Selector::Tag("admin".into()),
+                dst: Selector::Any,
+                action: Action::Allow,
+                ports: vec![],
+                protocol: None,
+                priority: 10,
+            }],
+            ssh_rules: vec![],
+            version: 1,
+            signature: String::new(),
+        };
+        assert_eq!(evaluate(&bundle, &ctx, Direction::Outbound), Action::Deny);
+    }
+
+    #[test]
+    fn ipv6_empty_policy_allows_by_default() {
         let ctx = Ipv6EvalCtx {
             self_endpoint_hex: "aa",
             self_ipv6: Ipv6Addr::LOCALHOST,
@@ -372,7 +426,7 @@ mod tests {
             protocol: Protocol::Any,
         };
         let action = evaluate_ipv6(&PolicyBundle::default(), &[], &ctx, Direction::Outbound);
-        assert_eq!(action, Action::Deny);
+        assert_eq!(action, Action::Allow);
     }
 
     #[test]

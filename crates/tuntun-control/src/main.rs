@@ -68,6 +68,8 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(async move {
         if let Err(e) = pg_notify::run_listener(
             &database_url,
+            listener_state.pool.clone(),
+            listener_state.policy_key.clone(),
             listener_state.ws_hub.clone(),
             listener_state.listen_connected.clone(),
         )

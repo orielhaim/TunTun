@@ -1,6 +1,8 @@
 //! Fan-out for server → agent WebSocket pushes.
 
 use dashmap::DashMap;
+use ed25519_dalek::SigningKey;
+use sqlx::PgPool;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tuntun_common::ws::ServerMsg;
@@ -72,14 +74,34 @@ impl WsHub {
         }
     }
 
-    pub async fn notify_network_changed(&self, network_id: Uuid) {
+    pub async fn notify_network_changed(
+        &self,
+        network_id: Uuid,
+        pool: &PgPool,
+        policy_key: &SigningKey,
+    ) {
         let Some(set) = self.inner.by_network.get(&network_id) else {
             return;
         };
         let ids: Vec<String> = set.iter().map(|e| e.clone()).collect();
         drop(set);
-        for id in ids {
-            self.push_to(&id, ServerMsg::Ping { nonce: 0 }).await;
+
+        tracing::info!(%network_id, agents = ids.len(), "pushing snapshots after network change");
+
+        for endpoint_id in ids {
+            match crate::snapshot::build_endpoint_snapshot(pool, policy_key, &endpoint_id).await {
+                Ok(snap) => {
+                    self.push_to(&endpoint_id, ServerMsg::Snapshot(snap)).await;
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        ?e,
+                        %endpoint_id,
+                        %network_id,
+                        "failed to build snapshot for network-change push"
+                    );
+                }
+            }
         }
     }
 }

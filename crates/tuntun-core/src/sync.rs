@@ -82,6 +82,7 @@ pub fn spawn_ws_processor(
     self_endpoint_id: String,
     self_hostname: String,
     agent_version: &'static str,
+    poll_client: Option<SignedClient>,
     serves: Option<crate::serve::ServeManager>,
     tunnels: Option<crate::tunnel::TunnelManager>,
     send: Option<crate::send::SendManager>,
@@ -135,6 +136,34 @@ pub fn spawn_ws_processor(
                         }
                         ServerMsg::Ping { nonce } => {
                             let _ = ws.tx.send(ClientMsg::Pong { nonce }).await;
+                            if let Some(client) = &poll_client {
+                                match client.poll(**version.load()).await {
+                                    Ok(snap) => {
+                                        if let Ok(m) = membership_for_network(&snap, network_id)
+                                            && (snap.version != **version.load()
+                                                || m.version != routes.version())
+                                        {
+                                            apply_membership(
+                                                m,
+                                                &routes,
+                                                &acl,
+                                                &version,
+                                                snap.version,
+                                                &self_endpoint_id,
+                                                &self_hostname,
+                                            );
+                                            save_snapshot_cache(&paths, &snap).ok();
+                                            tracing::info!(
+                                                v = m.version,
+                                                "snapshot from ping wake-up poll"
+                                            );
+                                        }
+                                    }
+                                    Err(e) => {
+                                        tracing::warn!(?e, "ping wake-up poll failed");
+                                    }
+                                }
+                            }
                         }
                         ServerMsg::StartServe {
                             serve_id,
@@ -351,8 +380,8 @@ pub fn spawn_poll_fallback(
             ticker.tick().await;
             match client.poll(**version.load()).await {
                 Ok(snap) => {
-                    if snap.version != **version.load()
-                        && let Ok(m) = membership_for_network(&snap, network_id)
+                    if let Ok(m) = membership_for_network(&snap, network_id)
+                        && (snap.version != **version.load() || m.version != routes.version())
                     {
                         apply_membership(
                             m,

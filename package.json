@@ -23,7 +23,7 @@
     "check": "biome check"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.3",
+    "@biomejs/biome": "2.5.4",
     "@types/bun": "^1.3.14",
     "lefthook": "^2.1.10",
     "vitepress": "^2.0.0-alpha.18"

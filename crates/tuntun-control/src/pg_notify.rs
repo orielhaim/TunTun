@@ -21,13 +21,23 @@ pub async fn emit_network_changed(pool: &PgPool, network_id: Uuid) -> anyhow::Re
 
 pub async fn run_listener(
     database_url: &str,
+    pool: PgPool,
+    policy_key: ed25519_dalek::SigningKey,
     ws_hub: WsHub,
     connected: Arc<AtomicBool>,
 ) -> anyhow::Result<()> {
     let mut backoff = Duration::from_secs(1);
 
     loop {
-        match listen_loop(database_url, ws_hub.clone(), connected.clone()).await {
+        match listen_loop(
+            database_url,
+            pool.clone(),
+            policy_key.clone(),
+            ws_hub.clone(),
+            connected.clone(),
+        )
+        .await
+        {
             Ok(()) => {
                 tracing::warn!("postgres listener exited unexpectedly, reconnecting");
             }
@@ -43,6 +53,8 @@ pub async fn run_listener(
 
 async fn listen_loop(
     database_url: &str,
+    pool: PgPool,
+    policy_key: ed25519_dalek::SigningKey,
     ws_hub: WsHub,
     connected: Arc<AtomicBool>,
 ) -> anyhow::Result<()> {
@@ -56,7 +68,9 @@ async fn listen_loop(
         let payload = notification.payload();
         match Uuid::parse_str(payload) {
             Ok(network_id) => {
-                ws_hub.notify_network_changed(network_id).await;
+                ws_hub
+                    .notify_network_changed(network_id, &pool, &policy_key)
+                    .await;
             }
             Err(e) => {
                 tracing::warn!(?e, payload, "invalid network_id in NOTIFY payload");

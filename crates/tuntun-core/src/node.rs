@@ -243,6 +243,7 @@ impl CoreNode {
             my_id_hex.clone(),
             cfg.hostname.clone(),
             cfg.agent_version,
+            Some(signed.clone()),
             Some(serves.clone()),
             Some(tunnels.clone()),
             Some(send.clone()),
