@@ -17,7 +17,7 @@ The management image is built from `deploy/Dockerfile.management`. It uses `oven
 ## Running manually
 
 ```bash
-bun run dev:management
+bun run management:dev
 ```
 
 ## Configuration

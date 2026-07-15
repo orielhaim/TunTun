@@ -15,7 +15,8 @@ At runtime, `MANAGEMENT_API_URL` tells the Nitro proxy where to reach the manage
 ## Running manually
 
 ```bash
-bun run dev:dash
+bun run dash:build
+bun run dash:preview
 ```
 
 ## Configuration

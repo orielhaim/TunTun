@@ -30,10 +30,11 @@ TUNTUN_CONTROL_URL=http://127.0.0.1:8080
 ./target/release/tuntun-control
 
 # Terminal 2 - Management API (:3000)
-bun run dev:management
+bun run management:dev
 
 # Terminal 3 - Dashboard (:5173)
-bun run dev:dash
+bun run dash:build
+bun run dash:preview
 ```
 
 ## 3. Create an organization

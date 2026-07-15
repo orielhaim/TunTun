@@ -7,8 +7,11 @@
     "crates/tuntun-node-napi"
   ],
   "scripts": {
-    "dev:management": "bun --env-file=.env --filter @tuntun/management dev",
-    "dev:dash": "bun --env-file=.env --filter @tuntun/dashboard dev",
+    "management:dev": "bun --env-file=.env --filter @tuntun/management dev",
+    "management:start": "bun --env-file=.env --filter @tuntun/management start",
+    "dash:dev": "bun --env-file=.env --filter @tuntun/dashboard dev",
+    "dash:build": "bun --env-file=.env --filter @tuntun/dashboard build",
+    "dash:preview": "bun --env-file=.env --filter @tuntun/dashboard preview",
     "db:generate": "bun --env-file=.env --filter @tuntun/db generate",
     "db:migrate": "bun --env-file=.env --filter @tuntun/db migrate",
     "db:studio": "bun --env-file=.env --filter @tuntun/db studio",
@@ -18,8 +21,6 @@
     "test:sdk": "bun --env-file=.env --filter @tuntun/core test",
     "test": "bun --env-file=.env --filter @tuntun/core test",
     "test:sdk:integration": "bun --env-file=.env --filter @tuntun/core test:integration",
-    "format": "biome format",
-    "lint": "biome lint",
     "check": "biome check"
   },
   "devDependencies": {
