@@ -26,7 +26,7 @@ bun run db:migrate
 
 # 3. Start services
 ./target/release/tuntun-control &
-bun run management:dev &
+bun run management:start &
 bun run dash:build &
 bun run dash:preview &
 ```

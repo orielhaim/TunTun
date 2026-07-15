@@ -60,8 +60,9 @@ docker compose up -d
 
 # Or run manually:
 #   ./target/release/tuntun-control
-#   bun run management:dev
-#   bun run dash:dev
+#   bun run management:start
+#   bun run dash:build
+#   bun run dash:preview
 ```
 
 Open the dashboard at `http://localhost:5173`. Create an account and organization. Generate an enrollment token.
