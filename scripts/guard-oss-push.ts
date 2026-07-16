@@ -1,16 +1,23 @@
 /**
- * Pre-push hook for the OSS remote.
+ * Pre-push guard:
+ * - OSS (origin): publish filtered tree via push-oss.ts, then abort native push
+ * - private (TunTun-cloud): block unless sync:private set TUNTUN_ALLOW_PRIVATE_PUSH=1
  *
- * Regular `git push` to origin/public publishes a filtered tree (no cloud/)
- * via push-oss.ts, then aborts the native push so cloud/ never uploads.
- *
- * Invoked by lefthook: bun run scripts/guard-oss-push.ts {remote}
+ * Lefthook: bun run scripts/guard-oss-push.ts {remote}
  */
 
+function normalizeUrl(url: string): string {
+  return url.replace(/\.git$/i, "").toLowerCase();
+}
+
+function isPrivateRemote(remoteName: string, remoteUrl: string): boolean {
+  if (remoteName === "private") return true;
+  return normalizeUrl(remoteUrl).includes("tuntun-cloud");
+}
+
 function isOssRemote(remoteName: string, remoteUrl: string): boolean {
-  if (remoteName === "private") return false;
-  const normalized = remoteUrl.replace(/\.git$/i, "").toLowerCase();
-  if (normalized.includes("tuntun-cloud")) return false;
+  if (isPrivateRemote(remoteName, remoteUrl)) return false;
+  const normalized = normalizeUrl(remoteUrl);
   if (remoteName === "origin" || remoteName === "public") {
     return (
       normalized.endsWith("orielhaim/tuntun") ||
@@ -46,7 +53,6 @@ async function headHasCloud(): Promise<boolean> {
 }
 
 const remoteName = process.argv[2] ?? "";
-// Drain stdin (git pre-push protocol) so the pipe does not stall
 await Bun.stdin.text();
 
 if (!remoteName) {
@@ -54,12 +60,28 @@ if (!remoteName) {
 }
 
 const url = await getRemoteUrl(remoteName).catch(() => "");
+
+if (isPrivateRemote(remoteName, url)) {
+  if (process.env.TUNTUN_ALLOW_PRIVATE_PUSH === "1") {
+    process.exit(0);
+  }
+  console.error(
+    [
+      "",
+      `Refusing push to private remote (${remoteName}).`,
+      "Full-tree updates go through:  bun run sync:private",
+      "Default `git push` publishes filtered OSS to origin only.",
+      "",
+    ].join("\n"),
+  );
+  process.exit(1);
+}
+
 if (!isOssRemote(remoteName, url)) {
   process.exit(0);
 }
 
 if (!(await headHasCloud())) {
-  // No cloud/ in HEAD — allow a normal fast-forward push
   process.exit(0);
 }
 
@@ -85,5 +107,4 @@ console.error(
     "",
   ].join("\n"),
 );
-// Non-zero aborts the native (unfiltered) push after a successful OSS publish.
 process.exit(1);
