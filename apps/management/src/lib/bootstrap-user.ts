@@ -1,19 +1,17 @@
+import { getDb } from "@tunnet/db";
 import { auth } from "../auth";
-import {
-  clearEntitlementsCache,
-  getEntitlements,
-  hasAnyUsers,
-  hasFeature,
-} from "./entitlements";
+import { clearEntitlementsCache, hasFeature } from "./entitlements";
 
 export async function ensureBootstrapUser(): Promise<void> {
-  const entitlements = await getEntitlements();
   // Cloud SaaS: first user signs up publicly; no bootstrap owner seed.
-  if (hasFeature(entitlements, "openSignUp")) {
+  if (await hasFeature("openSignUp")) {
     return;
   }
 
-  if (await hasAnyUsers()) {
+  const existing = await getDb().query.user.findFirst({
+    columns: { id: true },
+  });
+  if (existing) {
     return;
   }
 

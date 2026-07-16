@@ -7,7 +7,6 @@
     "crates/tunnet-node-napi"
   ],
   "scripts": {
-    "prepare": "bun run scripts/prepare.ts",
     "management:dev": "bun --env-file=.env --filter @tunnet/management dev",
     "management:start": "bun --env-file=.env --filter @tunnet/management start",
     "dash:dev": "bun --env-file=.env --filter @tunnet/dashboard dev",

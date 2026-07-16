@@ -14,13 +14,12 @@ import {
 import { eq } from "drizzle-orm";
 
 import { createDefaultNetwork } from "./lib/default-network";
-import { getEntitlements, hasFeature } from "./lib/entitlements";
+import { hasFeature } from "./lib/entitlements";
 
 const db = getDb();
 
 const dashboardOrigin = getDashboardUrl();
-const entitlements = await getEntitlements();
-const disablePublicSignUp = !hasFeature(entitlements, "openSignUp");
+const disablePublicSignUp = !(await hasFeature("openSignUp"));
 
 export const OAUTH_CLIENT_DASHBOARD = "tunnet-dashboard";
 export const OAUTH_CLIENT_CLI = "tunnet-cli";
@@ -39,8 +38,7 @@ export const TRUSTED_OAUTH_CLIENT_IDS = new Set<string>([
 async function canUserCreateOrganization(user: {
   id: string;
 }): Promise<boolean> {
-  const current = await getEntitlements();
-  if (hasFeature(current, "multiOrganization")) return true;
+  if (await hasFeature("multiOrganization")) return true;
 
   const memberships = await db.query.member.findMany({
     where: eq(schema.member.userId, user.id),
@@ -51,8 +49,7 @@ async function canUserCreateOrganization(user: {
 async function hasReachedOrganizationLimit(user: {
   id: string;
 }): Promise<boolean> {
-  const current = await getEntitlements();
-  if (hasFeature(current, "multiOrganization")) return false;
+  if (await hasFeature("multiOrganization")) return false;
 
   const memberships = await db.query.member.findMany({
     where: eq(schema.member.userId, user.id),
@@ -172,8 +169,7 @@ export const auth = betterAuth({
       },
       organizationHooks: {
         beforeCreateInvitation: async () => {
-          const current = await getEntitlements();
-          if (!hasFeature(current, "openSignUp")) {
+          if (!(await hasFeature("openSignUp"))) {
             throw new Error(
               "Invitations require cloud signup. Create users from the admin panel instead.",
             );

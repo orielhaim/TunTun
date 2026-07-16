@@ -19,7 +19,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { hasFeature, useEntitlements } from "@/hooks/use-entitlements";
+import { useFeature } from "@/hooks/use-entitlements";
 import {
   authClient,
   useActiveOrganization,
@@ -34,10 +34,7 @@ export function OrgSwitcher() {
   const queryClient = useQueryClient();
   const { data: organizations, isPending } = useListOrganizations();
   const { data: activeOrganization } = useActiveOrganization();
-  const { data: entitlements } = useEntitlements();
-  const multiOrg = entitlements
-    ? hasFeature(entitlements, "multiOrganization")
-    : false;
+  const multiOrg = useFeature("multiOrganization");
 
   async function switchOrg(organizationId: string) {
     const { error } = await authClient.organization.setActive({

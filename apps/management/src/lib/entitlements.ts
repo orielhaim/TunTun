@@ -1,15 +1,14 @@
 import { existsSync } from "node:fs";
-import { getDb } from "@tunnet/db";
 import {
   COMMUNITY_ENTITLEMENTS,
   type Entitlements,
   entitlementsForTier,
+  type Feature,
 } from "@tunnet/entitlements";
 import { verifyLicense } from "@tunnet/entitlements/license";
 
 type Cache = {
   entitlements: Entitlements;
-  /** Drop cache at this time (ms) when a paid license is active. */
   refreshAtMs: number | null;
 };
 
@@ -47,15 +46,9 @@ async function loadLicenseText(env: NodeJS.ProcessEnv): Promise<string | null> {
   }
 }
 
-export async function hasAnyUsers(): Promise<boolean> {
-  const row = await getDb().query.user.findFirst({ columns: { id: true } });
-  return row != null;
-}
-
-/** Missing / invalid / expired certificate → community. */
-export async function resolveEntitlements(
-  env: NodeJS.ProcessEnv = process.env,
-  nowMs: number = Date.now(),
+async function resolveEntitlements(
+  env: NodeJS.ProcessEnv,
+  nowMs: number,
 ): Promise<Entitlements> {
   const text = await loadLicenseText(env);
   if (!text) return COMMUNITY_ENTITLEMENTS;
@@ -78,10 +71,7 @@ export async function resolveEntitlements(
   return entitlementsForTier(verified.payload.tier, verified.payload.exp);
 }
 
-/**
- * License status for this process — resolved once and cached until expiry.
- * Use `hasFeature(entitlements, "…")` at call sites.
- */
+/** License status — resolved once and cached until expiry. */
 export async function getEntitlements(): Promise<Entitlements> {
   const now = Date.now();
   if (cache && (cache.refreshAtMs === null || now < cache.refreshAtMs)) {
@@ -99,8 +89,12 @@ export async function getEntitlements(): Promise<Entitlements> {
   return entitlements;
 }
 
+/** Whether a feature is unlocked for the active license. */
+export async function hasFeature(feature: Feature): Promise<boolean> {
+  const entitlements = await getEntitlements();
+  return entitlements[feature] === true;
+}
+
 export function clearEntitlementsCache(): void {
   cache = null;
 }
-
-export { COMMUNITY_ENTITLEMENTS, hasFeature } from "@tunnet/entitlements";
