@@ -79,30 +79,13 @@ async function main() {
       mustForce = true;
     }
 
-    await git(["rm", "-rf", "--ignore-unmatch", "."], {
+    // Import HEAD via local fetch (no tar — Windows-safe), then drop cloud/.
+    const localRepo = repoRoot.replace(/\\/g, "/");
+    await git(["fetch", "--no-tags", localRepo, "+HEAD:refs/heads/__full__"], {
       cwd: tmp,
-      allowFail: true,
     });
-
-    const archive = Bun.spawn(
-      ["git", "-C", repoRoot, "archive", "--format=tar", "HEAD"],
-      { stdout: "pipe", stderr: "pipe" },
-    );
-    const extract = Bun.spawn(["tar", "-xf", "-", "-C", tmp], {
-      stdin: archive.stdout,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const archiveCode = await archive.exited;
-    const extractCode = await extract.exited;
-    if (archiveCode !== 0 || extractCode !== 0) {
-      const err = await new Response(extract.stderr).text();
-      const aerr = await new Response(archive.stderr).text();
-      throw new Error(
-        `Failed to export archive: ${aerr || err || `codes ${archiveCode}/${extractCode}`}`,
-      );
-    }
-
+    await git(["checkout", "-f", "__full__"], { cwd: tmp });
+    await git(["checkout", "-B", branch], { cwd: tmp });
     await rm(join(tmp, "cloud"), { recursive: true, force: true });
 
     await git(["add", "-A"], { cwd: tmp });
