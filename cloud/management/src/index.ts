@@ -1,12 +1,4 @@
-/** SaaS deploy: full multi-org + cloud landing entitlements. */
-export function getEntitlementOverrides(): {
-  tier: "cloud";
-  multiOrganization: true;
-  cloudLanding: true;
-} {
-  return {
-    tier: "cloud",
-    multiOrganization: true,
-    cloudLanding: true,
-  };
+/** SaaS package marker — entitlements come from TUNTUN_LICENSE only. */
+export function getEntitlementOverrides(): null {
+  return null;
 }

@@ -53,4 +53,4 @@ export {
   resolveCloudManagementRoot,
   stubDashboardPath,
   stubManagementPath,
-} from "./cloud-paths";
+} from "./cloud-paths.ts";

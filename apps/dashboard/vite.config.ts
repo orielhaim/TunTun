@@ -14,13 +14,7 @@ const cloudDashboardSrc = path.join(resolveCloudDashboardRoot(repoRoot), "src");
 
 const config = defineConfig({
   envDir: path.resolve(import.meta.dirname, "../.."),
-  envPrefix: [
-    "VITE_",
-    "DASHBOARD_",
-    "MANAGEMENT_",
-    "CONTROL_PLANE_",
-    "TUNTUN_",
-  ],
+  envPrefix: ["VITE_", "DASHBOARD_", "MANAGEMENT_", "CONTROL_PLANE_"],
   resolve: {
     tsconfigPaths: true,
     alias: {

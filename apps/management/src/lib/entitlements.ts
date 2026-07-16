@@ -1,67 +1,48 @@
 import { existsSync } from "node:fs";
-import { join } from "node:path";
 import {
   COMMUNITY_ENTITLEMENTS,
-  type EntitlementOverrides,
   type Entitlements,
   entitlementsForTier,
-  type LicenseTier,
-  mergeEntitlements,
+  parseLicenseTier,
 } from "@tuntun/entitlements";
-import {
-  getRepoRoot,
-  hasCloudPackages,
-  resolveCloudManagementRoot,
-} from "@tuntun/env";
+import { getRepoRoot, hasCloudPackages } from "@tuntun/env";
 
-type LicenseFile = {
-  tier?: LicenseTier;
-  multiOrganization?: boolean;
-  cloudLanding?: boolean;
+type LicenseDocument = {
+  tier?: unknown;
 };
 
 let cached: Entitlements | null = null;
 
-function parseTier(value: string | undefined): LicenseTier | null {
-  if (value === "community" || value === "cloud" || value === "commercial") {
-    return value;
-  }
-  return null;
-}
-
-async function loadLicenseFile(
+/**
+ * Load license from `TUNTUN_LICENSE` (file path or https URL).
+ * Missing / invalid → community.
+ */
+async function loadLicenseDocument(
   env: NodeJS.ProcessEnv,
-): Promise<EntitlementOverrides | null> {
-  const path = env.TUNTUN_LICENSE_FILE?.trim();
-  if (!path || !existsSync(path)) return null;
-  try {
-    const raw = (await Bun.file(path).json()) as LicenseFile;
-    return {
-      tier: raw.tier,
-      multiOrganization: raw.multiOrganization,
-      cloudLanding: raw.cloudLanding,
-    };
-  } catch (err) {
-    console.warn(
-      "[entitlements] failed to read TUNTUN_LICENSE_FILE:",
-      err instanceof Error ? err.message : err,
-    );
-    return null;
-  }
-}
+): Promise<LicenseDocument | null> {
+  const ref = env.TUNTUN_LICENSE?.trim();
+  if (!ref) return null;
 
-async function loadCloudOverrides(): Promise<EntitlementOverrides | null> {
-  if (!hasCloudPackages()) return null;
   try {
-    const mod = (await import(
-      join(resolveCloudManagementRoot(), "src", "index.ts")
-    )) as {
-      getEntitlementOverrides?: () => EntitlementOverrides | null;
-    };
-    return mod.getEntitlementOverrides?.() ?? null;
+    if (/^https?:\/\//i.test(ref)) {
+      const response = await fetch(ref);
+      if (!response.ok) {
+        console.warn(
+          `[entitlements] TUNTUN_LICENSE fetch failed: ${response.status}`,
+        );
+        return null;
+      }
+      return (await response.json()) as LicenseDocument;
+    }
+
+    if (!existsSync(ref)) {
+      console.warn(`[entitlements] TUNTUN_LICENSE file not found: ${ref}`);
+      return null;
+    }
+    return (await Bun.file(ref).json()) as LicenseDocument;
   } catch (err) {
     console.warn(
-      "[entitlements] failed to load cloud management overrides:",
+      "[entitlements] failed to load TUNTUN_LICENSE:",
       err instanceof Error ? err.message : err,
     );
     return null;
@@ -69,33 +50,22 @@ async function loadCloudOverrides(): Promise<EntitlementOverrides | null> {
 }
 
 /**
- * Resolve product entitlements for this management process.
- *
- * Priority: TUNTUN_LICENSE_FILE → TUNTUN_LICENSE_TIER / TUNTUN_DEPLOYMENT=cloud
- * → cloud package overrides (when tier is cloud) → community default.
+ * Resolve product entitlements from the license document only.
+ * No license → community.
  */
 export async function resolveEntitlements(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<Entitlements> {
-  const fileOverrides = await loadLicenseFile(env);
-  const tierFromEnv =
-    parseTier(env.TUNTUN_LICENSE_TIER?.trim()) ??
-    (env.TUNTUN_DEPLOYMENT?.trim() === "cloud" ? "cloud" : null);
+  const doc = await loadLicenseDocument(env);
+  const tier = parseLicenseTier(doc?.tier) ?? "community";
+  let entitlements = entitlementsForTier(tier);
 
-  let base = entitlementsForTier(tierFromEnv ?? "community");
-
-  if (base.tier === "cloud") {
-    const cloudOverrides = await loadCloudOverrides();
-    base = mergeEntitlements(base, cloudOverrides);
+  // Landing UI lives in private-only cloud/; never claim it without that code.
+  if (entitlements.cloudLanding && !hasCloudPackages(getRepoRoot())) {
+    entitlements = { ...entitlements, cloudLanding: false };
   }
 
-  base = mergeEntitlements(base, fileOverrides);
-
-  if (base.cloudLanding && !hasCloudPackages(getRepoRoot())) {
-    base = { ...base, cloudLanding: false };
-  }
-
-  return base;
+  return entitlements;
 }
 
 export async function getEntitlements(): Promise<Entitlements> {

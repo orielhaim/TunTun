@@ -17,5 +17,5 @@ pre-commit:
 
 pre-push:
   jobs:
-    - name: block-cloud-to-public
-      run: bun run scripts/guard-public-push.ts {remote}
+    - name: oss-filtered-push
+      run: bun run scripts/guard-oss-push.ts {remote}

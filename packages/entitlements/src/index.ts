@@ -1,4 +1,4 @@
-export type LicenseTier = "community" | "cloud" | "commercial";
+export type LicenseTier = "community" | "cloud" | "enterprise";
 
 export type Entitlements = {
   tier: LicenseTier;
@@ -18,15 +18,17 @@ export const COMMUNITY_ENTITLEMENTS: Entitlements = {
   cloudLanding: false,
 };
 
+/** Cloud license: multi-org + marketing landing. */
 export const CLOUD_ENTITLEMENTS: Entitlements = {
   tier: "cloud",
   multiOrganization: true,
   cloudLanding: true,
 };
 
-export const COMMERCIAL_ENTITLEMENTS: Entitlements = {
-  tier: "commercial",
-  multiOrganization: true,
+/** Enterprise license: no extra product features yet. */
+export const ENTERPRISE_ENTITLEMENTS: Entitlements = {
+  tier: "enterprise",
+  multiOrganization: false,
   cloudLanding: false,
 };
 
@@ -34,8 +36,8 @@ export function entitlementsForTier(tier: LicenseTier): Entitlements {
   switch (tier) {
     case "cloud":
       return { ...CLOUD_ENTITLEMENTS };
-    case "commercial":
-      return { ...COMMERCIAL_ENTITLEMENTS };
+    case "enterprise":
+      return { ...ENTERPRISE_ENTITLEMENTS };
     default:
       return { ...COMMUNITY_ENTITLEMENTS };
   }
@@ -51,4 +53,11 @@ export function mergeEntitlements(
     ...overrides,
     tier: overrides.tier ?? base.tier,
   };
+}
+
+export function parseLicenseTier(value: unknown): LicenseTier | null {
+  if (value === "community" || value === "cloud" || value === "enterprise") {
+    return value;
+  }
+  return null;
 }

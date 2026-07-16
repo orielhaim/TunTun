@@ -1,10 +1,10 @@
 /**
- * Publish a filtered mirror of the current HEAD to the `public` remote,
- * excluding the `cloud/` directory.
+ * Publish a filtered mirror of HEAD to the OSS remote (no cloud/).
+ * Prefer `git push` (origin) which runs this via the pre-push hook.
  *
  * Usage:
- *   bun run scripts/sync-public.ts
- *   bun run scripts/sync-public.ts --force   # only when public history must be rewritten
+ *   bun run scripts/push-oss.ts
+ *   bun run scripts/push-oss.ts --force
  */
 
 import { mkdtemp, rm } from "node:fs/promises";
@@ -12,7 +12,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const force = process.argv.includes("--force");
-const remote = "public";
+const remoteArg = process.argv.find((a) => a.startsWith("--remote="));
+const remote = remoteArg?.slice("--remote=".length) || "origin";
 const branch = "main";
 
 async function git(
@@ -35,37 +36,57 @@ async function git(
   return { code, stdout: stdout.trim(), stderr: stderr.trim() };
 }
 
+async function rewindPastSyncCommits(cwd: string): Promise<void> {
+  let sha = (await git(["rev-parse", "HEAD"], { cwd })).stdout;
+  for (let i = 0; i < 50; i++) {
+    const { stdout: subject } = await git(["log", "-1", "--format=%s", sha], {
+      cwd,
+    });
+    if (!subject.startsWith("sync:")) {
+      break;
+    }
+    const parent = await git(["rev-parse", `${sha}^`], {
+      cwd,
+      allowFail: true,
+    });
+    if (parent.code !== 0 || !parent.stdout) break;
+    sha = parent.stdout;
+  }
+  await git(["reset", "--hard", sha], { cwd });
+}
+
 async function main() {
   const { stdout: remoteUrl } = await git(["remote", "get-url", remote]);
-  const { stdout: headSha } = await git(["rev-parse", "--short", "HEAD"]);
   const { stdout: headFull } = await git(["rev-parse", "HEAD"]);
+  const { stdout: subject } = await git(["log", "-1", "--format=%s", "HEAD"]);
+  const { stdout: body } = await git(["log", "-1", "--format=%b", "HEAD"]);
   const { stdout: repoRoot } = await git(["rev-parse", "--show-toplevel"]);
 
-  const tmp = await mkdtemp(join(tmpdir(), "tuntun-sync-public-"));
-  console.log(`Syncing filtered tree to ${remote} (${remoteUrl})`);
+  const message = body ? `${subject}\n\n${body}`.trim() : subject;
+
+  const tmp = await mkdtemp(join(tmpdir(), "tuntun-push-oss-"));
+  console.log(`Publishing filtered tree to ${remote} (${remoteUrl})`);
   console.log(`Source: ${headFull}`);
 
   try {
     const clone = await git(
-      ["clone", "--depth", "1", "--branch", branch, remoteUrl, tmp],
+      ["clone", "--depth", "50", "--branch", branch, remoteUrl, tmp],
       { allowFail: true },
     );
 
     if (clone.code !== 0) {
-      console.log(
-        "Public branch missing or empty; initializing fresh clone...",
-      );
+      console.log("OSS branch missing or empty; initializing fresh clone...");
       await git(["init", "-b", branch], { cwd: tmp });
       await git(["remote", "add", "origin", remoteUrl], { cwd: tmp });
+    } else if (force) {
+      await rewindPastSyncCommits(tmp);
     }
 
-    // Clear public clone contents
     await git(["rm", "-rf", "--ignore-unmatch", "."], {
       cwd: tmp,
       allowFail: true,
     });
 
-    // Export HEAD via archive (does not touch the main worktree/index)
     const archive = Bun.spawn(
       ["git", "-C", repoRoot, "archive", "--format=tar", "HEAD"],
       { stdout: "pipe", stderr: "pipe" },
@@ -92,21 +113,16 @@ async function main() {
       cwd: tmp,
     });
     if (!porcelain) {
-      console.log(
-        "Public remote already matches filtered tree; nothing to do.",
-      );
+      console.log("OSS remote already matches filtered tree; nothing to do.");
       return;
     }
 
-    await git(
-      ["commit", "-m", `sync: mirror from private@${headSha} (without cloud/)`],
-      { cwd: tmp },
-    );
+    await git(["commit", "-m", message], { cwd: tmp });
 
     const pushArgs = ["push", "origin", `HEAD:${branch}`];
     if (force) pushArgs.push("--force");
     await git(pushArgs, { cwd: tmp });
-    console.log(`Pushed filtered mirror to ${remote}/${branch}`);
+    console.log(`Pushed filtered tree to ${remote}/${branch}`);
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }
