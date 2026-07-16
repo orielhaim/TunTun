@@ -18,7 +18,7 @@ import {
 } from "../../lib/control-plane-client";
 import { db } from "../../lib/db";
 import { toIso } from "../../lib/serialize";
-import { getAuth, requireAdmin, requireAuth } from "./middleware/authz";
+import { getAuth, requireAuth, requirePermission } from "./middleware/authz";
 import { notFound, sessionPlugin } from "./middleware/session";
 
 function serializeTransfer(row: typeof schema.fileTransfers.$inferSelect) {
@@ -120,7 +120,7 @@ export const transfersRoutes = new Elysia()
   )
   .group("", (app) =>
     app
-      .use(requireAdmin)
+      .use(requirePermission({ transfer: ["create", "accept", "reject"] }))
       .post(
         "/organizations/:orgId/transfers",
         async ({ authContext, body }) => {

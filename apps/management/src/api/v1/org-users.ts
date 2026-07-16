@@ -5,20 +5,20 @@ import { auth } from "../../auth";
 import { writeAudit } from "../../lib/audit";
 import { db } from "../../lib/db";
 import { hasFeature } from "../../lib/entitlements";
-import { getAuth, requireAdmin, requireAuth } from "./middleware/authz";
+import { getAuth, requireAuth, requirePermission } from "./middleware/authz";
 import { badRequest, sessionPlugin } from "./middleware/session";
 
 const createOrgUserBody = z.object({
   email: z.string().email(),
   password: z.string().min(8),
   name: z.string().min(1),
-  role: z.enum(["member", "admin"]).default("member"),
+  role: z.string().min(1).default("member"),
 });
 
 export const orgUsersRoutes = new Elysia()
   .use(sessionPlugin)
   .use(requireAuth)
-  .use(requireAdmin)
+  .use(requirePermission({ member: ["create"] }))
   .post(
     "/organizations/:orgId/users",
     async ({ authContext, body, request }) => {

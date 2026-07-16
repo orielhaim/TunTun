@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
+import { useCan } from "@/hooks/use-permission";
 import { useActiveOrganization } from "@/lib/auth-client";
 import {
   useMachines,
@@ -38,8 +38,7 @@ type ConsentMode = "auto_accept" | "prompt" | "deny";
 function TransfersPage() {
   const { data: activeOrg } = useActiveOrganization();
   const orgId = activeOrg?.id;
-  const { data: role } = useMemberRole(orgId);
-  const isAdmin = isAdminRole(role);
+  const { data: canManage = false } = useCan(orgId, "transfer", "accept");
   const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [consentEndpointId, setConsentEndpointId] = useState<string>("");
@@ -144,7 +143,7 @@ function TransfersPage() {
         header: "",
         cell: ({ row }) => {
           const t = row.original;
-          if (t.status !== "pending" || !isAdmin || !t.receiverEndpointId) {
+          if (t.status !== "pending" || !canManage || !t.receiverEndpointId) {
             return null;
           }
           return (
@@ -180,7 +179,7 @@ function TransfersPage() {
         },
       },
     ],
-    [accept, reject, isAdmin],
+    [accept, reject, canManage],
   );
 
   return (
@@ -190,7 +189,7 @@ function TransfersPage() {
         description="P2P file transfers across the mesh"
       />
 
-      {isAdmin && machines && machines.length > 0 ? (
+      {canManage && machines && machines.length > 0 ? (
         <div className="flex flex-wrap items-end gap-4">
           <div className="space-y-2">
             <Label htmlFor="consent-machine">Machine consent</Label>

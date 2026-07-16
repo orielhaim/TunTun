@@ -18,7 +18,7 @@ import { db } from "../../lib/db";
 import { deviceDisplayName } from "../../lib/device-metadata";
 import { bumpNetworkAndNotify, notifyEntityChanged } from "../../lib/notify";
 import { toIso } from "../../lib/serialize";
-import { getAuth, requireAdmin, requireAuth } from "./middleware/authz";
+import { getAuth, requireAuth, requirePermission } from "./middleware/authz";
 import { conflict, notFound, sessionPlugin } from "./middleware/session";
 
 function serializeTunnel(
@@ -266,7 +266,7 @@ export const tunnelsRoutes = new Elysia()
   )
   .group("", (app) =>
     app
-      .use(requireAdmin)
+      .use(requirePermission({ tunnel: ["create", "update", "delete"] }))
       .post(
         "/organizations/:orgId/networks/:networkId/tunnels",
         async ({ authContext, params, body }) => {

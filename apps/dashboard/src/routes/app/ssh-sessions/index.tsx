@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
+import { useCan } from "@/hooks/use-permission";
 import { useActiveOrganization } from "@/lib/auth-client";
 import {
   useSshRecording,
@@ -44,8 +44,11 @@ type SessionRow = NonNullable<
 function SshSessionsPage() {
   const { data: activeOrg } = useActiveOrganization();
   const orgId = activeOrg?.id;
-  const { data: role } = useMemberRole(orgId);
-  const isAdmin = isAdminRole(role);
+  const { data: canTerminate = false } = useCan(
+    orgId,
+    "sshSession",
+    "terminate",
+  );
   const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [playSessionId, setPlaySessionId] = useState<string | null>(null);
@@ -157,7 +160,7 @@ function SshSessionsPage() {
                   Play
                 </Button>
               ) : null}
-              {isAdmin && s.status === "active" ? (
+              {canTerminate && s.status === "active" ? (
                 <Button
                   size="sm"
                   variant="destructive"
@@ -171,7 +174,7 @@ function SshSessionsPage() {
         },
       },
     ],
-    [isAdmin, recordingSessionIds],
+    [canTerminate, recordingSessionIds],
   );
 
   return (

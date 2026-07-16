@@ -1,7 +1,6 @@
 import parse from "parse-duration";
 import { z } from "zod";
 
-/** Parse a human duration string (e.g. `3d`, `12h`, `30m`, `50s`) to seconds. */
 export function parseHumanDuration(raw: string): number | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;
@@ -10,15 +9,10 @@ export function parseHumanDuration(raw: string): number | null {
   return Math.floor(secs);
 }
 
-/** Convert seconds to a PostgreSQL interval literal input. */
 export function secondsToPgInterval(seconds: number): string {
   return `${Math.floor(seconds)} seconds`;
 }
 
-/**
- * Parse PostgreSQL `interval` text to seconds.
- * Handles verbose forms (`50 seconds`, `7 days`) and time forms (`00:00:50`, `3 04:05:06`).
- */
 export function pgIntervalToSeconds(value: string): number | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
@@ -38,7 +32,6 @@ export function pgIntervalToSeconds(value: string): number | null {
   return null;
 }
 
-/** Compact duration label (e.g. `50s`, `1m30s`, `7d`, `1w2d`). */
 export function formatDurationCompact(seconds: number): string {
   const secs = Math.floor(seconds);
   if (secs <= 0) return "0s";
@@ -71,7 +64,6 @@ export function formatDurationCompact(seconds: number): string {
   return parts.join("");
 }
 
-/** Longer human label (e.g. `50 seconds`, `1 minute, 30 seconds`). */
 export function formatDurationLong(seconds: number): string {
   const secs = Math.floor(seconds);
   if (secs <= 0) return "0 seconds";

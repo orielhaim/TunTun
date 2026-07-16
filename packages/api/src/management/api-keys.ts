@@ -1,6 +1,5 @@
 import { z } from "zod";
 
-/** Known API key scopes - enforced in code, not stored in separate tables. */
 export const API_KEY_SCOPE_VALUES = ["sdk:enroll"] as const;
 
 export type ApiKeyScope = (typeof API_KEY_SCOPE_VALUES)[number];
@@ -38,7 +37,6 @@ export const createApiKeyBody = z
   .object({
     name: z.string().min(1).max(128),
     scopes: z.array(apiKeyScopeSchema).min(1),
-    /** Omit or pass null for all networks; otherwise an explicit allow-list. */
     networkIds: z.array(z.string().uuid()).nullable().optional(),
     expiresAt: z.string().datetime().optional(),
   })

@@ -38,7 +38,7 @@ export const deviceStatusSchema = z.enum([
   "expired",
 ]);
 
-export const orgRoleSchema = z.enum(["owner", "admin", "member"]);
+export const orgRoleSchema = z.string().min(1);
 
 export const paginationQuery = z.object({
   cursor: z.coerce.number().int().nonnegative().optional(),

@@ -7,7 +7,7 @@ import { blake3 } from "hash-wasm";
 import { writeAudit } from "../../lib/audit";
 import { db } from "../../lib/db";
 import { toIso } from "../../lib/serialize";
-import { getAuth, requireAdmin, requireAuth } from "./middleware/authz";
+import { getAuth, requireAuth, requirePermission } from "./middleware/authz";
 import { notFound, sessionPlugin } from "./middleware/session";
 
 function serializeToken(row: typeof schema.enrollmentTokens.$inferSelect) {
@@ -53,7 +53,7 @@ export const enrollmentTokensRoutes = new Elysia()
   )
   .group("", (app) =>
     app
-      .use(requireAdmin)
+      .use(requirePermission({ enrollment: ["create"] }))
       .post(
         "/organizations/:orgId/networks/:networkId/enrollment-tokens",
         async ({ authContext, params, body }) => {
@@ -110,7 +110,7 @@ export const enrollmentTokensRoutes = new Elysia()
   )
   .group("", (app) =>
     app
-      .use(requireAdmin)
+      .use(requirePermission({ enrollment: ["revoke"] }))
       .delete(
         "/organizations/:orgId/networks/:networkId/enrollment-tokens/:tokenHash",
         async ({ authContext, params }) => {

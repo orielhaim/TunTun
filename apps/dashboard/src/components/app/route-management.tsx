@@ -551,11 +551,11 @@ export function MachineConnectedRoutesDiagram({
 }
 
 export function buildNetworkRouteColumns({
-  isAdmin,
+  canManage,
   onToggle,
   onDelete,
 }: {
-  isAdmin: boolean;
+  canManage: boolean;
   onToggle: (route: UnifiedRoute) => void;
   onDelete: (route: UnifiedRoute) => void;
 }): ColumnDef<UnifiedRoute>[] {
@@ -607,7 +607,7 @@ export function buildNetworkRouteColumns({
         </Badge>
       ),
     },
-    ...(isAdmin
+    ...(canManage
       ? [
           {
             id: "actions",
@@ -637,11 +637,11 @@ export function buildNetworkRouteColumns({
 }
 
 export function buildMachineRouteColumns({
-  isAdmin,
+  canManage,
   onToggle,
   onDelete,
 }: {
-  isAdmin: boolean;
+  canManage: boolean;
   onToggle: (route: UnifiedRoute) => void;
   onDelete: (route: UnifiedRoute) => void;
 }): ColumnDef<UnifiedRoute>[] {
@@ -681,7 +681,7 @@ export function buildMachineRouteColumns({
         </span>
       ),
     },
-    ...(isAdmin
+    ...(canManage
       ? [
           {
             id: "actions",

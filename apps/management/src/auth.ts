@@ -1,9 +1,11 @@
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { sso } from "@better-auth/sso";
+import { ac, member, admin as orgAdmin, owner } from "@tunnet/api/auth";
 import { getDb, schema } from "@tunnet/db";
 import { getDashboardUrl, getManagementUrl } from "@tunnet/env";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { APIError } from "better-auth/api";
 import {
   admin,
   bearer,
@@ -13,6 +15,7 @@ import {
 } from "better-auth/plugins";
 import { eq } from "drizzle-orm";
 
+import { hierarchyBeforeHook } from "./auth/hierarchy-hooks";
 import { createDefaultNetwork } from "./lib/default-network";
 import { hasFeature } from "./lib/entitlements";
 
@@ -114,6 +117,7 @@ export const auth = betterAuth({
       organization: schema.organization,
       member: schema.member,
       invitation: schema.invitation,
+      organizationRole: schema.organizationRole,
       ssoProvider: schema.ssoProvider,
       jwks: schema.jwks,
       oauthClient: schema.oauthClient,
@@ -146,12 +150,25 @@ export const auth = betterAuth({
     }
     return base;
   },
+  hooks: {
+    before: hierarchyBeforeHook,
+  },
   plugins: [
     admin({
       defaultRole: "user",
       adminRoles: ["admin"],
     }),
     organization({
+      ac,
+      roles: {
+        owner,
+        admin: orgAdmin,
+        member,
+      },
+      dynamicAccessControl: {
+        enabled: true,
+        maximumRolesPerOrganization: 50,
+      },
       allowUserToCreateOrganization: async (user) =>
         canUserCreateOrganization(user),
       organizationLimit: async (user) => hasReachedOrganizationLimit(user),
@@ -166,13 +183,29 @@ export const auth = betterAuth({
             },
           },
         },
+        organizationRole: {
+          additionalFields: {
+            position: {
+              type: "number",
+              required: true,
+              defaultValue: 101,
+              input: true,
+            },
+            color: {
+              type: "string",
+              required: false,
+              input: true,
+            },
+          },
+        },
       },
       organizationHooks: {
         beforeCreateInvitation: async () => {
           if (!(await hasFeature("openSignUp"))) {
-            throw new Error(
-              "Invitations require cloud signup. Create users from the admin panel instead.",
-            );
+            throw new APIError("BAD_REQUEST", {
+              message:
+                "Invitations require cloud signup. Create users from the admin panel instead.",
+            });
           }
         },
         afterCreateOrganization: async ({ organization, user }) => {
@@ -221,7 +254,6 @@ export const auth = betterAuth({
   ],
 });
 
-/** Ensure first-party OAuth clients exist (CLI + dashboard). */
 export async function ensureTrustedOAuthClients() {
   const apiOrigin = getManagementUrl();
 

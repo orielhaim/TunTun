@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
+import { useCan } from "@/hooks/use-permission";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useTunnels } from "@/lib/queries/management";
 
@@ -32,8 +32,7 @@ type TunnelRow = NonNullable<ReturnType<typeof useTunnels>["data"]>[number];
 function TunnelsPage() {
   const { data: activeOrg } = useActiveOrganization();
   const orgId = activeOrg?.id;
-  const { data: role } = useMemberRole(orgId);
-  const isAdmin = isAdminRole(role);
+  const { data: canCreate = false } = useCan(orgId, "tunnel", "create");
   const { data: tunnels, isPending } = useTunnels(orgId);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -172,7 +171,7 @@ function TunnelsPage() {
         title="Tunnels"
         description="Public URLs that forward to ports on your machines."
         actions={
-          isAdmin ? (
+          canCreate ? (
             <Button onClick={() => setCreateOpen(true)}>
               <PlusIcon className="mr-2 size-4" />
               Create tunnel
@@ -219,7 +218,7 @@ function TunnelsPage() {
             "Share the https://… URL - or run tunnet tunnel <port> from the CLI.",
           ]}
           action={
-            isAdmin ? (
+            canCreate ? (
               <Button onClick={() => setCreateOpen(true)}>Create tunnel</Button>
             ) : undefined
           }

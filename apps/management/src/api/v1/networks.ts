@@ -7,7 +7,7 @@ import { writeAudit } from "../../lib/audit";
 import { db } from "../../lib/db";
 import { bumpNetworkAndNotify } from "../../lib/notify";
 import { toIso } from "../../lib/serialize";
-import { getAuth, requireAdmin, requireAuth } from "./middleware/authz";
+import { getAuth, requireAuth, requirePermission } from "./middleware/authz";
 import { notFound, sessionPlugin } from "./middleware/session";
 
 function serializeNetwork(row: typeof schema.networks.$inferSelect) {
@@ -48,7 +48,7 @@ export const networksRoutes = new Elysia()
   )
   .group("", (app) =>
     app
-      .use(requireAdmin)
+      .use(requirePermission({ network: ["create"] }))
       .post("/organizations/:orgId/networks", async ({ authContext, body }) => {
         const auth = getAuth({ authContext });
         const parsed = createNetworkBody.parse(body);
@@ -85,7 +85,7 @@ export const networksRoutes = new Elysia()
   )
   .group("", (app) =>
     app
-      .use(requireAdmin)
+      .use(requirePermission({ network: ["update"] }))
       .patch(
         "/organizations/:orgId/networks/:networkId",
         async ({ authContext, params, body }) => {
@@ -131,7 +131,7 @@ export const networksRoutes = new Elysia()
   )
   .group("", (app) =>
     app
-      .use(requireAdmin)
+      .use(requirePermission({ network: ["delete"] }))
       .delete(
         "/organizations/:orgId/networks/:networkId",
         async ({ authContext, params }) => {

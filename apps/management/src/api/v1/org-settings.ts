@@ -13,7 +13,7 @@ import { Elysia } from "elysia";
 
 import { writeAudit } from "../../lib/audit";
 import { db } from "../../lib/db";
-import { getAuth, requireAdmin, requireAuth } from "./middleware/authz";
+import { getAuth, requireAuth, requirePermission } from "./middleware/authz";
 import { badRequest, sessionPlugin } from "./middleware/session";
 
 /** Store durations as PG-parseable interval text (`N seconds`). */
@@ -82,7 +82,7 @@ export const orgSettingsRoutes = new Elysia()
   })
   .group("", (app) =>
     app
-      .use(requireAdmin)
+      .use(requirePermission({ organization: ["update"] }))
       .patch(
         "/organizations/:orgId/settings",
         async ({ authContext, body }) => {

@@ -1,5 +1,6 @@
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { ssoClient } from "@better-auth/sso/client";
+import { ac, admin, member, owner } from "@tunnet/api/auth";
 import {
   adminClient,
   deviceAuthorizationClient,
@@ -18,12 +19,35 @@ export const authClient = createAuthClient({
   plugins: [
     adminClient(),
     organizationClient({
+      ac,
+      roles: {
+        owner,
+        admin,
+        member,
+      },
+      dynamicAccessControl: {
+        enabled: true,
+      },
       schema: inferOrgAdditionalFields({
         organization: {
           additionalFields: {
             quickEnrollEnabled: {
               type: "boolean",
+              required: false,
               defaultValue: true,
+            },
+          },
+        },
+        organizationRole: {
+          additionalFields: {
+            position: {
+              type: "number",
+              required: false,
+              defaultValue: 101,
+            },
+            color: {
+              type: "string",
+              required: false,
             },
           },
         },

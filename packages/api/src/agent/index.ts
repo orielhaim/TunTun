@@ -1,7 +1,5 @@
 import { z } from "zod";
 
-/** Mirrors tunnet-common agent protocol shapes (documentation / client typing). */
-
 export const enrollRequestSchema = z
   .object({
     enrollment_token: z.string().optional(),

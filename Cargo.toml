@@ -101,7 +101,7 @@ tun-rs = { version = "2", features = ["async_tokio"] }
 portable-pty = "0.9"
 rusqlite = { version = "0.39", features = ["bundled"] }
 
-# napi-rs v3
+# napi-rs
 napi = { version = "3", features = [
   "async",
   "tokio_rt",

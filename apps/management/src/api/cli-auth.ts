@@ -3,7 +3,6 @@ import { Elysia } from "elysia";
 
 import { OAUTH_CLIENT_CLI } from "../auth";
 
-/** Public CLI auth discovery (device authorization / RFC 8628). */
 export const cliAuthRoutes = new Elysia().get("/auth/cli/config", () => {
   const base = getManagementUrl();
   const web = getDashboardUrl();

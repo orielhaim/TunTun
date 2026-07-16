@@ -12,7 +12,7 @@ import { PageToolbar } from "@/components/app/page-toolbar";
 import { RegisterRelayDialog } from "@/components/app/register-relay-dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
+import { useCan } from "@/hooks/use-permission";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useRelays } from "@/lib/queries/management";
 
@@ -23,8 +23,7 @@ export const Route = createFileRoute("/app/relays/")({
 function RelaysPage() {
   const { data: activeOrg } = useActiveOrganization();
   const orgId = activeOrg?.id;
-  const { data: role } = useMemberRole(orgId);
-  const isAdmin = isAdminRole(role);
+  const { data: canCreate = false } = useCan(orgId, "relay", "create");
   const { data: relays, isPending } = useRelays(orgId);
   const [search, setSearch] = useState("");
   const [registerOpen, setRegisterOpen] = useState(false);
@@ -123,7 +122,7 @@ function RelaysPage() {
         title="Relays"
         description="Infrastructure that terminates public tunnels for your organization."
         actions={
-          isAdmin ? (
+          canCreate ? (
             <Button onClick={() => setRegisterOpen(true)}>
               <PlusIcon className="mr-2 size-4" />
               Register relay
@@ -147,7 +146,7 @@ function RelaysPage() {
           title="No relays yet"
           description="Register a self-hosted relay to terminate public tunnel traffic."
           action={
-            isAdmin ? (
+            canCreate ? (
               <Button onClick={() => setRegisterOpen(true)}>
                 Register relay
               </Button>

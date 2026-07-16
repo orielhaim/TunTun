@@ -40,7 +40,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
+import { useCan } from "@/hooks/use-permission";
 import {
   seedPresenceCache,
   usePresenceStream,
@@ -322,8 +322,10 @@ function MachineDetailPage() {
   const { endpointId } = Route.useParams();
   const { data: activeOrg } = useActiveOrganization();
   const orgId = activeOrg?.id;
-  const { data: role } = useMemberRole(orgId);
-  const isAdmin = isAdminRole(role);
+  const { data: canManageDevice = false } = useCan(orgId, "device", "update");
+  const { data: canCreateTunnel = false } = useCan(orgId, "tunnel", "create");
+  const { data: canCreateServe = false } = useCan(orgId, "serve", "create");
+  const { data: canUpdateRoute = false } = useCan(orgId, "route", "update");
   const {
     data: device,
     isPending,
@@ -474,7 +476,7 @@ function MachineDetailPage() {
             <TabsTrigger value="system" className="rounded-none px-3">
               System
             </TabsTrigger>
-            {isAdmin ? (
+            {canManageDevice ? (
               <TabsTrigger value="settings" className="rounded-none px-3">
                 Settings
               </TabsTrigger>
@@ -640,7 +642,7 @@ function MachineDetailPage() {
             networkId={networkId}
             endpointId={endpointId}
             hostname={device.name}
-            isAdmin={isAdmin}
+            canManage={canUpdateRoute}
           />
         </TabsContent>
 
@@ -649,7 +651,7 @@ function MachineDetailPage() {
             <p className="text-muted-foreground text-sm">
               Public tunnels originating from this machine.
             </p>
-            {isAdmin ? (
+            {canCreateTunnel ? (
               <Button size="sm" onClick={() => setCreateTunnelOpen(true)}>
                 <PlusIcon className="mr-2 size-4" />
                 Create tunnel
@@ -661,7 +663,7 @@ function MachineDetailPage() {
               title="No tunnels"
               description="Create a tunnel to expose a local port publicly."
               action={
-                isAdmin ? (
+                canCreateTunnel ? (
                   <Button onClick={() => setCreateTunnelOpen(true)}>
                     Create tunnel
                   </Button>
@@ -699,7 +701,7 @@ function MachineDetailPage() {
             <p className="text-muted-foreground text-sm">
               Mesh serves published from this machine.
             </p>
-            {isAdmin ? (
+            {canCreateServe ? (
               <Button size="sm" onClick={() => setCreateServeOpen(true)}>
                 <PlusIcon className="mr-2 size-4" />
                 Create serve
@@ -711,7 +713,7 @@ function MachineDetailPage() {
               title="No serves"
               description="Publish a local port for other machines on the mesh."
               action={
-                isAdmin ? (
+                canCreateServe ? (
                   <Button onClick={() => setCreateServeOpen(true)}>
                     Create serve
                   </Button>
@@ -756,7 +758,7 @@ function MachineDetailPage() {
           <SystemTab metadata={device.metadata} />
         </TabsContent>
 
-        {isAdmin ? (
+        {canManageDevice ? (
           <TabsContent value="settings" className="mt-0">
             <div className="mx-auto flex max-w-2xl flex-col gap-4">
               <SettingsSection

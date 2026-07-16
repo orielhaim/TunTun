@@ -6,7 +6,7 @@ import { Elysia } from "elysia";
 import { writeAudit } from "../../lib/audit";
 import { db } from "../../lib/db";
 import { toIso } from "../../lib/serialize";
-import { getAuth, requireAdmin, requireAuth } from "./middleware/authz";
+import { getAuth, requireAuth, requirePermission } from "./middleware/authz";
 import { notFound, sessionPlugin } from "./middleware/session";
 
 function serializeSettings(
@@ -53,7 +53,7 @@ export const tunnelSettingsRoutes = new Elysia()
   })
   .group("", (app) =>
     app
-      .use(requireAdmin)
+      .use(requirePermission({ tunnel: ["update"] }))
       .patch(
         "/organizations/:orgId/tunnel-settings",
         async ({ authContext, body }) => {

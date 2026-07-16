@@ -10,7 +10,7 @@ import { writeAudit } from "../../lib/audit";
 import { db } from "../../lib/db";
 import { bumpNetworkAndNotify, bumpOrgAndNotify } from "../../lib/notify";
 import { toIso } from "../../lib/serialize";
-import { getAuth, requireAdmin, requireAuth } from "./middleware/authz";
+import { getAuth, requireAuth, requirePermission } from "./middleware/authz";
 import { notFound, sessionPlugin } from "./middleware/session";
 
 function serializePolicy(row: typeof schema.policies.$inferSelect) {
@@ -73,7 +73,7 @@ export const policiesRoutes = new Elysia()
   })
   .group("", (app) =>
     app
-      .use(requireAdmin)
+      .use(requirePermission({ policy: ["create"] }))
       .post(
         "/organizations/:orgId/networks/:networkId/policies",
         async ({ authContext, params, body }) => {
@@ -164,7 +164,7 @@ export const policiesRoutes = new Elysia()
   )
   .group("", (app) =>
     app
-      .use(requireAdmin)
+      .use(requirePermission({ policy: ["update"] }))
       .patch(
         "/organizations/:orgId/networks/:networkId/policies/:policyId",
         async ({ authContext, params, body }) => {
@@ -254,7 +254,7 @@ export const policiesRoutes = new Elysia()
   )
   .group("", (app) =>
     app
-      .use(requireAdmin)
+      .use(requirePermission({ policy: ["delete"] }))
       .delete(
         "/organizations/:orgId/networks/:networkId/policies/:policyId",
         async ({ authContext, params }) => {

@@ -9,7 +9,7 @@ import { writeAudit } from "../../lib/audit";
 import { db } from "../../lib/db";
 import { notifyEntityChanged } from "../../lib/notify";
 import { toIso } from "../../lib/serialize";
-import { getAuth, requireAdmin, requireAuth } from "./middleware/authz";
+import { getAuth, requireAuth, requirePermission } from "./middleware/authz";
 import { notFound, sessionPlugin } from "./middleware/session";
 
 function serializeRelay(row: typeof schema.relays.$inferSelect) {
@@ -112,7 +112,7 @@ export const relaysRoutes = new Elysia()
   )
   .group("", (app) =>
     app
-      .use(requireAdmin)
+      .use(requirePermission({ relay: ["create", "update", "delete"] }))
       .post("/organizations/:orgId/relays", async ({ authContext, body }) => {
         const auth = getAuth({ authContext });
         const parsed = createRelayBody.parse(body);

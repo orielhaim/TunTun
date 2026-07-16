@@ -10,7 +10,7 @@ import { deviceDisplayName } from "../../lib/device-metadata";
 import { issueLeafCertificate } from "../../lib/internal-ca";
 import { bumpNetworkAndNotify, notifyEntityChanged } from "../../lib/notify";
 import { toIso } from "../../lib/serialize";
-import { getAuth, requireAdmin, requireAuth } from "./middleware/authz";
+import { getAuth, requireAuth, requirePermission } from "./middleware/authz";
 import { notFound, sessionPlugin } from "./middleware/session";
 
 function serializeServe(
@@ -149,7 +149,7 @@ export const servesRoutes = new Elysia()
   )
   .group("", (app) =>
     app
-      .use(requireAdmin)
+      .use(requirePermission({ serve: ["create", "update", "delete"] }))
       .post(
         "/organizations/:orgId/networks/:networkId/serves",
         async ({ authContext, params, body }) => {

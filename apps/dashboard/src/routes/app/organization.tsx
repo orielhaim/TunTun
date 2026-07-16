@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
+import { useCan } from "@/hooks/use-permission";
 import { authClient } from "@/lib/auth-client";
 import {
   useInternalCa,
@@ -218,9 +218,9 @@ function ToggleRow({
 function OrganizationSettingsPage() {
   const { data: activeOrg } = authClient.useActiveOrganization();
   const orgId = activeOrg?.id;
-  const { data: role } = useMemberRole(orgId);
-  const isAdmin = isAdminRole(role);
-  const isOwner = role?.includes("owner") ?? false;
+  const { data: canUpdate = false } = useCan(orgId, "organization", "update");
+  const { data: canDelete = false } = useCan(orgId, "organization", "delete");
+  const { data: canManageSso = false } = useCan(orgId, "sso", "update");
   const [section, setSection] = useState<SettingsSection>("general");
   const [name, setName] = useState(activeOrg?.name ?? "");
   const [quickEnrollEnabled, setQuickEnrollEnabled] = useState(
@@ -270,7 +270,7 @@ function OrganizationSettingsPage() {
       "certificate",
       "api-keys",
       "sso",
-      ...(isOwner ? (["danger"] as const) : []),
+      ...(canDelete ? (["danger"] as const) : []),
     ] as const
   ).filter(Boolean) as SettingsSection[];
 
@@ -337,10 +337,10 @@ function OrganizationSettingsPage() {
   }, [activeOrg]);
 
   useEffect(() => {
-    if (section === "danger" && !isOwner) {
+    if (section === "danger" && !canDelete) {
       setSection("general");
     }
-  }, [section, isOwner]);
+  }, [section, canDelete]);
 
   async function saveGeneral(e: React.FormEvent) {
     e.preventDefault();
@@ -498,7 +498,7 @@ function OrganizationSettingsPage() {
               title="Organization profile"
               description="Basic identity and how machines join this organization."
               footer={
-                isAdmin ? (
+                canUpdate ? (
                   <Button
                     type="submit"
                     form="org-general-form"
@@ -520,7 +520,7 @@ function OrganizationSettingsPage() {
                     id="org-name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    disabled={!isAdmin}
+                    disabled={!canUpdate}
                   />
                 </FieldBlock>
                 <FieldBlock
@@ -535,7 +535,7 @@ function OrganizationSettingsPage() {
                   description="Allow machines to join without a token. They stay pending until an admin approves."
                   checked={quickEnrollEnabled}
                   onCheckedChange={setQuickEnrollEnabled}
-                  disabled={!isAdmin}
+                  disabled={!canUpdate}
                 />
               </form>
             </SettingsPanel>
@@ -546,7 +546,7 @@ function OrganizationSettingsPage() {
               title="Auto cleanup"
               description="Expire or remove machines that have not connected to the control plane for a while. Per-machine overrides still apply when this is off."
               footer={
-                isAdmin ? (
+                canUpdate ? (
                   <Button
                     type="submit"
                     form="org-machines-form"
@@ -574,7 +574,7 @@ function OrganizationSettingsPage() {
                     description="Apply the org default inactivity policy to enrolled machines."
                     checked={cleanupEnabled}
                     onCheckedChange={setCleanupEnabled}
-                    disabled={!isAdmin}
+                    disabled={!canUpdate}
                   />
 
                   <div
@@ -597,7 +597,7 @@ function OrganizationSettingsPage() {
                             value={inactivityAfter}
                             onChange={(e) => setInactivityAfter(e.target.value)}
                             placeholder="7d"
-                            disabled={!isAdmin}
+                            disabled={!canUpdate}
                             className="max-w-xs"
                           />
                         </FieldBlock>
@@ -611,14 +611,15 @@ function OrganizationSettingsPage() {
                                 <button
                                   key={mode.value}
                                   type="button"
-                                  disabled={!isAdmin}
+                                  disabled={!canUpdate}
                                   onClick={() => setCleanupMode(mode.value)}
                                   className={cn(
                                     "rounded-lg border px-3.5 py-3 text-left transition-colors",
                                     selected
                                       ? "border-foreground/25 bg-secondary/70 ring-1 ring-foreground/10"
                                       : "border-border/70 hover:bg-secondary/40",
-                                    !isAdmin && "cursor-not-allowed opacity-60",
+                                    !canUpdate &&
+                                      "cursor-not-allowed opacity-60",
                                   )}
                                 >
                                   <span className="block text-sm font-medium">
@@ -654,7 +655,7 @@ function OrganizationSettingsPage() {
                                   setHardDeleteAfter(e.target.value)
                                 }
                                 placeholder="7d"
-                                disabled={!isAdmin}
+                                disabled={!canUpdate}
                                 className="max-w-xs"
                               />
                             </FieldBlock>
@@ -689,7 +690,7 @@ function OrganizationSettingsPage() {
                 </>
               }
               footer={
-                isAdmin ? (
+                canUpdate ? (
                   <Button
                     type="submit"
                     form="org-tunnels-form"
@@ -717,7 +718,7 @@ function OrganizationSettingsPage() {
                       onValueChange={(value) =>
                         setDefaultRelayId(value ?? "auto")
                       }
-                      disabled={!isAdmin}
+                      disabled={!canUpdate}
                     >
                       <SelectTrigger className="max-w-md">
                         <SelectValue />
@@ -748,7 +749,7 @@ function OrganizationSettingsPage() {
                         placeholder="Never"
                         value={defaultTtl}
                         onChange={(e) => setDefaultTtl(e.target.value)}
-                        disabled={!isAdmin}
+                        disabled={!canUpdate}
                       />
                     </FieldBlock>
                     <FieldBlock
@@ -762,7 +763,7 @@ function OrganizationSettingsPage() {
                         max={1000}
                         value={maxTunnels}
                         onChange={(e) => setMaxTunnels(e.target.value)}
-                        disabled={!isAdmin}
+                        disabled={!canUpdate}
                       />
                     </FieldBlock>
                   </div>
@@ -776,7 +777,7 @@ function OrganizationSettingsPage() {
                       value={customDomain}
                       onChange={(e) => setCustomDomain(e.target.value)}
                       placeholder="tunnels.example.com"
-                      disabled={!isAdmin}
+                      disabled={!canUpdate}
                     />
                   </FieldBlock>
 
@@ -798,7 +799,7 @@ function OrganizationSettingsPage() {
                       value={peerDnsSuffix}
                       onChange={(e) => setPeerDnsSuffix(e.target.value)}
                       placeholder="tunnet"
-                      disabled={!isAdmin}
+                      disabled={!canUpdate}
                     />
                   </FieldBlock>
 
@@ -824,7 +825,7 @@ function OrganizationSettingsPage() {
               title="Internal certificate authority"
               description="Tunnet issues short-lived certificates from an organization CA when you create HTTPS serves. Agents trust this CA so peers can connect to mesh hostnames without public DNS."
               footer={
-                isAdmin ? (
+                canUpdate ? (
                   <Button
                     variant="outline"
                     size="sm"
@@ -905,7 +906,7 @@ function OrganizationSettingsPage() {
               title="Single sign-on"
               description="Register an external OIDC identity provider for this organization. Dashboard login and SSH check-mode re-auth use Better Auth SSO."
               footer={
-                isAdmin ? (
+                canManageSso ? (
                   <div className="flex flex-wrap gap-2">
                     <Button
                       type="submit"
@@ -957,7 +958,7 @@ function OrganizationSettingsPage() {
                       value={ssoDomain}
                       onChange={(e) => setSsoDomain(e.target.value)}
                       placeholder="company.com"
-                      disabled={!isAdmin}
+                      disabled={!canManageSso}
                       required
                     />
                   </FieldBlock>
@@ -968,7 +969,7 @@ function OrganizationSettingsPage() {
                       value={issuerUrl}
                       onChange={(e) => setIssuerUrl(e.target.value)}
                       placeholder="https://accounts.example.com"
-                      disabled={!isAdmin}
+                      disabled={!canManageSso}
                       required
                     />
                   </FieldBlock>
@@ -979,7 +980,7 @@ function OrganizationSettingsPage() {
                         id="client-id"
                         value={clientId}
                         onChange={(e) => setClientId(e.target.value)}
-                        disabled={!isAdmin}
+                        disabled={!canManageSso}
                         required
                       />
                     </FieldBlock>
@@ -994,7 +995,7 @@ function OrganizationSettingsPage() {
                             ? "Leave blank to keep current"
                             : "Secret"
                         }
-                        disabled={!isAdmin}
+                        disabled={!canManageSso}
                         autoComplete="new-password"
                         required={!ssoProvider?.clientSecretSet}
                       />
@@ -1011,7 +1012,7 @@ function OrganizationSettingsPage() {
                       value={discoveryUrl}
                       onChange={(e) => setDiscoveryUrl(e.target.value)}
                       placeholder="Defaults to /.well-known/openid-configuration"
-                      disabled={!isAdmin}
+                      disabled={!canManageSso}
                     />
                   </FieldBlock>
 
@@ -1020,7 +1021,7 @@ function OrganizationSettingsPage() {
                       id="sso-scopes"
                       value={scopes}
                       onChange={(e) => setScopes(e.target.value)}
-                      disabled={!isAdmin}
+                      disabled={!canManageSso}
                     />
                   </FieldBlock>
                 </form>
@@ -1028,7 +1029,7 @@ function OrganizationSettingsPage() {
             </SettingsPanel>
           ) : null}
 
-          {section === "danger" && isOwner ? (
+          {section === "danger" && canDelete ? (
             <SettingsPanel
               title="Delete organization"
               description="This permanently removes all networks, machines, members, and settings. This cannot be undone."

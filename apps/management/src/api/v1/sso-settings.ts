@@ -7,7 +7,7 @@ import { auth } from "../../auth";
 import { writeAudit } from "../../lib/audit";
 import { db } from "../../lib/db";
 import { toIso } from "../../lib/serialize";
-import { getAuth, requireAdmin, requireAuth } from "./middleware/authz";
+import { getAuth, requireAuth, requirePermission } from "./middleware/authz";
 import { notFound, sessionPlugin } from "./middleware/session";
 
 type OidcConfigStored = {
@@ -80,7 +80,7 @@ export const ssoSettingsRoutes = new Elysia()
   )
   .group("", (app) =>
     app
-      .use(requireAdmin)
+      .use(requirePermission({ sso: ["update"] }))
       .put(
         "/organizations/:orgId/sso-settings",
         async ({ authContext, body, request }) => {

@@ -43,7 +43,6 @@ export const organization = pgTable(
       .notNull()
       .default(0),
     quickEnrollEnabled: boolean("quick_enroll_enabled").notNull().default(true),
-    /** Org-level product settings (machine auto-cleanup, etc.). */
     settings: jsonb("settings").notNull().default({}),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -74,7 +73,6 @@ export const session = pgTable(
       () => organization.id,
       { onDelete: "set null" },
     ),
-    /** Better Auth admin plugin — set when impersonating. */
     impersonatedBy: text("impersonated_by"),
   },
   (table) => [
@@ -186,7 +184,32 @@ export const invitation = pgTable(
   ],
 );
 
-/** Better Auth `@better-auth/sso` - external IdP federation. */
+export const organizationRole = pgTable(
+  "organization_role",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    role: text("role").notNull(),
+    permission: text("permission").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }),
+    /** Discord-style hierarchy position (higher = more power). */
+    position: integer("position").notNull().default(101),
+    color: text("color"),
+  },
+  (table) => [
+    index("organization_role_organization_id_idx").on(table.organizationId),
+    unique("organization_role_organization_id_role_unique").on(
+      table.organizationId,
+      table.role,
+    ),
+  ],
+);
+
 export const ssoProvider = pgTable(
   "sso_provider",
   {
@@ -207,7 +230,6 @@ export const ssoProvider = pgTable(
   ],
 );
 
-/** Better Auth `jwt()` plugin. */
 export const jwks = pgTable("jwks", {
   id: text("id").primaryKey(),
   publicKey: text("public_key").notNull(),
@@ -216,7 +238,6 @@ export const jwks = pgTable("jwks", {
   expiresAt: timestamp("expires_at", { withTimezone: true }),
 });
 
-/** Better Auth `@better-auth/oauth-provider` tables. */
 export const oauthClient = pgTable(
   "oauth_client",
   {
@@ -332,7 +353,6 @@ export const oauthConsent = pgTable(
   ],
 );
 
-/** Better Auth `deviceAuthorization()` - RFC 8628 device codes. */
 export const deviceCode = pgTable(
   "device_code",
   {

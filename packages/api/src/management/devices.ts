@@ -22,7 +22,6 @@ export const deviceLabelsSchema = z.record(
   z.string().max(253),
 );
 
-/** Merge patch: `null` or `""` deletes the key. */
 export const deviceLabelsResponse = z.object({
   labels: deviceLabelsSchema,
 });
@@ -92,7 +91,6 @@ export const patchDeviceBody = z
   .object({
     name: z.string().trim().min(1).max(253).optional(),
     ipv6Enabled: z.boolean().optional(),
-    /** Per-machine inactivity TTL override; `never` / null clears override. */
     expiresIn: expiresInInputSchema.optional(),
   })
   .refine(

@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
+import { useCan } from "@/hooks/use-permission";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { createManagementClient } from "@/lib/management-client";
 import {
@@ -97,8 +97,7 @@ function AccessPage() {
 function OrganizationPoliciesPanel() {
   const { data: activeOrg } = useActiveOrganization();
   const orgId = activeOrg?.id;
-  const { data: role } = useMemberRole(orgId);
-  const isAdmin = isAdminRole(role);
+  const { data: canManage = false } = useCan(orgId, "policy", "update");
   const { data: policies, isPending } = useOrganizationPolicies(orgId);
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
@@ -169,7 +168,7 @@ function OrganizationPoliciesPanel() {
         header: "Priority",
         accessorKey: "priority",
       },
-      ...(isAdmin
+      ...(canManage
         ? [
             {
               id: "actions",
@@ -188,7 +187,7 @@ function OrganizationPoliciesPanel() {
           ]
         : []),
     ],
-    [isAdmin],
+    [canManage],
   );
 
   return (
@@ -201,7 +200,7 @@ function OrganizationPoliciesPanel() {
             meshes.
           </p>
         </div>
-        {isAdmin ? (
+        {canManage ? (
           <Button onClick={() => setCreateOpen(true)}>
             <PlusIcon className="mr-2 size-4" />
             Add org policy
@@ -216,7 +215,7 @@ function OrganizationPoliciesPanel() {
           title="No organization policies"
           description="Optional org-wide rules apply to every network in this tenant."
           action={
-            isAdmin ? (
+            canManage ? (
               <Button onClick={() => setCreateOpen(true)}>
                 Add org policy
               </Button>

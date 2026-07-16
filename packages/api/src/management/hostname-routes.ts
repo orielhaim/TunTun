@@ -57,7 +57,6 @@ export type HostnameRoute = z.infer<typeof hostnameRouteSchema>;
 export type CreateHostnameRouteBody = z.infer<typeof createHostnameRouteBody>;
 export type PatchHostnameRouteBody = z.infer<typeof patchHostnameRouteBody>;
 
-/** Normalize `*.foo.bar` → `{ hostname: "foo.bar", isWildcard: true }`. */
 export function parseHostnameInput(raw: string): {
   hostname: string;
   isWildcard: boolean;

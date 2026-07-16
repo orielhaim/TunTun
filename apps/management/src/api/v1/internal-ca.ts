@@ -9,7 +9,7 @@ import {
   rotateOrganizationCa,
 } from "../../lib/internal-ca";
 import { toIso } from "../../lib/serialize";
-import { getAuth, requireAdmin, requireAuth } from "./middleware/authz";
+import { getAuth, requireAuth, requirePermission } from "./middleware/authz";
 import { sessionPlugin } from "./middleware/session";
 
 function caStatus(
@@ -42,7 +42,7 @@ export const internalCaRoutes = new Elysia()
   })
   .group("", (app) =>
     app
-      .use(requireAdmin)
+      .use(requirePermission({ ca: ["update"] }))
       .post(
         "/organizations/:orgId/internal-ca/rotate",
         async ({ authContext }) => {

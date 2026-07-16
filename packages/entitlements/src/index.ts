@@ -9,7 +9,6 @@ export type Entitlements = {
   multiOrganization: boolean;
   cloudLanding: boolean;
   openSignUp: boolean;
-  /** Unix seconds; null when community / no active license. */
   licenseExpiresAt: number | null;
 };
 

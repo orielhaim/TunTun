@@ -12,7 +12,7 @@ import { EmptyState } from "@/components/app/empty-state";
 import { EnrollmentTokenDialog } from "@/components/app/enrollment-token-dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
+import { useCan } from "@/hooks/use-permission";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { createManagementClient } from "@/lib/management-client";
 import { useEnrollmentTokens } from "@/lib/queries/management";
@@ -26,8 +26,7 @@ function NetworkEnrollmentPage() {
   const { networkId } = Route.useParams();
   const { data: activeOrg } = useActiveOrganization();
   const orgId = activeOrg?.id;
-  const { data: role } = useMemberRole(orgId);
-  const isAdmin = isAdminRole(role);
+  const { data: canManage = false } = useCan(orgId, "enrollment", "create");
   const { data: tokens, isPending } = useEnrollmentTokens(orgId, networkId);
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
@@ -67,7 +66,7 @@ function NetworkEnrollmentPage() {
           </span>
         ),
       },
-      ...(isAdmin
+      ...(canManage
         ? [
             {
               id: "actions",
@@ -86,7 +85,7 @@ function NetworkEnrollmentPage() {
           ]
         : []),
     ],
-    [isAdmin],
+    [canManage],
   );
 
   async function revoke() {
@@ -115,7 +114,7 @@ function NetworkEnrollmentPage() {
         <p className="text-muted-foreground text-sm">
           Active enrollment tokens for this network.
         </p>
-        {isAdmin ? (
+        {canManage ? (
           <Button onClick={() => setCreateOpen(true)}>
             <PlusIcon className="mr-2 size-4" />
             New token
@@ -130,7 +129,7 @@ function NetworkEnrollmentPage() {
           title="No active tokens"
           description="Generate a token to enroll a new machine."
           action={
-            isAdmin ? (
+            canManage ? (
               <Button onClick={() => setCreateOpen(true)}>New token</Button>
             ) : undefined
           }

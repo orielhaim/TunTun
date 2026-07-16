@@ -130,6 +130,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@tunnet/ip": "workspace:*",
+        "better-auth": "^1.6.23",
         "parse-duration": "^2.1.8",
         "zod": "^4.4.3",
       },

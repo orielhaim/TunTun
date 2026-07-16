@@ -5,6 +5,7 @@ import {
   invitation,
   member,
   organization,
+  organizationRole,
   session,
   user,
 } from "./auth";
@@ -33,6 +34,7 @@ export const organizationRelations = relations(
   ({ one, many }) => ({
     members: many(member),
     invitations: many(invitation),
+    roles: many(organizationRole),
     networks: many(networks),
     devices: many(devices),
     policies: many(policies),
@@ -88,3 +90,13 @@ export const invitationRelations = relations(invitation, ({ one }) => ({
     references: [user.id],
   }),
 }));
+
+export const organizationRoleRelations = relations(
+  organizationRole,
+  ({ one }) => ({
+    organization: one(organization, {
+      fields: [organizationRole.organizationId],
+      references: [organization.id],
+    }),
+  }),
+);

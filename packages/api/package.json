@@ -5,12 +5,14 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./auth": "./src/auth/index.ts",
     "./management": "./src/management/index.ts",
     "./internal": "./src/internal/index.ts",
     "./agent": "./src/agent/index.ts"
   },
   "dependencies": {
     "@tunnet/ip": "workspace:*",
+    "better-auth": "^1.6.23",
     "parse-duration": "^2.1.8",
     "zod": "^4.4.3"
   }

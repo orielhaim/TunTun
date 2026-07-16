@@ -20,7 +20,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
+import { useCan } from "@/hooks/use-permission";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { createManagementClient } from "@/lib/management-client";
 import {
@@ -41,8 +41,7 @@ function NetworkRoutesPage() {
   const { networkId } = Route.useParams();
   const { data: activeOrg } = useActiveOrganization();
   const orgId = activeOrg?.id;
-  const { data: role } = useMemberRole(orgId);
-  const isAdmin = isAdminRole(role);
+  const { data: canManage = false } = useCan(orgId, "route", "update");
   const { data: subnetRoutes, isPending: subnetsPending } = useSubnetRoutes(
     orgId,
     networkId,
@@ -166,7 +165,7 @@ function NetworkRoutesPage() {
   const columns = useMemo(
     () =>
       buildNetworkRouteColumns({
-        isAdmin,
+        canManage,
         onToggle: (r: UnifiedRoute) => {
           const run = r.kind === "subnet" ? toggleSubnet : toggleHostname;
           void run
@@ -186,7 +185,7 @@ function NetworkRoutesPage() {
           else setDeleteHostnameId(r.id);
         },
       }),
-    [isAdmin, toggleHostname, toggleSubnet],
+    [canManage, toggleHostname, toggleSubnet],
   );
 
   const pending = subnetsPending || hostnamesPending;
@@ -202,7 +201,7 @@ function NetworkRoutesPage() {
             {subnetCount} subnet · {hostnameCount} hostname
           </p>
         </div>
-        {isAdmin ? (
+        {canManage ? (
           <div className="flex items-center gap-2">
             <Button
               size="sm"

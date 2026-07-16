@@ -8,7 +8,7 @@ import { generateApiKeySecret } from "../../lib/api-key-secret";
 import { writeAudit } from "../../lib/audit";
 import { db } from "../../lib/db";
 import { toIso } from "../../lib/serialize";
-import { getAuth, requireAdmin, requireAuth } from "./middleware/authz";
+import { getAuth, requireAuth, requirePermission } from "./middleware/authz";
 import { badRequest, sessionPlugin } from "./middleware/session";
 
 function serializeApiKey(row: typeof schema.apiKeys.$inferSelect) {
@@ -62,7 +62,7 @@ export const apiKeysRoutes = new Elysia()
   })
   .group("", (app) =>
     app
-      .use(requireAdmin)
+      .use(requirePermission({ apiKey: ["create"] }))
       .post("/organizations/:orgId/api-keys", async ({ authContext, body }) => {
         const auth = getAuth({ authContext });
         const parsed = createApiKeyBody.parse(body);
@@ -124,7 +124,7 @@ export const apiKeysRoutes = new Elysia()
   )
   .group("", (app) =>
     app
-      .use(requireAdmin)
+      .use(requirePermission({ apiKey: ["revoke"] }))
       .delete(
         "/organizations/:orgId/api-keys/:keyId",
         async ({ authContext, params }) => {

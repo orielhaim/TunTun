@@ -11,7 +11,7 @@ import { db } from "../../lib/db";
 import { deviceDisplayName } from "../../lib/device-metadata";
 import { bumpNetworkAndNotify } from "../../lib/notify";
 import { toIso } from "../../lib/serialize";
-import { getAuth, requireAdmin, requireAuth } from "./middleware/authz";
+import { getAuth, requireAuth, requirePermission } from "./middleware/authz";
 import { notFound, sessionPlugin } from "./middleware/session";
 
 async function getNetworkInOrg(networkId: string, organizationId: string) {
@@ -117,7 +117,7 @@ export const deviceProfilesRoutes = new Elysia()
   )
   .group("", (app) =>
     app
-      .use(requireAdmin)
+      .use(requirePermission({ device: ["update"] }))
       .put(
         "/organizations/:orgId/networks/:networkId/devices/:endpointId/exit-node",
         async ({ authContext, params, body, set }) => {

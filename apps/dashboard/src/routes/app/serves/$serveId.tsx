@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
+import { useCan } from "@/hooks/use-permission";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { getMachinePresence } from "@/lib/machine-utils";
 import {
@@ -69,8 +69,7 @@ function ServeDetailPage() {
   const { serveId } = Route.useParams();
   const { data: activeOrg } = useActiveOrganization();
   const orgId = activeOrg?.id;
-  const { data: role } = useMemberRole(orgId);
-  const isAdmin = isAdminRole(role);
+  const { data: canManage = false } = useCan(orgId, "serve", "update");
   const { data: serves, isPending } = useServes(orgId);
   const { data: machines } = useMachines(orgId);
   const mutations = useServeMutations(orgId);
@@ -191,7 +190,7 @@ function ServeDetailPage() {
             ) : null}
           </TabsTrigger>
           <TabsTrigger value="access">Access control</TabsTrigger>
-          {isAdmin ? (
+          {canManage ? (
             <TabsTrigger value="danger">Danger zone</TabsTrigger>
           ) : null}
         </TabsList>
@@ -330,7 +329,7 @@ function ServeDetailPage() {
                         "all_peers",
                     )
                   }
-                  disabled={!isAdmin}
+                  disabled={!canManage}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -350,7 +349,7 @@ function ServeDetailPage() {
                     {tags.map((tag) => (
                       <Badge key={tag} variant="secondary" className="gap-1">
                         {tag}
-                        {isAdmin ? (
+                        {canManage ? (
                           <button
                             type="button"
                             onClick={() =>
@@ -363,7 +362,7 @@ function ServeDetailPage() {
                       </Badge>
                     ))}
                   </div>
-                  {isAdmin ? (
+                  {canManage ? (
                     <div className="flex gap-2">
                       <Input
                         value={tagInput}
@@ -404,7 +403,7 @@ function ServeDetailPage() {
                           >
                             <Checkbox
                               checked={checked}
-                              disabled={!isAdmin}
+                              disabled={!canManage}
                               onCheckedChange={(value) => {
                                 if (value) {
                                   setSelectedEndpoints([
@@ -429,7 +428,7 @@ function ServeDetailPage() {
                 </div>
               ) : null}
 
-              {isAdmin ? (
+              {canManage ? (
                 <Button
                   onClick={() => void saveAccess()}
                   disabled={mutations.update.isPending}
@@ -441,7 +440,7 @@ function ServeDetailPage() {
           </Card>
         </TabsContent>
 
-        {isAdmin ? (
+        {canManage ? (
           <TabsContent value="danger">
             <Card className="max-w-xl border-destructive/30">
               <CardHeader>

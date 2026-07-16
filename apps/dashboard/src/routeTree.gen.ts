@@ -18,6 +18,7 @@ import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as DeviceApproveRouteImport } from './routes/device/approve'
 import { Route as AuthSshRouteImport } from './routes/auth/ssh'
 import { Route as AppUsersRouteImport } from './routes/app/users'
+import { Route as AppRolesRouteImport } from './routes/app/roles'
 import { Route as AppOrganizationRouteImport } from './routes/app/organization'
 import { Route as AppOnboardingRouteImport } from './routes/app/onboarding'
 import { Route as AppLogsRouteImport } from './routes/app/logs'
@@ -87,6 +88,11 @@ const AuthSshRoute = AuthSshRouteImport.update({
 const AppUsersRoute = AppUsersRouteImport.update({
   id: '/users',
   path: '/users',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppRolesRoute = AppRolesRouteImport.update({
+  id: '/roles',
+  path: '/roles',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppOrganizationRoute = AppOrganizationRouteImport.update({
@@ -233,6 +239,7 @@ export interface FileRoutesByFullPath {
   '/app/logs': typeof AppLogsRoute
   '/app/onboarding': typeof AppOnboardingRoute
   '/app/organization': typeof AppOrganizationRoute
+  '/app/roles': typeof AppRolesRoute
   '/app/users': typeof AppUsersRoute
   '/auth/ssh': typeof AuthSshRoute
   '/device/approve': typeof DeviceApproveRoute
@@ -267,6 +274,7 @@ export interface FileRoutesByTo {
   '/app/logs': typeof AppLogsRoute
   '/app/onboarding': typeof AppOnboardingRoute
   '/app/organization': typeof AppOrganizationRoute
+  '/app/roles': typeof AppRolesRoute
   '/app/users': typeof AppUsersRoute
   '/auth/ssh': typeof AuthSshRoute
   '/device/approve': typeof DeviceApproveRoute
@@ -303,6 +311,7 @@ export interface FileRoutesById {
   '/app/logs': typeof AppLogsRoute
   '/app/onboarding': typeof AppOnboardingRoute
   '/app/organization': typeof AppOrganizationRoute
+  '/app/roles': typeof AppRolesRoute
   '/app/users': typeof AppUsersRoute
   '/auth/ssh': typeof AuthSshRoute
   '/device/approve': typeof DeviceApproveRoute
@@ -341,6 +350,7 @@ export interface FileRouteTypes {
     | '/app/logs'
     | '/app/onboarding'
     | '/app/organization'
+    | '/app/roles'
     | '/app/users'
     | '/auth/ssh'
     | '/device/approve'
@@ -375,6 +385,7 @@ export interface FileRouteTypes {
     | '/app/logs'
     | '/app/onboarding'
     | '/app/organization'
+    | '/app/roles'
     | '/app/users'
     | '/auth/ssh'
     | '/device/approve'
@@ -410,6 +421,7 @@ export interface FileRouteTypes {
     | '/app/logs'
     | '/app/onboarding'
     | '/app/organization'
+    | '/app/roles'
     | '/app/users'
     | '/auth/ssh'
     | '/device/approve'
@@ -510,6 +522,13 @@ declare module '@tanstack/react-router' {
       path: '/users'
       fullPath: '/app/users'
       preLoaderRoute: typeof AppUsersRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/app/roles': {
+      id: '/app/roles'
+      path: '/roles'
+      fullPath: '/app/roles'
+      preLoaderRoute: typeof AppRolesRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/app/organization': {
@@ -731,6 +750,7 @@ interface AppRouteRouteChildren {
   AppLogsRoute: typeof AppLogsRoute
   AppOnboardingRoute: typeof AppOnboardingRoute
   AppOrganizationRoute: typeof AppOrganizationRoute
+  AppRolesRoute: typeof AppRolesRoute
   AppUsersRoute: typeof AppUsersRoute
   AppIndexRoute: typeof AppIndexRoute
   AppNetworksNetworkIdRouteRoute: typeof AppNetworksNetworkIdRouteRouteWithChildren
@@ -753,6 +773,7 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppLogsRoute: AppLogsRoute,
   AppOnboardingRoute: AppOnboardingRoute,
   AppOrganizationRoute: AppOrganizationRoute,
+  AppRolesRoute: AppRolesRoute,
   AppUsersRoute: AppUsersRoute,
   AppIndexRoute: AppIndexRoute,
   AppNetworksNetworkIdRouteRoute: AppNetworksNetworkIdRouteRouteWithChildren,

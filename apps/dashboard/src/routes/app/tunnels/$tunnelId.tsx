@@ -38,7 +38,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
+import { useCan } from "@/hooks/use-permission";
 import { useActiveOrganization } from "@/lib/auth-client";
 import {
   useMachines,
@@ -71,8 +71,7 @@ function TunnelDetailPage() {
   const { tunnelId } = Route.useParams();
   const { data: activeOrg } = useActiveOrganization();
   const orgId = activeOrg?.id;
-  const { data: role } = useMemberRole(orgId);
-  const isAdmin = isAdminRole(role);
+  const { data: canManage = false } = useCan(orgId, "tunnel", "update");
   const { data: tunnels, isPending } = useTunnels(orgId);
   const mutations = useTunnelMutations(orgId);
   const [confirmDestroy, setConfirmDestroy] = useState(false);
@@ -340,7 +339,7 @@ function TunnelDetailPage() {
           ) : (
             <TabsTrigger value="port-mappings">Port mappings</TabsTrigger>
           )}
-          {isAdmin ? (
+          {canManage ? (
             <TabsTrigger value="danger">Danger zone</TabsTrigger>
           ) : null}
         </TabsList>
@@ -454,7 +453,7 @@ function TunnelDetailPage() {
                     max={65535}
                     value={localPort}
                     onChange={(e) => setLocalPort(e.target.value)}
-                    disabled={!isAdmin}
+                    disabled={!canManage}
                   />
                 </div>
                 <div className="space-y-2">
@@ -464,7 +463,7 @@ function TunnelDetailPage() {
                     value={subdomain}
                     onChange={(e) => setSubdomain(e.target.value)}
                     pattern="[a-z0-9]([a-z0-9-]*[a-z0-9])?"
-                    disabled={!isAdmin}
+                    disabled={!canManage}
                   />
                   <p className="text-muted-foreground text-xs">
                     Preview: {subdomain || tunnel.subdomain}.
@@ -502,7 +501,7 @@ function TunnelDetailPage() {
                       Not configured
                     </p>
                   )}
-                  {isAdmin ? (
+                  {canManage ? (
                     <>
                       <div className="grid gap-3 sm:grid-cols-2">
                         <div className="space-y-2">
@@ -555,7 +554,7 @@ function TunnelDetailPage() {
                     </>
                   ) : null}
                 </div>
-                {isAdmin ? (
+                {canManage ? (
                   <div className="flex flex-wrap gap-2">
                     <Button type="submit" disabled={mutations.update.isPending}>
                       {mutations.update.isPending
@@ -601,7 +600,7 @@ function TunnelDetailPage() {
                           variant="ghost"
                           size="icon"
                           className="size-7"
-                          disabled={!isAdmin || index === 0}
+                          disabled={!canManage || index === 0}
                           onClick={() =>
                             void moveRule(rule.id, rule.priority, "up")
                           }
@@ -612,7 +611,9 @@ function TunnelDetailPage() {
                           variant="ghost"
                           size="icon"
                           className="size-7"
-                          disabled={!isAdmin || index === pathRules.length - 1}
+                          disabled={
+                            !canManage || index === pathRules.length - 1
+                          }
                           onClick={() =>
                             void moveRule(rule.id, rule.priority, "down")
                           }
@@ -632,7 +633,7 @@ function TunnelDetailPage() {
                           : "localhost"}
                         :{rule.targetPort}
                       </span>
-                      {isAdmin ? (
+                      {canManage ? (
                         <Button
                           variant="ghost"
                           size="icon"
@@ -655,7 +656,7 @@ function TunnelDetailPage() {
                   ))}
                 </ul>
               )}
-              {isAdmin ? (
+              {canManage ? (
                 <form
                   className="flex flex-wrap items-end gap-3 rounded-lg border border-dashed border-border/60 p-4"
                   onSubmit={(e) => {
@@ -773,7 +774,7 @@ function TunnelDetailPage() {
                           : "localhost"}
                         :{mapping.targetPort}
                       </code>
-                      {isAdmin ? (
+                      {canManage ? (
                         <Button
                           variant="ghost"
                           size="icon"
@@ -796,7 +797,7 @@ function TunnelDetailPage() {
                   ))}
                 </ul>
               )}
-              {isAdmin ? (
+              {canManage ? (
                 <form
                   className="flex flex-wrap items-end gap-3 rounded-lg border border-dashed border-border/60 p-4"
                   onSubmit={(e) => {
@@ -885,7 +886,7 @@ function TunnelDetailPage() {
           </TabsContent>
         )}
 
-        {isAdmin ? (
+        {canManage ? (
           <TabsContent value="danger">
             <Card className="max-w-xl border-destructive/30">
               <CardHeader>

@@ -25,7 +25,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
+import { useCan } from "@/hooks/use-permission";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { createManagementClient } from "@/lib/management-client";
 import { useApiKeys, useNetworks } from "@/lib/queries/management";
@@ -50,8 +50,7 @@ function formatNetworkAccess(
 export function ApiKeysPanel() {
   const { data: activeOrg } = useActiveOrganization();
   const orgId = activeOrg?.id;
-  const { data: role } = useMemberRole(orgId);
-  const isAdmin = isAdminRole(role);
+  const { data: canManage = false } = useCan(orgId, "apiKey", "create");
   const { data: apiKeys, isPending } = useApiKeys(orgId);
   const { data: networks } = useNetworks(orgId);
   const queryClient = useQueryClient();
@@ -115,7 +114,7 @@ export function ApiKeysPanel() {
           </span>
         ),
       },
-      ...(isAdmin
+      ...(canManage
         ? [
             {
               id: "actions",
@@ -134,13 +133,13 @@ export function ApiKeysPanel() {
           ]
         : []),
     ],
-    [isAdmin, networkNames],
+    [canManage, networkNames],
   );
 
   return (
     <>
       <div className="mb-4 flex justify-end">
-        {isAdmin ? (
+        {canManage ? (
           <Button size="sm" onClick={() => setCreateOpen(true)}>
             <PlusIcon className="mr-1.5 size-4" />
             Create key

@@ -10,7 +10,7 @@ import { writeAudit } from "../../lib/audit";
 import { db } from "../../lib/db";
 import { bumpNetworkAndNotify } from "../../lib/notify";
 import { toIso } from "../../lib/serialize";
-import { getAuth, requireAdmin, requireAuth } from "./middleware/authz";
+import { getAuth, requireAuth, requirePermission } from "./middleware/authz";
 import { notFound, sessionPlugin } from "./middleware/session";
 
 function serializeSshPolicy(row: typeof schema.sshPolicies.$inferSelect) {
@@ -60,7 +60,7 @@ export const sshPoliciesRoutes = new Elysia()
   )
   .group("", (app) =>
     app
-      .use(requireAdmin)
+      .use(requirePermission({ policy: ["create"] }))
       .post(
         "/organizations/:orgId/networks/:networkId/ssh-policies",
         async ({ authContext, params, body }) => {
@@ -114,7 +114,7 @@ export const sshPoliciesRoutes = new Elysia()
   )
   .group("", (app) =>
     app
-      .use(requireAdmin)
+      .use(requirePermission({ policy: ["update"] }))
       .patch(
         "/organizations/:orgId/networks/:networkId/ssh-policies/:policyId",
         async ({ authContext, params, body }) => {
@@ -190,7 +190,7 @@ export const sshPoliciesRoutes = new Elysia()
   )
   .group("", (app) =>
     app
-      .use(requireAdmin)
+      .use(requirePermission({ policy: ["delete"] }))
       .delete(
         "/organizations/:orgId/networks/:networkId/ssh-policies/:policyId",
         async ({ authContext, params }) => {

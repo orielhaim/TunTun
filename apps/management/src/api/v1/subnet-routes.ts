@@ -11,7 +11,7 @@ import { db } from "../../lib/db";
 import { deviceDisplayName } from "../../lib/device-metadata";
 import { bumpNetworkAndNotify } from "../../lib/notify";
 import { toIso } from "../../lib/serialize";
-import { getAuth, requireAdmin, requireAuth } from "./middleware/authz";
+import { getAuth, requireAuth, requirePermission } from "./middleware/authz";
 import { notFound, sessionPlugin } from "./middleware/session";
 
 function serializeRoute(
@@ -92,7 +92,7 @@ export const subnetRoutesRoutes = new Elysia()
   )
   .group("", (app) =>
     app
-      .use(requireAdmin)
+      .use(requirePermission({ route: ["create", "update", "delete"] }))
       .post(
         "/organizations/:orgId/networks/:networkId/routes",
         async ({ authContext, params, body, set }) => {

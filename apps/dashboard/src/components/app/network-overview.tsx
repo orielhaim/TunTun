@@ -29,7 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
+import { useCan } from "@/hooks/use-permission";
 import {
   seedPresenceCache,
   usePresenceStream,
@@ -51,8 +51,7 @@ export function NetworkOverviewPage() {
   const queryClient = useQueryClient();
   const { data: activeOrg } = useActiveOrganization();
   const orgId = activeOrg?.id;
-  const { data: role } = useMemberRole(orgId);
-  const isAdmin = isAdminRole(role);
+  const { data: canManage = false } = useCan(orgId, "network", "update");
   const now = usePresenceClock();
 
   const { data: network } = useNetwork(orgId, networkId);
@@ -175,7 +174,7 @@ export function NetworkOverviewPage() {
         title={network.name}
         description="Private mesh between your machines - route LAN, hostnames, and exits without bastions."
         actions={
-          isAdmin ? (
+          canManage ? (
             <Button size="sm" onClick={() => setEnrollOpen(true)}>
               <PlusIcon className="size-3.5" />
               Add machine

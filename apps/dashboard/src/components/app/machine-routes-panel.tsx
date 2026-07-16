@@ -33,7 +33,7 @@ type MachineRoutesPanelProps = {
   networkId: string | undefined;
   endpointId: string;
   hostname: string;
-  isAdmin: boolean;
+  canManage: boolean;
 };
 
 export function MachineRoutesPanel({
@@ -41,7 +41,7 @@ export function MachineRoutesPanel({
   networkId,
   endpointId,
   hostname,
-  isAdmin,
+  canManage,
 }: MachineRoutesPanelProps) {
   const queryClient = useQueryClient();
   const { data: subnetRoutes, isPending: subnetsPending } = useSubnetRoutes(
@@ -161,7 +161,7 @@ export function MachineRoutesPanel({
   const columns = useMemo(
     () =>
       buildMachineRouteColumns({
-        isAdmin,
+        canManage,
         onToggle: (r) => {
           const run = r.kind === "subnet" ? toggleSubnet : toggleHostname;
           void run
@@ -178,7 +178,7 @@ export function MachineRoutesPanel({
           else setDeleteHostnameId(r.id);
         },
       }),
-    [isAdmin, toggleHostname, toggleSubnet],
+    [canManage, toggleHostname, toggleSubnet],
   );
 
   if (!networkId) {
@@ -200,7 +200,7 @@ export function MachineRoutesPanel({
   }
 
   const pending = subnetsPending || hostnamesPending;
-  const canAdd = isAdmin && canAdvertise;
+  const canAdd = canManage && canAdvertise;
 
   return (
     <div className="space-y-6">

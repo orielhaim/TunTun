@@ -22,6 +22,13 @@
       "when": 1784204852453,
       "tag": "0002_tiny_stark_industries",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784238424315,
+      "tag": "0003_closed_nebula",
+      "breakpoints": true
     }
   ]
 }

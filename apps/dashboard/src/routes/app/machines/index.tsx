@@ -38,7 +38,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
+import { useCan } from "@/hooks/use-permission";
 import {
   seedPresenceCache,
   usePresenceStream,
@@ -69,8 +69,7 @@ function MachinesPage() {
   const queryClient = useQueryClient();
   const { data: activeOrg } = useActiveOrganization();
   const orgId = activeOrg?.id;
-  const { data: role } = useMemberRole(orgId);
-  const isAdmin = isAdminRole(role);
+  const { data: canManage = false } = useCan(orgId, "device", "update");
   const { data: machines, isPending } = useMachines(orgId);
   const { data: orgSettings } = useOrgSettings(orgId);
 
@@ -306,7 +305,7 @@ function MachinesPage() {
                   >
                     View details
                   </DropdownMenuItem>
-                  {isAdmin ? (
+                  {canManage ? (
                     <>
                       {machine.status === "pending" ? (
                         <>
@@ -422,7 +421,7 @@ function MachinesPage() {
       deviceMutations.approve,
       deviceMutations.reject,
       deviceMutations.updateMembership,
-      isAdmin,
+      canManage,
       orgId,
       serveCounts,
       tunnelCounts,
@@ -436,7 +435,7 @@ function MachinesPage() {
         title="Machines"
         description="Manage the agents connected to your organization."
         actions={
-          isAdmin ? (
+          canManage ? (
             <Button onClick={() => setEnrollOpen(true)}>
               <PlusIcon className="mr-2 size-4" />
               Add machine
@@ -445,7 +444,7 @@ function MachinesPage() {
         }
       />
 
-      {isAdmin && pendingCount > 0 ? (
+      {canManage && pendingCount > 0 ? (
         <div className="bg-amber-500/10 text-amber-950 dark:text-amber-100 mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/30 px-4 py-3 text-sm">
           <p>
             {pendingCount === 1
@@ -498,7 +497,7 @@ function MachinesPage() {
           </Select>
         }
         actions={
-          isAdmin && selectedMachines.length > 0 ? (
+          canManage && selectedMachines.length > 0 ? (
             <Button
               variant="destructive"
               onClick={() => setConfirmBulkRemove(true)}
@@ -518,7 +517,7 @@ function MachinesPage() {
           title="No machines yet"
           description="Create an enrollment token and install the Tunnet agent on a device."
           action={
-            isAdmin ? (
+            canManage ? (
               <Button onClick={() => setEnrollOpen(true)}>Add machine</Button>
             ) : undefined
           }
@@ -528,7 +527,7 @@ function MachinesPage() {
           columns={columns}
           data={filtered}
           getRowId={(row) => `${row.networkId}-${row.endpointId}`}
-          selectable={isAdmin}
+          selectable={canManage}
           rowSelection={rowSelection}
           onRowSelectionChange={setRowSelection}
         />

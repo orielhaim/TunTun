@@ -33,7 +33,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
+import { useCan } from "@/hooks/use-permission";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { createManagementClient } from "@/lib/management-client";
 import { usePolicies, useSshPolicies } from "@/lib/queries/management";
@@ -66,8 +66,7 @@ function NetworkPoliciesPanel() {
   const { networkId } = Route.useParams();
   const { data: activeOrg } = useActiveOrganization();
   const orgId = activeOrg?.id;
-  const { data: role } = useMemberRole(orgId);
-  const isAdmin = isAdminRole(role);
+  const { data: canManage = false } = useCan(orgId, "policy", "update");
   const { data: policies, isPending } = usePolicies(orgId, networkId);
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
@@ -138,7 +137,7 @@ function NetworkPoliciesPanel() {
         header: "Priority",
         accessorKey: "priority",
       },
-      ...(isAdmin
+      ...(canManage
         ? [
             {
               id: "actions",
@@ -157,7 +156,7 @@ function NetworkPoliciesPanel() {
           ]
         : []),
     ],
-    [isAdmin],
+    [canManage],
   );
 
   return (
@@ -166,7 +165,7 @@ function NetworkPoliciesPanel() {
         <p className="text-muted-foreground text-sm">
           Access control policies for this network.
         </p>
-        {isAdmin ? (
+        {canManage ? (
           <Button onClick={() => setCreateOpen(true)}>
             <PlusIcon className="mr-2 size-4" />
             Add policy
@@ -181,7 +180,7 @@ function NetworkPoliciesPanel() {
           title="No policies"
           description="Add policies to control traffic between machines."
           action={
-            isAdmin ? (
+            canManage ? (
               <Button onClick={() => setCreateOpen(true)}>Add policy</Button>
             ) : undefined
           }
@@ -240,8 +239,7 @@ function SshRulesPanel() {
   const { networkId } = Route.useParams();
   const { data: activeOrg } = useActiveOrganization();
   const orgId = activeOrg?.id;
-  const { data: role } = useMemberRole(orgId);
-  const isAdmin = isAdminRole(role);
+  const { data: canManage = false } = useCan(orgId, "policy", "update");
   const { data: policies, isPending } = useSshPolicies(orgId, networkId);
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
@@ -329,7 +327,7 @@ function SshRulesPanel() {
         header: "Priority",
         accessorKey: "priority",
       },
-      ...(isAdmin
+      ...(canManage
         ? [
             {
               id: "actions",
@@ -348,7 +346,7 @@ function SshRulesPanel() {
           ]
         : []),
     ],
-    [isAdmin],
+    [canManage],
   );
 
   return (
@@ -358,7 +356,7 @@ function SshRulesPanel() {
           SSH access rules. Empty means deny. Check mode requires periodic IdP
           re-auth.
         </p>
-        {isAdmin ? (
+        {canManage ? (
           <Button onClick={() => setCreateOpen(true)}>
             <PlusIcon className="mr-2 size-4" />
             Add SSH rule
@@ -373,7 +371,7 @@ function SshRulesPanel() {
           title="No SSH rules"
           description="Add rules to allow SSH between machines. Without rules, SSH is denied."
           action={
-            isAdmin ? (
+            canManage ? (
               <Button onClick={() => setCreateOpen(true)}>Add SSH rule</Button>
             ) : undefined
           }

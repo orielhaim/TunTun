@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
+import { useCan } from "@/hooks/use-permission";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { useServes } from "@/lib/queries/management";
 
@@ -31,8 +31,7 @@ type ServeRow = NonNullable<ReturnType<typeof useServes>["data"]>[number];
 function ServesPage() {
   const { data: activeOrg } = useActiveOrganization();
   const orgId = activeOrg?.id;
-  const { data: role } = useMemberRole(orgId);
-  const isAdmin = isAdminRole(role);
+  const { data: canCreate = false } = useCan(orgId, "serve", "create");
   const { data: serves, isPending } = useServes(orgId);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -132,7 +131,7 @@ function ServesPage() {
         title="Serves"
         description="Internal hostnames for services shared across the mesh."
         actions={
-          isAdmin ? (
+          canCreate ? (
             <Button onClick={() => setCreateOpen(true)}>
               <PlusIcon className="mr-2 size-4" />
               Create serve
@@ -178,7 +177,7 @@ function ServesPage() {
             "Peers use the internal hostname, or run tunnet serve <port>.",
           ]}
           action={
-            isAdmin ? (
+            canCreate ? (
               <Button onClick={() => setCreateOpen(true)}>Create serve</Button>
             ) : undefined
           }

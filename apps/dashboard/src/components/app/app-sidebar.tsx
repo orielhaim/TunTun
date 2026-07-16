@@ -9,6 +9,7 @@ import {
   HiOutlineCog6Tooth,
   HiOutlineCommandLine,
   HiOutlineCube,
+  HiOutlineKey,
   HiOutlineServer,
   HiOutlineServerStack,
   HiOutlineShare,
@@ -105,6 +106,7 @@ const navSections: NavSection[] = [
     defaultOpen: false,
     items: [
       { to: "/app/users", label: "Users", icon: HiOutlineUsers },
+      { to: "/app/roles", label: "Roles", icon: HiOutlineKey },
       { to: "/app/access", label: "Access", icon: HiOutlineShieldCheck },
       {
         to: "/app/logs",

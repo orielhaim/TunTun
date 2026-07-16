@@ -5,7 +5,6 @@ import { isPaidTier, type PaidTier } from "./index";
 const ALG = "Ed25519" as const;
 const VERSION = 1 as const;
 
-/** Issuer public key (SPKI DER, base64). */
 export const TUNNET_LICENSE_PUBLIC_KEY_B64 =
   "MCowBQYDK2VwAyEAVFRLxiUbgHbnzc7/a3QdJYs3pqkwIKA6JR/iCbMl670=";
 
@@ -23,7 +22,6 @@ export type LicensePayload = {
 export type LicenseCertificate = {
   alg: typeof ALG;
   payload: LicensePayload;
-  /** Base64url Ed25519 signature over the canonical payload. */
   signature: string;
 };
 
@@ -85,7 +83,6 @@ function parseCertificate(value: unknown): LicenseCertificate | null {
   return { alg: ALG, payload, signature: obj.signature };
 }
 
-/** Verify a certificate object or JSON string. Invalid → null. */
 export function verifyLicense(
   input: unknown,
   nowSec: number = Math.floor(Date.now() / 1000),
@@ -125,11 +122,9 @@ export function verifyLicense(
   };
 }
 
-/** Create and sign a license certificate. */
 export function issueLicense(input: {
   tier: PaidTier;
   privateKeyPkcs8DerBase64: string;
-  /** Absolute expiry (unix seconds). Overrides `expiresInDays`. */
   exp?: number;
   expiresInDays?: number;
   iat?: number;

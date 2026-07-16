@@ -20,7 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
-import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
+import { useCan } from "@/hooks/use-permission";
 import { useActiveOrganization } from "@/lib/auth-client";
 import { formatNetworkName } from "@/lib/network-utils";
 import {
@@ -38,8 +38,8 @@ export const Route = createFileRoute("/app/networks/")({
 function NetworksPage() {
   const { data: activeOrg } = useActiveOrganization();
   const orgId = activeOrg?.id;
-  const { data: role } = useMemberRole(orgId);
-  const isAdmin = isAdminRole(role);
+  const { data: canManage = false } = useCan(orgId, "network", "update");
+  const { data: canCreate = false } = useCan(orgId, "network", "create");
   const { data: networks, isPending } = useNetworks(orgId);
   const { data: machines } = useMachines(orgId);
   const { remove } = useNetworkMutations(orgId);
@@ -116,7 +116,7 @@ function NetworksPage() {
         header: "",
         meta: { headerClassName: "w-10" },
         cell: ({ row }) =>
-          isAdmin ? (
+          canManage ? (
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={
@@ -149,7 +149,7 @@ function NetworksPage() {
           ) : null,
       },
     ],
-    [isAdmin],
+    [canManage],
   );
 
   return (
@@ -158,7 +158,7 @@ function NetworksPage() {
         title="Networks"
         description="Virtual networks that connect your machines."
         actions={
-          isAdmin ? (
+          canCreate ? (
             <Button onClick={() => setCreateOpen(true)}>
               <PlusIcon className="mr-2 size-4" />
               Create network
@@ -182,7 +182,7 @@ function NetworksPage() {
           title="No networks yet"
           description="Create a network to start enrolling machines."
           action={
-            isAdmin ? (
+            canCreate ? (
               <Button onClick={() => setCreateOpen(true)}>
                 Create network
               </Button>

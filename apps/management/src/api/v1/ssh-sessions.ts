@@ -10,7 +10,7 @@ import { Elysia } from "elysia";
 import { pushKillSshSession } from "../../lib/control-plane-client";
 import { db } from "../../lib/db";
 import { toIso } from "../../lib/serialize";
-import { getAuth, requireAdmin, requireAuth } from "./middleware/authz";
+import { getAuth, requireAuth, requirePermission } from "./middleware/authz";
 import { notFound, sessionPlugin } from "./middleware/session";
 
 function serializeSession(row: typeof schema.sshSessions.$inferSelect) {
@@ -123,7 +123,7 @@ export const sshSessionsRoutes = new Elysia()
   )
   .group("", (app) =>
     app
-      .use(requireAdmin)
+      .use(requirePermission({ sshSession: ["terminate"] }))
       .post(
         "/organizations/:orgId/ssh-sessions/:sessionId/kill",
         async ({ authContext, params }) => {

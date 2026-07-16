@@ -1,8 +1,6 @@
-import { schema } from "@tunnet/db";
-import { and, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
+
 import { auth } from "../../../auth";
-import { db } from "../../../lib/db";
 
 export type AuthContext = {
   user: { id: string; name: string; email: string };
@@ -30,14 +28,20 @@ async function resolveOrgContext(
     return null;
   }
 
-  const member = await db.query.member.findFirst({
-    where: and(
-      eq(schema.member.organizationId, organizationId),
-      eq(schema.member.userId, sessionResult.user.id),
-    ),
-  });
+  // Ensure Better Auth active org matches the request org so permission APIs resolve correctly.
+  if (sessionResult.session.activeOrganizationId !== organizationId) {
+    try {
+      await auth.api.setActiveOrganization({
+        headers,
+        body: { organizationId },
+      });
+    } catch {
+      return null;
+    }
+  }
 
-  if (!member) {
+  const member = await auth.api.getActiveMember({ headers });
+  if (!member || member.organizationId !== organizationId) {
     return null;
   }
 
@@ -49,7 +53,7 @@ async function resolveOrgContext(
     },
     session: {
       id: sessionResult.session.id,
-      activeOrganizationId: sessionResult.session.activeOrganizationId,
+      activeOrganizationId: organizationId,
     },
     organizationId,
     memberRole: member.role,
@@ -86,16 +90,16 @@ export function forbidden() {
   });
 }
 
-export function notFound(message = "Not found") {
+export function badRequest(message: string) {
   return new Response(JSON.stringify({ error: message }), {
-    status: 404,
+    status: 400,
     headers: { "Content-Type": "application/json" },
   });
 }
 
-export function badRequest(message: string) {
+export function notFound(message = "Not found") {
   return new Response(JSON.stringify({ error: message }), {
-    status: 400,
+    status: 404,
     headers: { "Content-Type": "application/json" },
   });
 }

@@ -8,7 +8,7 @@ import {
   MoreHorizontalIcon,
   PlusIcon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { DataTable } from "@/components/app/data-table";
@@ -42,7 +42,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useFeature } from "@/hooks/use-entitlements";
-import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
+import { useCan } from "@/hooks/use-permission";
 import { authClient, useActiveOrganization } from "@/lib/auth-client";
 import {
   createManagementClient,
@@ -65,8 +65,7 @@ type RoleFilter = "all" | "owner" | "admin" | "member";
 function UsersPage() {
   const { data: activeOrg } = useActiveOrganization();
   const orgId = activeOrg?.id;
-  const { data: role } = useMemberRole(orgId);
-  const isAdmin = isAdminRole(role);
+  const { data: canManage = false } = useCan(orgId, "member", "update");
   /** Cloud license: invite + signup. Community/enterprise: admin createUser only. */
   const cloudInvites = useFeature("openSignUp");
   const canCreateUsers = !cloudInvites;
@@ -74,6 +73,11 @@ function UsersPage() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [removeMemberId, setRemoveMemberId] = useState<string | null>(null);
+  const [changeRoleMember, setChangeRoleMember] = useState<{
+    id: string;
+    role: string;
+    name: string;
+  } | null>(null);
   const [cancelInviteId, setCancelInviteId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [view, setView] = useState<ViewFilter>("members");
@@ -198,7 +202,7 @@ function UsersPage() {
         meta: { headerClassName: tableHeaderClassName },
         cell: () => <span className="text-muted-foreground text-sm">-</span>,
       },
-      ...(isAdmin
+      ...(canManage
         ? [
             {
               id: "actions",
@@ -216,6 +220,17 @@ function UsersPage() {
                   <DropdownMenuContent align="end">
                     <DropdownMenuGroup>
                       <DropdownMenuItem
+                        onClick={() =>
+                          setChangeRoleMember({
+                            id: row.original.id,
+                            role: row.original.role,
+                            name: row.original.user.name,
+                          })
+                        }
+                      >
+                        Change role
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
                         variant="destructive"
                         disabled={row.original.role.includes("owner")}
                         onClick={() => setRemoveMemberId(row.original.id)}
@@ -230,7 +245,7 @@ function UsersPage() {
           ]
         : []),
     ],
-    [isAdmin],
+    [canManage],
   );
 
   const invitationColumns = useMemo<ColumnDef<Invitation>[]>(
@@ -273,7 +288,7 @@ function UsersPage() {
             addSuffix: true,
           }),
       },
-      ...(isAdmin
+      ...(canManage
         ? [
             {
               id: "actions",
@@ -304,7 +319,7 @@ function UsersPage() {
           ]
         : []),
     ],
-    [isAdmin],
+    [canManage],
   );
 
   const isPending = showingInvitations ? invitationsPending : membersPending;
@@ -366,7 +381,7 @@ function UsersPage() {
             : "Manage organization members."
         }
         actions={
-          isAdmin ? (
+          canManage ? (
             <div className="flex items-center gap-2">
               {cloudInvites ? (
                 <Button onClick={() => setInviteOpen(true)}>
@@ -451,7 +466,7 @@ function UsersPage() {
                   : "Invite your team to get started."
           }
           action={
-            isAdmin && !showingInvitations ? (
+            canManage && !showingInvitations ? (
               cloudInvites ? (
                 <Button onClick={() => setInviteOpen(true)}>Invite</Button>
               ) : canCreateUsers ? (
@@ -516,6 +531,14 @@ function UsersPage() {
         }}
       />
 
+      <ChangeRoleDialog
+        orgId={orgId}
+        member={changeRoleMember}
+        open={changeRoleMember !== null}
+        onOpenChange={(open) => !open && setChangeRoleMember(null)}
+        onSuccess={invalidate}
+      />
+
       {cloudInvites ? (
         <ConfirmDialog
           open={cancelInviteId !== null}
@@ -554,8 +577,9 @@ function InviteDialog({
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
 }) {
+  const { data: roles = ["member", "admin"] } = useAssignableRoles(orgId);
   const [email, setEmail] = useState("");
-  const [memberRole, setMemberRole] = useState<"member" | "admin">("member");
+  const [memberRole, setMemberRole] = useState("member");
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -603,14 +627,19 @@ function InviteDialog({
               <Label>Role</Label>
               <Select
                 value={memberRole}
-                onValueChange={(v) => setMemberRole(v as "member" | "admin")}
+                onValueChange={(v) => {
+                  if (v) setMemberRole(v);
+                }}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="member">Member</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
+                  {roles.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {formatMemberRole(r)}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -645,10 +674,11 @@ function CreateUserDialog({
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
 }) {
+  const { data: roles = ["member", "admin"] } = useAssignableRoles(orgId);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [memberRole, setMemberRole] = useState<"member" | "admin">("member");
+  const [memberRole, setMemberRole] = useState("member");
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -727,14 +757,19 @@ function CreateUserDialog({
               <Label>Role</Label>
               <Select
                 value={memberRole}
-                onValueChange={(v) => setMemberRole(v as "member" | "admin")}
+                onValueChange={(v) => {
+                  if (v) setMemberRole(v);
+                }}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="member">Member</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
+                  {roles.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {formatMemberRole(r)}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -750,6 +785,115 @@ function CreateUserDialog({
             <Button type="submit" disabled={loading}>
               <PlusIcon className="mr-2 size-4" />
               {loading ? "Creating..." : "Create user"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function useAssignableRoles(orgId: string | undefined) {
+  return useQuery({
+    queryKey: orgId
+      ? [...queryKeys.org(orgId), "roles", "assignable"]
+      : ["roles"],
+    enabled: Boolean(orgId),
+    queryFn: async () => {
+      const { data, error } = await authClient.organization.listRoles({
+        query: { organizationId: orgId! },
+      });
+      if (error) throw new Error(error.message);
+      const dynamic = (data ?? []).map((r) => r.role);
+      return ["member", "admin", ...dynamic.filter((r) => r !== "owner")];
+    },
+  });
+}
+
+function ChangeRoleDialog({
+  orgId,
+  member,
+  open,
+  onOpenChange,
+  onSuccess,
+}: {
+  orgId: string | undefined;
+  member: { id: string; role: string; name: string } | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSuccess: () => void;
+}) {
+  const { data: roles = ["member", "admin"] } = useAssignableRoles(orgId);
+  const [role, setRole] = useState("member");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (open && member) {
+      setRole(member.role.split(",")[0]?.trim() || "member");
+    }
+  }, [open, member]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!orgId || !member) return;
+    setLoading(true);
+    const { error } = await authClient.organization.updateMemberRole({
+      memberId: member.id,
+      role,
+      organizationId: orgId,
+    });
+    setLoading(false);
+    if (error) {
+      toast.error(error.message ?? "Failed to update role");
+      return;
+    }
+    toast.success("Role updated");
+    onOpenChange(false);
+    onSuccess();
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <form onSubmit={(e) => void handleSubmit(e)}>
+          <DialogHeader>
+            <DialogTitle>Change role</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-muted-foreground text-sm">
+              Update the organization role for {member?.name}.
+            </p>
+            <div className="space-y-2">
+              <Label>Role</Label>
+              <Select
+                value={role}
+                onValueChange={(value) => {
+                  if (value) setRole(value);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {roles.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {formatMemberRole(r)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={loading}>
+              {loading ? "Saving..." : "Save"}
             </Button>
           </DialogFooter>
         </form>

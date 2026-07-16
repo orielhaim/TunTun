@@ -18,7 +18,7 @@ import {
 import { bumpNetworkAndNotify, bumpOrgAndNotify } from "../../lib/notify";
 import { removeDeviceMembership } from "../../lib/remove-device-membership";
 import { serializeDevice } from "../../lib/serialize-device";
-import { getAuth, requireAdmin, requireAuth } from "./middleware/authz";
+import { getAuth, requireAuth, requirePermission } from "./middleware/authz";
 import { badRequest, notFound, sessionPlugin } from "./middleware/session";
 
 async function getNetworkInOrg(networkId: string, organizationId: string) {
@@ -107,7 +107,7 @@ export const devicesRoutes = new Elysia()
   )
   .group("", (app) =>
     app
-      .use(requireAdmin)
+      .use(requirePermission({ device: ["update", "approve"] }))
       .patch(
         "/organizations/:orgId/devices/:endpointId",
         async ({ authContext, params, body }) => {
@@ -409,7 +409,7 @@ export const devicesRoutes = new Elysia()
   )
   .group("", (app) =>
     app
-      .use(requireAdmin)
+      .use(requirePermission({ device: ["delete"] }))
       .delete(
         "/organizations/:orgId/devices",
         async ({ authContext, body }) => {

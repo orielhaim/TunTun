@@ -24,7 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
+import { useCan } from "@/hooks/use-permission";
 import { useActiveOrganization } from "@/lib/auth-client";
 import {
   useRelay,
@@ -56,8 +56,7 @@ function RelayDetailPage() {
   const { relayId } = Route.useParams();
   const { data: activeOrg } = useActiveOrganization();
   const orgId = activeOrg?.id;
-  const { data: role } = useMemberRole(orgId);
-  const isAdmin = isAdminRole(role);
+  const { data: canManage = false } = useCan(orgId, "relay", "update");
   const { data: relay, isPending, isError, error } = useRelay(orgId, relayId);
   const { data: health } = useRelayHealth(orgId, relayId);
   const { data: tunnels } = useTunnels(orgId);
@@ -181,7 +180,7 @@ function RelayDetailPage() {
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="tunnels">Tunnels</TabsTrigger>
           <TabsTrigger value="health">Health</TabsTrigger>
-          {isAdmin ? (
+          {canManage ? (
             <TabsTrigger value="settings">Settings</TabsTrigger>
           ) : null}
         </TabsList>
@@ -320,7 +319,7 @@ function RelayDetailPage() {
           </div>
         </TabsContent>
 
-        {isAdmin ? (
+        {canManage ? (
           <TabsContent value="settings">
             <div className="mx-auto flex max-w-2xl flex-col gap-4">
               <Card>
