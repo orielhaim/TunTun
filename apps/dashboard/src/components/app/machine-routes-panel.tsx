@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
   CreateHostnameRouteBody,
   CreateSubnetRouteBody,
-} from "@tuntun/api/management";
+} from "@tunnet/api/management";
 import { PlusIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";

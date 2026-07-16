@@ -202,7 +202,7 @@ export function CreateServeDialog({
               <CopyField label="Internal hostname" value={createdHostname} />
               <CopyField
                 label="CLI equivalent"
-                value={`tuntun serve ${port}${protocol !== "https" ? ` --protocol ${protocol}` : ""}`}
+                value={`tunnet serve ${port}${protocol !== "https" ? ` --protocol ${protocol}` : ""}`}
               />
             </div>
             <DialogFooter>

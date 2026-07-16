@@ -175,7 +175,7 @@ function ServesPage() {
           steps={[
             "Select an online machine and the port your service listens on.",
             "Choose who can access it - all peers, tags, or specific machines.",
-            "Peers use the internal hostname, or run tuntun serve <port>.",
+            "Peers use the internal hostname, or run tunnet serve <port>.",
           ]}
           action={
             isAdmin ? (

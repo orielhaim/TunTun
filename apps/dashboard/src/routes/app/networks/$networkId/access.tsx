@@ -6,7 +6,7 @@ import type {
   CreateSshPolicyBody,
   Policy,
   SshPolicy,
-} from "@tuntun/api/management";
+} from "@tunnet/api/management";
 import { PlusIcon, TrashIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { Device } from "@tuntun/api/management";
+import type { Device } from "@tunnet/api/management";
 import {
   mergePresence,
   type PresencePatch,

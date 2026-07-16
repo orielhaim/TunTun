@@ -1,5 +1,5 @@
-import { createServeBody, patchServeBody } from "@tuntun/api/management";
-import { schema } from "@tuntun/db";
+import { createServeBody, patchServeBody } from "@tunnet/api/management";
+import { schema } from "@tunnet/db";
 import { and, desc, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
 
@@ -184,7 +184,7 @@ export const servesRoutes = new Elysia()
             .replace(/[^a-z0-9-]/g, "-")
             .replace(/^-+|-+$/g, "")
             .slice(0, 40);
-          const internalHostname = `${host || "node"}.${network.name}.tuntun`;
+          const internalHostname = `${host || "node"}.${network.name}.tunnet`;
 
           let certificateId: string | null = null;
           let leafPrivateKeyPem: string | undefined;

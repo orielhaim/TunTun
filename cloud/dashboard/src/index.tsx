@@ -18,7 +18,7 @@ export function HomePage(): ReactNode {
 
       <header className="relative z-10 flex items-center justify-between px-6 py-5 sm:px-10">
         <span className="font-[family-name:var(--font-sans)] text-lg font-semibold tracking-tight">
-          TunTun
+          Tunnet
         </span>
         <nav className="flex items-center gap-3">
           <Link
@@ -38,7 +38,7 @@ export function HomePage(): ReactNode {
 
       <main className="relative z-10 mx-auto flex max-w-3xl flex-col items-start px-6 pb-24 pt-16 sm:px-10 sm:pt-24">
         <h1 className="max-w-2xl text-4xl font-semibold tracking-tight text-[#e8f0ea] sm:text-6xl sm:leading-[1.05]">
-          TunTun
+          Tunnet
         </h1>
         <p className="mt-5 max-w-xl text-lg text-[#e8f0ea]/70 sm:text-xl">
           Zero-trust networking for teams — mesh, tunnels, and access control

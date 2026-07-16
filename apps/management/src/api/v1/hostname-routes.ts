@@ -3,9 +3,9 @@ import {
   formatHostnameLabel,
   parseHostnameInput,
   patchHostnameRouteBody,
-} from "@tuntun/api/management";
-import { schema } from "@tuntun/db";
-import { formatIp } from "@tuntun/ip";
+} from "@tunnet/api/management";
+import { schema } from "@tunnet/db";
+import { formatIp } from "@tunnet/ip";
 import { and, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { writeAudit } from "../../lib/audit";

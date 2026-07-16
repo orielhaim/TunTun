@@ -1,6 +1,6 @@
 # TCP Port Mappings
 
-In addition to HTTPS tunnels, TunTun supports raw TCP port mappings. A TCP port mapping binds a public port on the relay to a local port on the agent machine.
+In addition to HTTPS tunnels, Tunnet supports raw TCP port mappings. A TCP port mapping binds a public port on the relay to a local port on the agent machine.
 
 ## Use case
 

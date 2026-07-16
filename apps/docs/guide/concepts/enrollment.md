@@ -1,6 +1,6 @@
 # Enrollment & Identity
 
-Every TunTun agent has a persistent identity: an Ed25519 keypair generated at first enrollment (or first Direct create/join). The public key (as a 64-character hex string) serves as the endpoint ID - a globally unique identifier for that machine.
+Every Tunnet agent has a persistent identity: an Ed25519 keypair generated at first enrollment (or first Direct create/join). The public key (as a 64-character hex string) serves as the endpoint ID - a globally unique identifier for that machine.
 
 ## Enrollment flow (Managed)
 
@@ -12,19 +12,19 @@ Enrollment registers a machine with the control plane. There are two paths.
 
 ```bash
 # Token enrollment (immediate)
-sudo tuntun enroll --control-url http://control:8080 --token TOKEN
+sudo tunnet enroll --control-url http://control:8080 --token TOKEN
 
 # Quick enrollment (requires admin approval)
-sudo tuntun enroll --control-url http://control:8080 --org my-company
+sudo tunnet enroll --control-url http://control:8080 --org my-company
 ```
 
-After enrollment, the agent stores public state in `state.json` and seals the identity seed (and later login tokens) in `state.enc`. Public settings go in `tuntun.toml`. See [Configuration](/guide/configuration) and [Encryption & Secrets](/guide/concepts/encryption).
+After enrollment, the agent stores public state in `state.json` and seals the identity seed (and later login tokens) in `state.enc`. Public settings go in `tunnet.toml`. See [Configuration](/guide/configuration) and [Encryption & Secrets](/guide/concepts/encryption).
 
-Default state directory: `~/.local/state/tuntun` (Linux user), `/var/lib/tuntun` (Linux service), or override with `--state-dir` / `TUNTUN_STATE_DIR`.
+Default state directory: `~/.local/state/tunnet` (Linux user), `/var/lib/tunnet` (Linux service), or override with `--state-dir` / `TUNNET_STATE_DIR`.
 
-Pass `--no-encrypt-state` (or `TUNTUN_NO_ENCRYPT_STATE=1`) only for containers/CI when platform sealing is unavailable.
+Pass `--no-encrypt-state` (or `TUNNET_NO_ENCRYPT_STATE=1`) only for containers/CI when platform sealing is unavailable.
 
-You cannot enroll into Managed mode while already joined to Direct networks (or the reverse). Wipe local state first with `tuntun reset --yes`.
+You cannot enroll into Managed mode while already joined to Direct networks (or the reverse). Wipe local state first with `tunnet reset --yes`.
 
 ## Request signing
 
@@ -35,7 +35,7 @@ After enrollment, every request from the agent to the control plane is signed wi
 Separate from machine enrollment, users can authenticate from the CLI to the management API using OAuth device authorization (RFC 8628):
 
 ```bash
-tuntun login --management-url http://localhost:3000
+tunnet login --management-url http://localhost:3000
 ```
 
 This opens a browser flow where the user enters a code displayed in the terminal. The resulting token is sealed in `state.enc` and enables management operations from the CLI.

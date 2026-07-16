@@ -1,8 +1,8 @@
 /**
- * Organization Internal CA - issues short-lived leaf certs for TunTun Serve.
+ * Organization Internal CA - issues short-lived leaf certs for Tunnet Serve.
  *
  * Root CA PEM is public (distributed in snapshots). Private keys are encrypted
- * at rest with AES-256-GCM using TUNTUN_CA_ENCRYPTION_KEY (32-byte hex or
+ * at rest with AES-256-GCM using TUNNET_CA_ENCRYPTION_KEY (32-byte hex or
  * base64). Without that env var, a derived key from a warning-level fallback
  * is used so local dev still works - never use that in production.
  */
@@ -16,7 +16,7 @@ import {
   randomBytes,
 } from "node:crypto";
 import * as x509 from "@peculiar/x509";
-import { schema } from "@tuntun/db";
+import { schema } from "@tunnet/db";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { db } from "./db";
@@ -31,19 +31,19 @@ const ALG: RsaHashedKeyGenParams = {
 };
 
 function encryptionKey(): Buffer {
-  const raw = process.env.TUNTUN_CA_ENCRYPTION_KEY;
+  const raw = process.env.TUNNET_CA_ENCRYPTION_KEY;
   if (raw) {
     if (/^[0-9a-fA-F]{64}$/.test(raw)) return Buffer.from(raw, "hex");
     const b64 = Buffer.from(raw, "base64");
     if (b64.length === 32) return b64;
     throw new Error(
-      "TUNTUN_CA_ENCRYPTION_KEY must be 32-byte hex (64 chars) or base64",
+      "TUNNET_CA_ENCRYPTION_KEY must be 32-byte hex (64 chars) or base64",
     );
   }
   console.warn(
-    "TUNTUN_CA_ENCRYPTION_KEY unset - using insecure local-dev CA key",
+    "TUNNET_CA_ENCRYPTION_KEY unset - using insecure local-dev CA key",
   );
-  return createHash("sha256").update("tuntun-dev-ca-key").digest();
+  return createHash("sha256").update("tunnet-dev-ca-key").digest();
 }
 
 export function encryptPem(pem: string): string {
@@ -84,7 +84,7 @@ async function generateCa(organizationId: string, orgName: string) {
 
   const cert = await x509.X509CertificateGenerator.createSelfSigned({
     serialNumber: randomBytes(16).toString("hex"),
-    name: `CN=TunTun Internal CA (${orgName}), O=${organizationId}`,
+    name: `CN=Tunnet Internal CA (${orgName}), O=${organizationId}`,
     notBefore,
     notAfter,
     signingAlgorithm: ALG,

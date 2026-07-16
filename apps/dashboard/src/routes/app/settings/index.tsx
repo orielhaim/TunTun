@@ -85,7 +85,7 @@ function UserSettingsPage() {
           <div className="border-b border-border/70 px-5 py-4 sm:px-6">
             <h2 className="text-sm font-semibold tracking-tight">Profile</h2>
             <p className="text-muted-foreground mt-1 text-sm">
-              Details from your TunTun account.
+              Details from your Tunnet account.
             </p>
           </div>
           <div className="divide-y divide-border/70 px-5 sm:px-6">
@@ -104,8 +104,8 @@ function UserSettingsPage() {
           <div className="border-b border-border/70 px-5 py-4 sm:px-6">
             <h2 className="text-sm font-semibold tracking-tight">CLI access</h2>
             <p className="text-muted-foreground mt-1 text-sm">
-              Link the TunTun CLI to this account with a device code from{" "}
-              <code className="text-foreground">tuntun login</code>.
+              Link the Tunnet CLI to this account with a device code from{" "}
+              <code className="text-foreground">tunnet login</code>.
             </p>
           </div>
           <div className="px-5 py-4 sm:px-6">

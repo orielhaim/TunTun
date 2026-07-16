@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
-import type { CreatePolicyBody, Policy } from "@tuntun/api/management";
+import type { CreatePolicyBody, Policy } from "@tunnet/api/management";
 import { ChevronRightIcon, PlusIcon, TrashIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";

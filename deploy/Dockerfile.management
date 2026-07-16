@@ -12,7 +12,7 @@ COPY packages/core/package.json packages/core/
 COPY packages/env/package.json packages/env/
 COPY apps/management/package.json apps/management/
 COPY apps/dashboard/package.json apps/dashboard/
-COPY crates/tuntun-node-napi/package.json crates/tuntun-node-napi/
+COPY crates/tunnet-node-napi/package.json crates/tunnet-node-napi/
 
 RUN bun install --linker=hoisted
 

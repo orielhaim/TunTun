@@ -2,8 +2,8 @@ import {
   sshRecordingCastResponse,
   sshRecordingListResponse,
   sshSessionListResponse,
-} from "@tuntun/api/management";
-import { schema } from "@tuntun/db";
+} from "@tunnet/api/management";
+import { schema } from "@tunnet/db";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { Elysia } from "elysia";
 

@@ -1,0 +1,45 @@
+[package]
+name = "tunnet-relay"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Tunnet public edge relay - TLS termination + reverse tunnels"
+
+[[bin]]
+name = "tunnet-relay"
+path = "src/main.rs"
+
+[dependencies]
+tunnet-common.workspace = true
+
+tokio.workspace = true
+futures-util.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+clap.workspace = true
+dotenvy.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+bytes.workspace = true
+dashmap.workspace = true
+parking_lot.workspace = true
+hex.workspace = true
+base64.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+rand.workspace = true
+ed25519-dalek.workspace = true
+reqwest.workspace = true
+blake3.workspace = true
+
+rustls.workspace = true
+tokio-rustls.workspace = true
+rustls-pemfile.workspace = true
+rcgen = { workspace = true }
+
+iroh.workspace = true
+argon2.workspace = true
+x509-parser = "0.18.1"
+instant-acme = { version = "0.8", default-features = false, features = ["hyper-rustls", "ring"] }

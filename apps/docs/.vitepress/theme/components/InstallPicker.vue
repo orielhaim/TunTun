@@ -26,11 +26,11 @@ const copied = ref(false);
 
 const commands: Record<Platform, string> = {
   linux:
-    "curl -fsSL https://github.com/orielhaim/TunTun/releases/latest/download/install.sh | sh",
+    "curl -fsSL https://github.com/tunnetio/Tunnet/releases/latest/download/install.sh | sh",
   macos:
-    "curl -fsSL https://github.com/orielhaim/TunTun/releases/latest/download/install.sh | sh",
+    "curl -fsSL https://github.com/tunnetio/Tunnet/releases/latest/download/install.sh | sh",
   windows:
-    "irm https://github.com/orielhaim/TunTun/releases/latest/download/install.ps1 | iex",
+    "irm https://github.com/tunnetio/Tunnet/releases/latest/download/install.ps1 | iex",
 };
 
 const shellLabel = computed(() =>
@@ -80,7 +80,7 @@ async function copyCommand() {
   <section
     class="install-picker"
     :class="{ 'is-compact': compact }"
-    aria-label="Install TunTun"
+    aria-label="Install Tunnet"
   >
     <header class="install-picker__header">
       <h2 class="install-picker__title">One command. Your machine joins the mesh</h2>
@@ -147,10 +147,10 @@ async function copyCommand() {
       Prefer the details?
       <a href="/guide/installation">Full installation guide</a>
       · update later with
-      <code>tuntun update</code>
+      <code>tunnet update</code>
     </p>
     <p v-else class="install-picker__footer">
-      Update later with <code>tuntun update</code>
+      Update later with <code>tunnet update</code>
     </p>
   </section>
 </template>

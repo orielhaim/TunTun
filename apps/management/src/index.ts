@@ -3,7 +3,7 @@ import {
   oauthProviderOpenIdConfigMetadata,
 } from "@better-auth/oauth-provider";
 import { cors } from "@elysiajs/cors";
-import { getDashboardUrl, getManagementPort } from "@tuntun/env";
+import { getDashboardUrl, getManagementPort } from "@tunnet/env";
 import { Elysia } from "elysia";
 
 import { cliAuthRoutes } from "./api/cli-auth";
@@ -65,5 +65,5 @@ const app = new Elysia()
   .listen(port);
 
 console.log(
-  `TunTun management server running at ${app.server?.hostname}:${app.server?.port}`,
+  `Tunnet management server running at ${app.server?.hostname}:${app.server?.port}`,
 );

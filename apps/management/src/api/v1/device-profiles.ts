@@ -1,9 +1,9 @@
 import {
   upsertDeviceProfileBody,
   upsertExitNodeBody,
-} from "@tuntun/api/management";
-import { schema } from "@tuntun/db";
-import { formatIpv4Cidr } from "@tuntun/ip";
+} from "@tunnet/api/management";
+import { schema } from "@tunnet/db";
+import { formatIpv4Cidr } from "@tunnet/ip";
 import { and, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { writeAudit } from "../../lib/audit";

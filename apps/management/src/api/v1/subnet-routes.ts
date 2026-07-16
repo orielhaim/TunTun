@@ -1,9 +1,9 @@
 import {
   createSubnetRouteBody,
   patchSubnetRouteBody,
-} from "@tuntun/api/management";
-import { schema } from "@tuntun/db";
-import { formatIpv4Cidr, ipv4CidrsOverlap, overlapsMeshCidr } from "@tuntun/ip";
+} from "@tunnet/api/management";
+import { schema } from "@tunnet/db";
+import { formatIpv4Cidr, ipv4CidrsOverlap, overlapsMeshCidr } from "@tunnet/ip";
 import { and, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { writeAudit } from "../../lib/audit";

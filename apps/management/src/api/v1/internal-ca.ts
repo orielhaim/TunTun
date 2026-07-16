@@ -1,4 +1,4 @@
-import { schema } from "@tuntun/db";
+import { schema } from "@tunnet/db";
 import { and, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
 

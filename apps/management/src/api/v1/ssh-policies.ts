@@ -2,8 +2,8 @@ import {
   createSshPolicyBody,
   patchSshPolicyBody,
   type Selector,
-} from "@tuntun/api/management";
-import { schema } from "@tuntun/db";
+} from "@tunnet/api/management";
+import { schema } from "@tunnet/db";
 import { and, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { writeAudit } from "../../lib/audit";

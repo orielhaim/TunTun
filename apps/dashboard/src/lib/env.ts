@@ -1,7 +1,7 @@
 import {
   getControlPlaneUrl as getControlPlaneUrlFromEnv,
   getManagementUrl as getManagementUrlFromEnv,
-} from "@tuntun/env";
+} from "@tunnet/env";
 
 function stripTrailingSlash(url: string): string {
   return url.replace(/\/$/, "");

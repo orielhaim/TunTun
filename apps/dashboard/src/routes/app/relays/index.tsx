@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
-import type { Relay } from "@tuntun/api/management";
+import type { Relay } from "@tunnet/api/management";
 import { formatDistanceToNow } from "date-fns";
 import { PlusIcon } from "lucide-react";
 import { useMemo, useState } from "react";

@@ -1,7 +1,7 @@
-import type { RegisterDeviceResponse } from "@tuntun/api/internal";
-import { registerSdkNodeBody, SDK_ENROLL_SCOPE } from "@tuntun/api/management";
-import { schema } from "@tuntun/db";
-import { formatIpv4Cidr } from "@tuntun/ip";
+import type { RegisterDeviceResponse } from "@tunnet/api/internal";
+import { registerSdkNodeBody, SDK_ENROLL_SCOPE } from "@tunnet/api/management";
+import { schema } from "@tunnet/db";
+import { formatIpv4Cidr } from "@tunnet/ip";
 import { and, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { canAccessNetwork } from "../../lib/api-key-auth";

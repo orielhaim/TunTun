@@ -1,0 +1,25 @@
+{
+  "name": "@tunnet/sdk-linux-arm64-musl",
+  "version": "0.3.0",
+  "cpu": [
+    "arm64"
+  ],
+  "main": "tunnet-node.linux-arm64-musl.node",
+  "files": [
+    "tunnet-node.linux-arm64-musl.node"
+  ],
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">= 18"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
+  "os": [
+    "linux"
+  ],
+  "libc": [
+    "musl"
+  ]
+}

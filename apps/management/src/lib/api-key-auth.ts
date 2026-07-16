@@ -1,4 +1,4 @@
-import { schema } from "@tuntun/db";
+import { schema } from "@tunnet/db";
 import * as argon2 from "argon2";
 import { and, eq, isNull, or } from "drizzle-orm";
 import { parseApiKeyPrefix } from "./api-key-secret";

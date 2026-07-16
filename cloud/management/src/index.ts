@@ -1,2 +1,2 @@
-/** Private cloud package marker — entitlements come from TUNTUN_LICENSE. */
+/** Private cloud package marker — entitlements come from TUNNET_LICENSE. */
 export {};

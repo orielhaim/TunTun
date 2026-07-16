@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
-import type { EnrollmentToken } from "@tuntun/api/management";
+import type { EnrollmentToken } from "@tunnet/api/management";
 import { formatDistanceToNow } from "date-fns";
 import { PlusIcon, TrashIcon } from "lucide-react";
 import { useMemo, useState } from "react";

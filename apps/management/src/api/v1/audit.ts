@@ -1,5 +1,5 @@
-import { paginationQuery } from "@tuntun/api/management";
-import { schema } from "@tuntun/db";
+import { paginationQuery } from "@tunnet/api/management";
+import { schema } from "@tunnet/db";
 import { and, desc, eq, gt } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { db } from "../../lib/db";

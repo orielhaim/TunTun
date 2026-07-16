@@ -1,21 +1,21 @@
 # Node SDK
 
-TunTun provides a Node.js/Bun SDK (`@tuntun/sdk`) that lets you embed mesh networking directly in your applications. The SDK wraps the Rust core via napi-rs, giving you native performance with a TypeScript API.
+Tunnet provides a Node.js/Bun SDK (`@tunnet/sdk`) that lets you embed mesh networking directly in your applications. The SDK wraps the Rust core via napi-rs, giving you native performance with a TypeScript API.
 
 ## Installation
 
 ```bash
-bun add @tuntun/sdk
+bun add @tunnet/sdk
 ```
 
 ## Quick start
 
 ```ts
-import { TunTunNode } from "@tuntun/sdk";
+import { TunnetNode } from "@tunnet/sdk";
 
-const node = await TunTunNode.create({
+const node = await TunnetNode.create({
   controlUrl: "http://control:8080",
-  stateDir: "/tmp/tuntun-sdk",
+  stateDir: "/tmp/tunnet-sdk",
 });
 
 // List peers on the mesh

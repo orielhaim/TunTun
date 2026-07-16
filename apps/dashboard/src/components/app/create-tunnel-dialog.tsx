@@ -121,7 +121,7 @@ export function CreateTunnelDialog({
       : (healthyRelays.find((r) => r.id === relayId) ?? null);
 
   const domainPreview =
-    selectedRelay?.domain ?? healthyRelays[0]?.domain ?? "*.tuntun.pub";
+    selectedRelay?.domain ?? healthyRelays[0]?.domain ?? "*.tunnet.pub";
 
   const hostnameForPreview =
     machineLabel ?? selectedMachine?.name ?? lockedMachine?.name;
@@ -139,7 +139,7 @@ export function CreateTunnelDialog({
     : `${subdomainPreview}.${domainPreview}`;
 
   const cliHint = [
-    `tuntun tunnel ${port}`,
+    `tunnet tunnel ${port}`,
     protocol !== "https" ? `--protocol ${protocol}` : null,
     subdomain.trim() ? `--subdomain ${subdomain.trim()}` : null,
   ]

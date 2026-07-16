@@ -5,8 +5,8 @@ COPY Cargo.toml Cargo.lock ./
 COPY crates/ crates/
 
 RUN cargo fetch
-RUN cargo build --release --package tuntun-relay \
-    && strip target/release/tuntun-relay
+RUN cargo build --release --package tunnet-relay \
+    && strip target/release/tunnet-relay
 
 FROM debian:bookworm-slim
 
@@ -14,9 +14,9 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /src/target/release/tuntun-relay /usr/local/bin/tuntun-relay
+COPY --from=builder /src/target/release/tunnet-relay /usr/local/bin/tunnet-relay
 
 EXPOSE 443 80
 
-ENTRYPOINT ["tuntun-relay"]
+ENTRYPOINT ["tunnet-relay"]
 CMD ["run"]

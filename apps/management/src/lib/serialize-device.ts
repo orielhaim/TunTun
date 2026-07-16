@@ -1,4 +1,4 @@
-import { formatIp } from "@tuntun/ip";
+import { formatIp } from "@tunnet/ip";
 import { normalizeDeviceLabels } from "./device-labels";
 import {
   deviceAgentVersion,

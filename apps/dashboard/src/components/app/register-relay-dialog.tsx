@@ -84,7 +84,7 @@ export function RegisterRelayDialog({
   }
 
   const command = registrationToken
-    ? `tuntun-relay register --control-url ${getControlPlaneUrl()} --token ${registrationToken}`
+    ? `tunnet-relay register --control-url ${getControlPlaneUrl()} --token ${registrationToken}`
     : "";
 
   return (

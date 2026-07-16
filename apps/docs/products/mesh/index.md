@@ -1,10 +1,10 @@
 # Mesh Network
 
-The mesh network is TunTun's core product. It creates an encrypted overlay network where every machine gets an internal IP address and can reach every other machine - SSH, ping, curl, HTTP, anything that uses TCP or UDP.
+The mesh network is Tunnet's core product. It creates an encrypted overlay network where every machine gets an internal IP address and can reach every other machine - SSH, ping, curl, HTTP, anything that uses TCP or UDP.
 
 ## How it competes
 
-The mesh network competes directly with **Tailscale** (mesh VPN), **Cloudflare WARP connector** (site-to-site connectivity), and raw **WireGuard** (encrypted tunneling). The key differentiator is that TunTun's control plane is fully open source, and the transport uses QUIC/iroh instead of WireGuard.
+The mesh network competes directly with **Tailscale** (mesh VPN), **Cloudflare WARP connector** (site-to-site connectivity), and raw **WireGuard** (encrypted tunneling). The key differentiator is that Tunnet's control plane is fully open source, and the transport uses QUIC/iroh instead of WireGuard.
 
 ## Key features
 
@@ -28,16 +28,16 @@ The mesh network competes directly with **Tailscale** (mesh VPN), **Cloudflare W
 
 ```bash
 # Enroll and start
-sudo tuntun enroll --control-url http://control:8080 --token TOKEN
-sudo tuntun run
+sudo tunnet enroll --control-url http://control:8080 --token TOKEN
+sudo tunnet run
 
 # Inspect the network
-tuntun status --peers
-tuntun ping other-machine
-tuntun dns status
-tuntun route list
+tunnet status --peers
+tunnet ping other-machine
+tunnet dns status
+tunnet route list
 
 # Diagnostics
-tuntun diag
-tuntun netcheck
+tunnet diag
+tunnet netcheck
 ```

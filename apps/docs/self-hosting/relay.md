@@ -1,6 +1,6 @@
 # Self-Hosting a Relay
 
-The relay (`tuntun-relay`) is an optional component for organizations that need public tunnels (`tuntun tunnel`). It is a standalone Rust binary that terminates public HTTPS/TCP connections and forwards them to agents through reverse tunnels.
+The relay (`tunnet-relay`) is an optional component for organizations that need public tunnels (`tunnet tunnel`). It is a standalone Rust binary that terminates public HTTPS/TCP connections and forwards them to agents through reverse tunnels.
 
 ## Running with Docker
 
@@ -20,9 +20,9 @@ relay:
     - "443:443"
     - "80:80"
   environment:
-    TUNTUN_RELAY_CONTROL_URL: "http://control:8080"
+    TUNNET_RELAY_CONTROL_URL: "http://control:8080"
   volumes:
-    - relay-certs:/etc/tuntun/certs
+    - relay-certs:/etc/tunnet/certs
 
 # Add to volumes:
 volumes:
@@ -36,12 +36,12 @@ The relay image is built from `deploy/Dockerfile.relay` - a simple multi-stage R
 
 ```bash
 # Register the relay with the control plane
-tuntun-relay register \
+tunnet-relay register \
   --control-url http://control:8080 \
   --token YOUR_RELAY_TOKEN
 
 # Run the relay
-tuntun-relay run
+tunnet-relay run
 ```
 
 ## DNS setup
@@ -61,11 +61,11 @@ The relay needs TLS certificates to terminate public HTTPS. You have three optio
 **Bring your own certs** - pass certificates directly:
 
 ```bash
-tuntun-relay run \
+tunnet-relay run \
   --cert-file /path/to/fullchain.pem \
   --key-file /path/to/privkey.pem
 ```
 
 **Reverse proxy** - put the relay behind a reverse proxy (Caddy, nginx, Traefik) that handles TLS termination, and run the relay in HTTP mode.
 
-See `tuntun-relay --help` for all available options.
+See `tunnet-relay --help` for all available options.

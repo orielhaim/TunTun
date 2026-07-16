@@ -19,7 +19,7 @@ import {
   relays,
   serves,
   tunnels,
-} from "./tuntun";
+} from "./tunnet";
 
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),

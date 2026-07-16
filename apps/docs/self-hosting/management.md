@@ -29,4 +29,4 @@ bun run management:start
 | `DASHBOARD_URL` | `http://localhost:5173` | Dashboard origin for CORS and OAuth |
 | `MANAGEMENT_URL` | `http://localhost:3000` | Public management API URL (listen port derived from this) |
 | `CONTROL_PLANE_URL` | `http://localhost:8080` | Control plane URL (admin API derived on port 9091) |
-| `TUNTUN_SERVICE_SECRET` | - | Internal API shared secret (must match control plane) |
+| `TUNNET_SERVICE_SECRET` | - | Internal API shared secret (must match control plane) |

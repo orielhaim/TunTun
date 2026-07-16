@@ -1,6 +1,6 @@
 # Environment Variables
 
-Complete reference for environment variables used by TunTun components.
+Complete reference for environment variables used by Tunnet components.
 
 ## Service URL bindings
 
@@ -18,31 +18,31 @@ The management server derives the control plane admin API URL from `CONTROL_PLAN
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection string | `postgres://user:pass@localhost:5432/tuntun` |
+| `DATABASE_URL` | PostgreSQL connection string | `postgres://user:pass@localhost:5432/tunnet` |
 | `BETTER_AUTH_SECRET` | Auth signing secret (32+ chars) | `a-long-random-string-at-least-32-characters` |
-| `TUNTUN_SERVICE_SECRET` | Internal API shared secret (management ↔ control) | `a-long-random-string-at-least-32-characters` |
+| `TUNNET_SERVICE_SECRET` | Internal API shared secret (management ↔ control) | `a-long-random-string-at-least-32-characters` |
 
-## Agent (`tuntun`)
+## Agent (`tunnet`)
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `TUNTUN_STATE_DIR` | Agent state directory | `~/.local/state/tuntun` |
+| `TUNNET_STATE_DIR` | Agent state directory | `~/.local/state/tunnet` |
 | `CONTROL_PLANE_URL` | Control plane URL (`--control-url`) | `http://127.0.0.1:8080` |
-| `MANAGEMENT_URL` | Management API URL (`tuntun login`) | `http://localhost:3000` |
-| `TUNTUN_ENROLL_TOKEN` | Enrollment token | `eyJ...` |
-| `TUNTUN_ORG_SLUG` | Organization slug (quick enroll) | `my-company` |
-| `TUNTUN_HOSTNAME` | Machine hostname | `api-prod` |
-| `TUNTUN_IFNAME` | TUN interface name | `tuntun0` |
-| `TUNTUN_POLL_SECS` | Snapshot poll interval | `30` |
-| `TUNTUN_METRICS_BIND` | Prometheus metrics bind | `127.0.0.1:9100` |
-| `TUNTUN_DISABLE_GOSSIP` | Disable gossip | `true` |
-| `TUNTUN_RECORDER` | Enable SSH recording | `true` |
-| `TUNTUN_JSON_LOGS` | JSON log format | `true` |
+| `MANAGEMENT_URL` | Management API URL (`tunnet login`) | `http://localhost:3000` |
+| `TUNNET_ENROLL_TOKEN` | Enrollment token | `eyJ...` |
+| `TUNNET_ORG_SLUG` | Organization slug (quick enroll) | `my-company` |
+| `TUNNET_HOSTNAME` | Machine hostname | `api-prod` |
+| `TUNNET_IFNAME` | TUN interface name | `tunnet0` |
+| `TUNNET_POLL_SECS` | Snapshot poll interval | `30` |
+| `TUNNET_METRICS_BIND` | Prometheus metrics bind | `127.0.0.1:9100` |
+| `TUNNET_DISABLE_GOSSIP` | Disable gossip | `true` |
+| `TUNNET_RECORDER` | Enable SSH recording | `true` |
+| `TUNNET_JSON_LOGS` | JSON log format | `true` |
 
 ## Control plane internals
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `TUNTUN_BIND` | Public API bind address | `0.0.0.0:8080` |
-| `TUNTUN_ADMIN_BIND` | Internal admin API bind | `127.0.0.1:9091` |
-| `TUNTUN_INTERNAL_BIND` | Metrics/ready bind | `127.0.0.1:9090` |
+| `TUNNET_BIND` | Public API bind address | `0.0.0.0:8080` |
+| `TUNNET_ADMIN_BIND` | Internal admin API bind | `127.0.0.1:9091` |
+| `TUNNET_INTERNAL_BIND` | Metrics/ready bind | `127.0.0.1:9090` |

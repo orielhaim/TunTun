@@ -1,7 +1,7 @@
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { sso } from "@better-auth/sso";
-import { getDb, schema } from "@tuntun/db";
-import { getDashboardUrl, getManagementUrl } from "@tuntun/env";
+import { getDb, schema } from "@tunnet/db";
+import { getDashboardUrl, getManagementUrl } from "@tunnet/env";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import {
@@ -22,17 +22,17 @@ const dashboardOrigin = getDashboardUrl();
 const entitlements = await getEntitlements();
 const disablePublicSignUp = !entitlements.openSignUp;
 
-export const OAUTH_CLIENT_DASHBOARD = "tuntun-dashboard";
-export const OAUTH_CLIENT_CLI = "tuntun-cli";
+export const OAUTH_CLIENT_DASHBOARD = "tunnet-dashboard";
+export const OAUTH_CLIENT_CLI = "tunnet-cli";
 
 export const TRUSTED_OAUTH_CLIENT_IDS = new Set<string>([
   OAUTH_CLIENT_DASHBOARD,
   OAUTH_CLIENT_CLI,
-  ...(process.env.TUNTUN_OAUTH_CLI_CLIENT_ID
-    ? [process.env.TUNTUN_OAUTH_CLI_CLIENT_ID]
+  ...(process.env.TUNNET_OAUTH_CLI_CLIENT_ID
+    ? [process.env.TUNNET_OAUTH_CLI_CLIENT_ID]
     : []),
-  ...(process.env.TUNTUN_OAUTH_DASHBOARD_CLIENT_ID
-    ? [process.env.TUNTUN_OAUTH_DASHBOARD_CLIENT_ID]
+  ...(process.env.TUNNET_OAUTH_DASHBOARD_CLIENT_ID
+    ? [process.env.TUNNET_OAUTH_DASHBOARD_CLIENT_ID]
     : []),
 ]);
 
@@ -105,7 +105,7 @@ async function ssoTrustedOrigins(): Promise<string[]> {
 }
 
 export const auth = betterAuth({
-  appName: "TunTun Management",
+  appName: "Tunnet Management",
   baseURL: getManagementUrl(),
   database: drizzleAdapter(db, {
     provider: "pg",
@@ -232,17 +232,17 @@ export async function ensureTrustedOAuthClients() {
   const desired = [
     {
       clientId:
-        process.env.TUNTUN_OAUTH_DASHBOARD_CLIENT_ID || OAUTH_CLIENT_DASHBOARD,
-      name: "TunTun Dashboard",
+        process.env.TUNNET_OAUTH_DASHBOARD_CLIENT_ID || OAUTH_CLIENT_DASHBOARD,
+      name: "Tunnet Dashboard",
       redirectUris: [
-        `${dashboardOrigin}/api/auth/callback/tuntun`,
+        `${dashboardOrigin}/api/auth/callback/tunnet`,
         `${dashboardOrigin}/consent`,
       ],
       type: "web" as const,
     },
     {
-      clientId: process.env.TUNTUN_OAUTH_CLI_CLIENT_ID || OAUTH_CLIENT_CLI,
-      name: "TunTun CLI",
+      clientId: process.env.TUNNET_OAUTH_CLI_CLIENT_ID || OAUTH_CLIENT_CLI,
+      name: "Tunnet CLI",
       redirectUris: [
         `${apiOrigin}/auth/cli/callback`,
         "http://127.0.0.1:3847/callback",

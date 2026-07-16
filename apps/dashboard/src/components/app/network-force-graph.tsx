@@ -1,4 +1,4 @@
-import type { TopologyEdge, TopologyNode } from "@tuntun/api/management";
+import type { TopologyEdge, TopologyNode } from "@tunnet/api/management";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ForceGraph2D, {
   type ForceGraphMethods,
@@ -222,11 +222,11 @@ export function NetworkForceGraph({
       }));
 
     if (showHub) {
-      const hubId = "hub:tuntun";
+      const hubId = "hub:tunnet";
       gNodes.unshift({
         id: hubId,
         kind: "hub",
-        label: "TunTun",
+        label: "Tunnet",
         secondary: "Edge",
         val: 1,
         online: true,
@@ -320,7 +320,7 @@ export function NetworkForceGraph({
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
         ctx.fillStyle = "rgba(71, 85, 105, 0.9)";
-        // ctx.fillText("TunTun", x, y + r + 5);
+        // ctx.fillText("Tunnet", x, y + r + 5);
         return;
       }
 

@@ -6,7 +6,7 @@ const ALG = "Ed25519" as const;
 const VERSION = 1 as const;
 
 /** Issuer public key (SPKI DER, base64). */
-export const TUNTUN_LICENSE_PUBLIC_KEY_B64 =
+export const TUNNET_LICENSE_PUBLIC_KEY_B64 =
   "MCowBQYDK2VwAyEAVFRLxiUbgHbnzc7/a3QdJYs3pqkwIKA6JR/iCbMl670=";
 
 export type LicensePayload = {
@@ -110,7 +110,7 @@ export function verifyLicense(
   }
 
   const publicKey = createPublicKey({
-    key: Buffer.from(TUNTUN_LICENSE_PUBLIC_KEY_B64, "base64"),
+    key: Buffer.from(TUNNET_LICENSE_PUBLIC_KEY_B64, "base64"),
     format: "der",
     type: "spki",
   });

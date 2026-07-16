@@ -21,7 +21,7 @@ if [ ! -f .env ]; then
     SERVICE_SECRET=$(openssl rand -hex 32)
     AUTH_SECRET=$(openssl rand -hex 32)
     cat > .env <<EOF
-TUNTUN_SERVICE_SECRET=${SERVICE_SECRET}
+TUNNET_SERVICE_SECRET=${SERVICE_SECRET}
 BETTER_AUTH_SECRET=${AUTH_SECRET}
 EOF
     echo -e "${GREEN}  .env created${NC}"
@@ -59,9 +59,9 @@ ${GREEN}════════════════════════
   3. Generate an enrollment token
   4. Enroll a machine:
 
-     ${CYAN}sudo tuntun enroll \\
+     ${CYAN}sudo tunnet enroll \\
        --control-url http://<your-ip>:8080 \\
        --token <YOUR_TOKEN>${NC}
 
-     ${CYAN}sudo tuntun run${NC}
+     ${CYAN}sudo tunnet run${NC}
 "

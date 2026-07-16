@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import type { AutoCleanupMode } from "@tuntun/api/management";
+import type { AutoCleanupMode } from "@tunnet/api/management";
 import {
   formatDurationCompact,
   parseHumanDuration,
   pgIntervalToSeconds,
-} from "@tuntun/api/management";
+} from "@tunnet/api/management";
 import { formatDistanceToNow } from "date-fns";
 import { type ReactNode, useEffect, useState } from "react";
 import {
@@ -787,7 +787,7 @@ function OrganizationSettingsPage() {
                       <>
                         Mesh hostnames resolve as{" "}
                         <span className="font-mono">
-                          hostname.{peerDnsSuffix.trim() || "tuntun"}
+                          hostname.{peerDnsSuffix.trim() || "tunnet"}
                         </span>
                         .
                       </>
@@ -797,7 +797,7 @@ function OrganizationSettingsPage() {
                       id="peer-dns"
                       value={peerDnsSuffix}
                       onChange={(e) => setPeerDnsSuffix(e.target.value)}
-                      placeholder="tuntun"
+                      placeholder="tunnet"
                       disabled={!isAdmin}
                     />
                   </FieldBlock>
@@ -822,7 +822,7 @@ function OrganizationSettingsPage() {
           {section === "certificate" ? (
             <SettingsPanel
               title="Internal certificate authority"
-              description="TunTun issues short-lived certificates from an organization CA when you create HTTPS serves. Agents trust this CA so peers can connect to mesh hostnames without public DNS."
+              description="Tunnet issues short-lived certificates from an organization CA when you create HTTPS serves. Agents trust this CA so peers can connect to mesh hostnames without public DNS."
               footer={
                 isAdmin ? (
                   <Button
@@ -1106,7 +1106,7 @@ function OrganizationSettingsPage() {
         open={removeSsoOpen}
         onOpenChange={setRemoveSsoOpen}
         title="Remove SSO provider"
-        description="SSH check-mode will fall back to TunTun session authentication. Dashboard SSO login for this org domain will stop working."
+        description="SSH check-mode will fall back to Tunnet session authentication. Dashboard SSO login for this org domain will stop working."
         confirmLabel="Remove SSO"
         destructive
         loading={ssoMutations.remove.isPending}

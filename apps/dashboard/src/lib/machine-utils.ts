@@ -1,4 +1,4 @@
-import type { Device, Network } from "@tuntun/api/management";
+import type { Device, Network } from "@tunnet/api/management";
 import { formatDistanceToNow } from "date-fns";
 
 import type { LivePresenceDevice } from "@/hooks/use-live-presence";

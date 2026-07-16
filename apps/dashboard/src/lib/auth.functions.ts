@@ -1,10 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
-import { entitlementsSchema } from "@tuntun/api/management";
+import { entitlementsSchema } from "@tunnet/api/management";
 import {
   COMMUNITY_ENTITLEMENTS,
   type Entitlements,
-} from "@tuntun/entitlements";
+} from "@tunnet/entitlements";
 
 import { authClient } from "@/lib/auth-client";
 import { getManagementApiUrl } from "@/lib/env";

@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import type { DeviceMetadata } from "@tuntun/api/management";
+import type { DeviceMetadata } from "@tunnet/api/management";
 import { formatDistanceToNow } from "date-fns";
 import { ChevronRightIcon, PlusIcon } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
@@ -234,7 +234,7 @@ function MachineSshTab({
           <p className="text-muted-foreground text-sm">
             From another mesh machine with SSH rules allowing access:
           </p>
-          <CopyField label="CLI" value={`tuntun ssh ${hostname}`} />
+          <CopyField label="CLI" value={`tunnet ssh ${hostname}`} />
           <p className="text-muted-foreground text-xs leading-relaxed">
             Check-mode rules open a browser for IdP re-auth when the last
             authentication is older than the rule&apos;s check period.

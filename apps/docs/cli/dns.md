@@ -1,11 +1,11 @@
-# tuntun dns
+# tunnet dns
 
 Manage PeerDNS.
 
 ## Usage
 
 ```bash
-tuntun dns status
+tunnet dns status
 ```
 
 ## Output

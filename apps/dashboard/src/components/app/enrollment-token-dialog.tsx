@@ -96,7 +96,7 @@ export function EnrollmentTokenDialog({
             <CopyField label="Enrollment token" value={token} />
             <CopyField
               label="Install command"
-              value={`tuntun enroll --token ${token} --control-url ${getControlPlaneUrl()}`}
+              value={`tunnet enroll --token ${token} --control-url ${getControlPlaneUrl()}`}
             />
             <p className="text-muted-foreground text-xs">
               This token is shown only once. Copy it before closing.

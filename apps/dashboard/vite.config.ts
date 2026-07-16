@@ -2,8 +2,8 @@ import path from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import { devtools } from "@tanstack/devtools-vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
-import { getManagementUrl } from "@tuntun/env";
-import { resolveCloudDashboardRoot } from "@tuntun/env/cloud-paths";
+import { getManagementUrl } from "@tunnet/env";
+import { resolveCloudDashboardRoot } from "@tunnet/env/cloud-paths";
 
 import viteReact from "@vitejs/plugin-react";
 import { nitro } from "nitro/vite";
@@ -19,7 +19,7 @@ const config = defineConfig({
   resolve: {
     tsconfigPaths: true,
     alias: {
-      "@tuntun/cloud-dashboard": cloudDashboardSrc,
+      "@tunnet/cloud-dashboard": cloudDashboardSrc,
     },
   },
   preview: {

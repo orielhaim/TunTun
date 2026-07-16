@@ -1,12 +1,12 @@
 # Database
 
-TunTun uses PostgreSQL as its primary data store. All state - organizations, networks, endpoints, tunnels, serves, routes, policies, SSH sessions, auth tables - lives in PostgreSQL.
+Tunnet uses PostgreSQL as its primary data store. All state - organizations, networks, endpoints, tunnels, serves, routes, policies, SSH sessions, auth tables - lives in PostgreSQL.
 
 ## Setup
 
 ```bash
 # Create the database
-createdb tuntun
+createdb tunnet
 
 # Run migrations
 bun install

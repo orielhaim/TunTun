@@ -1,4 +1,4 @@
-import { getDashboardUrl, getManagementUrl } from "@tuntun/env";
+import { getDashboardUrl, getManagementUrl } from "@tunnet/env";
 import { Elysia } from "elysia";
 
 import { OAUTH_CLIENT_CLI } from "../auth";
@@ -8,7 +8,7 @@ export const cliAuthRoutes = new Elysia().get("/auth/cli/config", () => {
   const base = getManagementUrl();
   const web = getDashboardUrl();
   return {
-    clientId: process.env.TUNTUN_OAUTH_CLI_CLIENT_ID || OAUTH_CLIENT_CLI,
+    clientId: process.env.TUNNET_OAUTH_CLI_CLIENT_ID || OAUTH_CLIENT_CLI,
     issuer: `${base}/api/auth`,
     deviceCodeEndpoint: `${base}/api/auth/device/code`,
     deviceTokenEndpoint: `${base}/api/auth/device/token`,

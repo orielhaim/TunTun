@@ -136,14 +136,14 @@ jobs:
         shell: bash
         run: |
           cargo build --release --target ${{ matrix.target }} \
-            -p tuntun-agent -p tuntun-control -p tuntun-relay
+            -p tunnet-agent -p tunnet-control -p tunnet-relay
 
       - name: Build (cross)
         if: matrix.cross
         shell: bash
         run: |
           cross build --release --target ${{ matrix.target }} \
-            -p tuntun-agent -p tuntun-control -p tuntun-relay
+            -p tunnet-agent -p tunnet-control -p tunnet-relay
 
       - name: Package
         id: package
@@ -151,13 +151,13 @@ jobs:
         run: |
           version="${{ needs.validate.outputs.version }}"
           target="${{ matrix.target }}"
-          staging="tuntun-${version}-${target}"
+          staging="tunnet-${version}-${target}"
           mkdir -p "$staging"
 
           ext=""
           if [[ "$target" == *windows* ]]; then ext=".exe"; fi
 
-          for bin in tuntun tuntun-control tuntun-relay; do
+          for bin in tunnet tunnet-control tunnet-relay; do
             src="target/${target}/release/${bin}${ext}"
             if [ -f "$src" ]; then cp "$src" "$staging/"; fi
           done
@@ -256,7 +256,7 @@ jobs:
       - uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.validate.outputs.tag }}
-          name: TunTun ${{ needs.validate.outputs.tag }}
+          name: Tunnet ${{ needs.validate.outputs.tag }}
           body_path: release-notes.md
           draft: true
           prerelease: ${{ needs.validate.outputs.prerelease == 'true' }}

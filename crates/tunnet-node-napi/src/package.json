@@ -1,0 +1,26 @@
+{
+  "name": "@tunnet/sdk",
+  "version": "0.3.0",
+  "type": "module",
+  "main": "../dist/index.js",
+  "types": "../dist/index.d.ts",
+  "napi": {
+    "binaryName": "tunnet-node",
+    "targets": [
+      "x86_64-unknown-linux-gnu",
+      "aarch64-unknown-linux-gnu",
+      "aarch64-apple-darwin",
+      "x86_64-pc-windows-msvc",
+      "aarch64-pc-windows-msvc",
+      "x86_64-unknown-linux-musl",
+      "aarch64-unknown-linux-musl"
+    ]
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^3.0.0"
+  },
+  "scripts": {
+    "build": "napi build --platform --release --manifest-path ../Cargo.toml --js ../binding.js --dts ../binding.d.ts --esm",
+    "build:debug": "napi build --platform --manifest-path ../Cargo.toml --js ../binding.js --dts ../binding.d.ts --esm"
+  }
+}

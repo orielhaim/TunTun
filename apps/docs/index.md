@@ -2,19 +2,19 @@
 layout: home
 
 hero:
-  name: "TunTun"
+  name: "Tunnet"
   text: "Private mesh networking for your infrastructure"
   tagline: Open-source alternative to Tailscale, ngrok, and Cloudflare mesh. One stack, fully open control plane.
   image:
     src: /logo.png
-    alt: TunTun
+    alt: Tunnet
   actions:
     - theme: brand
-      text: Install TunTun
+      text: Install Tunnet
       link: /guide/installation
     - theme: alt
       text: View on GitHub
-      link: https://github.com/orielhaim/TunTun
+      link: https://github.com/tunnetio/Tunnet
 
 features:
   - icon: 🕸️

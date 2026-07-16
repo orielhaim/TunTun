@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { createEnrollmentTokenBody } from "@tuntun/api/management";
-import { schema } from "@tuntun/db";
+import { createEnrollmentTokenBody } from "@tunnet/api/management";
+import { schema } from "@tunnet/db";
 import { and, eq, isNull } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { blake3 } from "hash-wasm";

@@ -5,8 +5,8 @@ import {
   fileTransferListResponse,
   fileTransferSchema,
   updateSendSettingsBody,
-} from "@tuntun/api/management";
-import { schema } from "@tuntun/db";
+} from "@tunnet/api/management";
+import { schema } from "@tunnet/db";
 import { and, desc, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
 

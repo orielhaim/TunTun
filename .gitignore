@@ -1,6 +1,6 @@
 node_modules
 /target
-/crates/tuntun-agent/resources/wintun/
+/crates/tunnet-agent/resources/wintun/
 .env
 .DS_Store
 dist

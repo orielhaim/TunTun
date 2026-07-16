@@ -3,9 +3,9 @@ import {
   type PatchDeviceLabelsBody,
   parseHumanDuration,
   secondsToPgInterval,
-} from "@tuntun/api/management";
-import { type Database, schema } from "@tuntun/db";
-import { formatIp } from "@tuntun/ip";
+} from "@tunnet/api/management";
+import { type Database, schema } from "@tunnet/db";
+import { formatIp } from "@tunnet/ip";
 import { and, eq } from "drizzle-orm";
 import { db } from "./db";
 import { mergeDeviceLabels, normalizeDeviceLabels } from "./device-labels";

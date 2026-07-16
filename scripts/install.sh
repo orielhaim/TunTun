@@ -1,25 +1,25 @@
 #!/bin/sh
-# TunTun installer - download from GitHub Releases, verify, install.
+# Tunnet installer - download from GitHub Releases, verify, install.
 # Usage:
-#   curl -fsSL https://github.com/orielhaim/TunTun/releases/latest/download/install.sh | sh
+#   curl -fsSL https://github.com/tunnetio/Tunnet/releases/latest/download/install.sh | sh
 #
 # Environment:
-#   TUNTUN_REPO          Override repository (default: orielhaim/TunTun)
-#   TUNTUN_INSTALL_DIR   Override install path (default: /usr/local/bin)
-#   TUNTUN_NO_SERVICE    Set to 1 to skip service installation
-#   TUNTUN_VERIFY        Set to 0 to skip attestation verification
+#   TUNNET_REPO          Override repository (default: tunnetio/Tunnet)
+#   TUNNET_INSTALL_DIR   Override install path (default: /usr/local/bin)
+#   TUNNET_NO_SERVICE    Set to 1 to skip service installation
+#   TUNNET_VERIFY        Set to 0 to skip attestation verification
 set -eu
 
 main() {
 
-REPO="${TUNTUN_REPO:-orielhaim/TunTun}"
-INSTALL_DIR="${TUNTUN_INSTALL_DIR:-/usr/local/bin}"
-SERVICE_NAME="tuntun"
+REPO="${TUNNET_REPO:-tunnetio/Tunnet}"
+INSTALL_DIR="${TUNNET_INSTALL_DIR:-/usr/local/bin}"
+SERVICE_NAME="tunnet"
 VERSION=""
-INSTALL_SERVICE="${TUNTUN_NO_SERVICE:+0}"
+INSTALL_SERVICE="${TUNNET_NO_SERVICE:+0}"
 INSTALL_SERVICE="${INSTALL_SERVICE:-1}"
-VERIFY="${TUNTUN_VERIFY:-1}"
-BINS="tuntun tuntun-control tuntun-relay"
+VERIFY="${TUNNET_VERIFY:-1}"
+BINS="tunnet tunnet-control tunnet-relay"
 GITHUB_API="${GITHUB_API:-https://api.github.com}"
 GITHUB_DOWNLOAD="${GITHUB_DOWNLOAD:-https://github.com}"
 
@@ -47,7 +47,7 @@ need_cmd() {
 
 usage() {
   cat <<EOF
-TunTun installer
+Tunnet installer
 
 Usage: install.sh [options]
 
@@ -60,10 +60,10 @@ Options:
   -h, --help        Show this help
 
 Environment:
-  TUNTUN_REPO         Repository to download from (default: orielhaim/TunTun)
-  TUNTUN_INSTALL_DIR  Override install directory
-  TUNTUN_NO_SERVICE   Set to 1 to skip service installation
-  TUNTUN_VERIFY       Set to 0 to skip attestation verification
+  TUNNET_REPO         Repository to download from (default: tunnetio/Tunnet)
+  TUNNET_INSTALL_DIR  Override install directory
+  TUNNET_NO_SERVICE   Set to 1 to skip service installation
+  TUNNET_VERIFY       Set to 0 to skip attestation verification
 EOF
 }
 
@@ -175,22 +175,22 @@ case "$VERSION" in
   *)  TAG="v${VERSION}" ;;
 esac
 
-if command -v tuntun >/dev/null 2>&1; then
-  INSTALLED="$(tuntun --version 2>/dev/null | sed -n 's/.*[[:space:]]\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' | head -1)"
+if command -v tunnet >/dev/null 2>&1; then
+  INSTALLED="$(tunnet --version 2>/dev/null | sed -n 's/.*[[:space:]]\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' | head -1)"
   if [ "$INSTALLED" = "$VERSION" ]; then
-    info "TunTun v${VERSION} is already installed"
+    info "Tunnet v${VERSION} is already installed"
     exit 0
   fi
   if [ -n "$INSTALLED" ]; then
-    info "Upgrading TunTun v${INSTALLED} -> v${VERSION}"
+    info "Upgrading Tunnet v${INSTALLED} -> v${VERSION}"
   fi
 fi
 
-ARCHIVE="tuntun-${VERSION}-${TARGET}.tar.gz"
+ARCHIVE="tunnet-${VERSION}-${TARGET}.tar.gz"
 URL="${GITHUB_DOWNLOAD}/${REPO}/releases/download/${TAG}/${ARCHIVE}"
 CHECKSUM_URL="${URL}.sha256"
 
-info "Installing TunTun ${TAG} (${TARGET})"
+info "Installing Tunnet ${TAG} (${TARGET})"
 
 TMP="$(mktemp -d)"
 # shellcheck disable=SC2064
@@ -228,7 +228,7 @@ fi
 
 cd "$TMP"
 tar xzf "$ARCHIVE"
-EXTRACTED="tuntun-${VERSION}-${TARGET}"
+EXTRACTED="tunnet-${VERSION}-${TARGET}"
 [ -d "$EXTRACTED" ] || die "unexpected archive layout (missing ${EXTRACTED}/)"
 
 $SUDO mkdir -p "$INSTALL_DIR"
@@ -247,29 +247,29 @@ done
 
 [ "$INSTALLED_COUNT" -gt 0 ] || die "no binaries were installed"
 
-if [ "$INSTALL_SERVICE" -eq 1 ] && [ -x "${INSTALL_DIR}/tuntun" ]; then
+if [ "$INSTALL_SERVICE" -eq 1 ] && [ -x "${INSTALL_DIR}/tunnet" ]; then
   if [ "$OS" = "linux" ] && command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
-    if $SUDO "${INSTALL_DIR}/tuntun" service install 2>/dev/null; then
+    if $SUDO "${INSTALL_DIR}/tunnet" service install 2>/dev/null; then
       info "systemd service installed"
     else
-      warn "could not install systemd service (run: sudo tuntun service install)"
+      warn "could not install systemd service (run: sudo tunnet service install)"
     fi
   elif [ "$OS" = "darwin" ]; then
-    if $SUDO "${INSTALL_DIR}/tuntun" service install 2>/dev/null; then
+    if $SUDO "${INSTALL_DIR}/tunnet" service install 2>/dev/null; then
       info "launchd service installed"
     else
-      warn "could not install launchd service (run: sudo tuntun service install)"
+      warn "could not install launchd service (run: sudo tunnet service install)"
     fi
   fi
 fi
 
 info ""
-info "${BOLD}TunTun ${TAG} installed successfully!${RESET}"
+info "${BOLD}Tunnet ${TAG} installed successfully!${RESET}"
 info ""
 info "Next steps:"
-info "  tuntun --version                                        # verify"
-info "  sudo tuntun enroll --control-url <url> --token <token>  # enroll"
-info "  sudo tuntun service start                               # start"
+info "  tunnet --version                                        # verify"
+info "  sudo tunnet enroll --control-url <url> --token <token>  # enroll"
+info "  sudo tunnet service start                               # start"
 
 }
 

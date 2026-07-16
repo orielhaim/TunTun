@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
-import type { TunnelTrafficLog } from "@tuntun/api/management";
+import type { TunnelTrafficLog } from "@tunnet/api/management";
 import { formatDistanceToNow } from "date-fns";
 import {
   ArrowDownIcon,
@@ -469,7 +469,7 @@ function TunnelDetailPage() {
                   <p className="text-muted-foreground text-xs">
                     Preview: {subdomain || tunnel.subdomain}.
                     {tunnel.publicHostname.split(".").slice(1).join(".") ||
-                      "tuntun.pub"}
+                      "tunnet.pub"}
                   </p>
                 </div>
                 <DetailRow label="Protocol">

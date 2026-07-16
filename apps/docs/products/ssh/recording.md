@@ -7,13 +7,13 @@ SSH session recording captures the terminal output of SSH sessions for audit and
 Recording is enabled per-machine by starting the agent with the `--recorder` flag:
 
 ```bash
-sudo tuntun run --recorder
+sudo tunnet run --recorder
 ```
 
 Or via the environment variable:
 
 ```bash
-TUNTUN_RECORDER=1 sudo tuntun run
+TUNNET_RECORDER=1 sudo tunnet run
 ```
 
 ## Recording rules
@@ -24,10 +24,10 @@ Recording can also be enforced through SSH policies configured in **Networks →
 
 ```bash
 # List all recordings
-tuntun ssh recordings
+tunnet ssh recordings
 
 # Play a recording
-tuntun ssh play <session_id>
+tunnet ssh play <session_id>
 ```
 
 Recordings are also viewable in the dashboard under **SSH → Recordings**.

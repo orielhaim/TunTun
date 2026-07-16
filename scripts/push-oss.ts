@@ -64,7 +64,7 @@ async function main() {
 
   const message = body ? `${subject}\n\n${body}`.trim() : subject;
 
-  const tmp = await mkdtemp(join(tmpdir(), "tuntun-push-oss-"));
+  const tmp = await mkdtemp(join(tmpdir(), "tunnet-push-oss-"));
   console.log(`Publishing filtered tree to ${remote} (${remoteUrl})`);
   console.log(`Source: ${headFull}`);
 

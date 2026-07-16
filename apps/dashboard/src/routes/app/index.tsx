@@ -215,7 +215,7 @@ function OverviewPage() {
                 title="No active tunnels"
                 description="Share a public URL to a port on one of your machines."
                 steps={[
-                  "Create tunnel (or run tuntun tunnel).",
+                  "Create tunnel (or run tunnet tunnel).",
                   "Pick an online machine and local port.",
                   "Copy the https:// URL and open it in a browser.",
                 ]}
@@ -287,7 +287,7 @@ function OverviewPage() {
                 title="No active serves"
                 description="Expose a service to peers on the mesh with HTTPS."
                 steps={[
-                  "Create serve (or run tuntun serve).",
+                  "Create serve (or run tunnet serve).",
                   "Choose access: all peers, tags, or specific machines.",
                   "Peers connect via the internal hostname.",
                 ]}

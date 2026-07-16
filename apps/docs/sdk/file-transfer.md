@@ -1,6 +1,6 @@
 # File Transfer (SDK)
 
-The SDK exposes the same file transfer capabilities as `tuntun send`.
+The SDK exposes the same file transfer capabilities as `tunnet send`.
 
 ## Sending files
 

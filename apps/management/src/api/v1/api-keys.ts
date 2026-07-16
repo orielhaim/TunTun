@@ -1,5 +1,5 @@
-import { createApiKeyBody } from "@tuntun/api/management";
-import { schema } from "@tuntun/db";
+import { createApiKeyBody } from "@tunnet/api/management";
+import { schema } from "@tunnet/db";
 import * as argon2 from "argon2";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { Elysia } from "elysia";

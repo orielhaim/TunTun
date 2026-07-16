@@ -1,5 +1,5 @@
-import { createListenClient, schema } from "@tuntun/db";
-import { formatIp } from "@tuntun/ip";
+import { createListenClient, schema } from "@tunnet/db";
+import { formatIp } from "@tunnet/ip";
 import { and, desc, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { db } from "../../lib/db";

@@ -1,39 +1,39 @@
 # Diagnostics
 
-TunTun provides several tools for troubleshooting mesh connectivity.
+Tunnet provides several tools for troubleshooting mesh connectivity.
 
-## tuntun status
+## tunnet status
 
 Shows agent status, assigned IP, network membership, and optionally peer connection details:
 
 ```bash
-tuntun status
-tuntun status --peers
+tunnet status
+tunnet status --peers
 ```
 
-## tuntun ping
+## tunnet ping
 
 Measures mesh round-trip time to a peer over QUIC:
 
 ```bash
-tuntun ping db-server
-tuntun ping 10.7.0.5
+tunnet ping db-server
+tunnet ping 10.7.0.5
 ```
 
-## tuntun diag
+## tunnet diag
 
 Full connectivity diagnostics - tests control plane connectivity, peer reachability, DNS resolution, and route table consistency:
 
 ```bash
-tuntun diag
+tunnet diag
 ```
 
-## tuntun netcheck
+## tunnet netcheck
 
 Quick pass/fail connectivity check:
 
 ```bash
-tuntun netcheck
+tunnet netcheck
 ```
 
 ## Metrics

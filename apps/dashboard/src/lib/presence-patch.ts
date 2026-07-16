@@ -1,4 +1,4 @@
-import type { Device } from "@tuntun/api/management";
+import type { Device } from "@tunnet/api/management";
 
 /** Presence fields updated by the agent WebSocket session. */
 export type PresencePatch = {

@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import type {
   CreateHostnameRouteBody,
   CreateSubnetRouteBody,
-} from "@tuntun/api/management";
+} from "@tunnet/api/management";
 import { PlusIcon, SearchIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";

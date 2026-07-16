@@ -1,5 +1,5 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { HomePage, hasMarketingLanding } from "@tuntun/cloud-dashboard";
+import { HomePage, hasMarketingLanding } from "@tunnet/cloud-dashboard";
 
 import { getEntitlements, getSession } from "@/lib/auth.functions";
 

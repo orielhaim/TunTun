@@ -1,12 +1,12 @@
 import { existsSync } from "node:fs";
-import { getDb } from "@tuntun/db";
+import { getDb } from "@tunnet/db";
 import {
   COMMUNITY_ENTITLEMENTS,
   type Entitlements,
   entitlementsForTier,
-} from "@tuntun/entitlements";
-import { verifyLicense } from "@tuntun/entitlements/license";
-import { getRepoRoot, hasCloudPackages } from "@tuntun/env/cloud-paths";
+} from "@tunnet/entitlements";
+import { verifyLicense } from "@tunnet/entitlements/license";
+import { getRepoRoot, hasCloudPackages } from "@tunnet/env/cloud-paths";
 
 type Cache = {
   entitlements: Entitlements;
@@ -17,7 +17,7 @@ type Cache = {
 let cache: Cache | null = null;
 
 async function loadLicenseText(env: NodeJS.ProcessEnv): Promise<string | null> {
-  const ref = env.TUNTUN_LICENSE?.trim();
+  const ref = env.TUNNET_LICENSE?.trim();
   if (!ref) return null;
 
   try {
@@ -27,7 +27,7 @@ async function loadLicenseText(env: NodeJS.ProcessEnv): Promise<string | null> {
       const response = await fetch(ref);
       if (!response.ok) {
         console.warn(
-          `[entitlements] TUNTUN_LICENSE fetch failed: ${response.status}`,
+          `[entitlements] TUNNET_LICENSE fetch failed: ${response.status}`,
         );
         return null;
       }
@@ -35,13 +35,13 @@ async function loadLicenseText(env: NodeJS.ProcessEnv): Promise<string | null> {
     }
 
     if (!existsSync(ref)) {
-      console.warn(`[entitlements] TUNTUN_LICENSE file not found: ${ref}`);
+      console.warn(`[entitlements] TUNNET_LICENSE file not found: ${ref}`);
       return null;
     }
     return await Bun.file(ref).text();
   } catch (err) {
     console.warn(
-      "[entitlements] failed to load TUNTUN_LICENSE:",
+      "[entitlements] failed to load TUNNET_LICENSE:",
       err instanceof Error ? err.message : err,
     );
     return null;
@@ -71,7 +71,7 @@ export async function resolveEntitlements(
   const verified = verifyLicense(text, Math.floor(nowMs / 1000));
   if (!verified) {
     console.warn(
-      "[entitlements] TUNTUN_LICENSE invalid or malformed; using community",
+      "[entitlements] TUNNET_LICENSE invalid or malformed; using community",
     );
     return applyCloudPackageGuard(COMMUNITY_ENTITLEMENTS);
   }

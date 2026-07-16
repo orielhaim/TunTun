@@ -1,14 +1,14 @@
-# TunTun Commercial License Agreement
+# Tunnet Commercial License Agreement
 
 Version 1.0 - Effective [DATE]
 
 This Commercial License Agreement ("Agreement") is between
-TunTun Ltd., [address] ("TunTun") and the entity or individual
+Tunnet Ltd., [address] ("Tunnet") and the entity or individual
 identified in the applicable Order Form ("Licensee").
 
 ## 1. Definitions
 
-"Software" means the TunTun source code, compiled binaries,
+"Software" means the Tunnet source code, compiled binaries,
 documentation, and any updates provided under this Agreement.
 
 "Order Form" means the signed document or electronic order
@@ -26,7 +26,7 @@ source code, compiled code, or a hosted service.
 
 ## 2. Grant of License
 
-2.1 Subject to payment of the applicable fees, TunTun grants
+2.1 Subject to payment of the applicable fees, Tunnet grants
 Licensee a non-exclusive, non-transferable, worldwide license
 to use, copy, and modify the Software as specified in the
 Order Form.
@@ -49,7 +49,7 @@ indicated in the Order Form:
 
 2.3 For clarity: this license removes the copyleft obligations
 of the AGPL v3 for the use described in the Order Form. All
-other rights not expressly granted are reserved by TunTun.
+other rights not expressly granted are reserved by Tunnet.
 
 ## 3. Fees and Payment
 
@@ -58,7 +58,7 @@ Unless the Order Form says otherwise, fees are due within
 thirty (30) days of invoice date and are non-refundable.
 
 3.2 Fees do not include taxes. Licensee is responsible for all
-applicable taxes, excluding taxes on TunTun's net income.
+applicable taxes, excluding taxes on Tunnet's net income.
 
 ## 4. Term and Termination
 
@@ -72,8 +72,8 @@ thirty (30) days before the end of the current term.
 party materially breaches it and fails to cure within thirty
 (30) days of written notice.
 
-4.3 TunTun may terminate immediately if Licensee challenges
-the validity or enforceability of any of TunTun's intellectual
+4.3 Tunnet may terminate immediately if Licensee challenges
+the validity or enforceability of any of Tunnet's intellectual
 property rights in the Software.
 
 4.4 On termination, Licensee must stop using the Software
@@ -83,27 +83,27 @@ those terms. Sections 5, 6, 7, and 8 survive termination.
 
 ## 5. Intellectual Property
 
-5.1 TunTun retains all right, title, and interest in the
+5.1 Tunnet retains all right, title, and interest in the
 Software, including all intellectual property rights.
 
 5.2 Licensee retains all rights in any original code it writes
-that does not incorporate TunTun code. Modifications to the
+that does not incorporate Tunnet code. Modifications to the
 Software itself remain subject to this Agreement.
 
 ## 6. No Warranty
 
-THE SOFTWARE IS PROVIDED "AS IS." TUNTUN DISCLAIMS ALL
+THE SOFTWARE IS PROVIDED "AS IS." TUNNET DISCLAIMS ALL
 WARRANTIES, EXPRESS OR IMPLIED, INCLUDING WARRANTIES OF
 MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND
-NON-INFRINGEMENT. TUNTUN DOES NOT WARRANT THAT THE SOFTWARE
+NON-INFRINGEMENT. TUNNET DOES NOT WARRANT THAT THE SOFTWARE
 WILL BE ERROR-FREE OR UNINTERRUPTED.
 
 ## 7. Limitation of Liability
 
-TO THE MAXIMUM EXTENT PERMITTED BY LAW, TUNTUN'S TOTAL
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, TUNNET'S TOTAL
 LIABILITY UNDER THIS AGREEMENT SHALL NOT EXCEED THE FEES
 ACTUALLY PAID BY LICENSEE IN THE TWELVE (12) MONTHS PRECEDING
-THE CLAIM. IN NO EVENT SHALL TUNTUN BE LIABLE FOR INDIRECT,
+THE CLAIM. IN NO EVENT SHALL TUNNET BE LIABLE FOR INDIRECT,
 INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES.
 
 ## 8. General
@@ -117,8 +117,8 @@ without regard to conflict-of-laws principles.
 8.3 Any dispute arising under this Agreement shall be resolved
 in the courts of [JURISDICTION].
 
-8.4 Licensee may not assign this Agreement without TunTun's
-prior written consent. TunTun may assign this Agreement in
+8.4 Licensee may not assign this Agreement without Tunnet's
+prior written consent. Tunnet may assign this Agreement in
 connection with a merger, acquisition, or sale of
 substantially all of its assets.
 

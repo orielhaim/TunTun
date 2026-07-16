@@ -5,7 +5,7 @@ import type {
   Device,
   HostnameRoute,
   SubnetRoute,
-} from "@tuntun/api/management";
+} from "@tunnet/api/management";
 import { LockIcon, NetworkIcon, PlusIcon, TrashIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";

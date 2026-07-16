@@ -1,4 +1,4 @@
-import type { Device } from "@tuntun/api/management";
+import type { Device } from "@tunnet/api/management";
 import { memo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { useLivePresence } from "@/hooks/use-live-presence";

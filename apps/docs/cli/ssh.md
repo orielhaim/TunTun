@@ -1,14 +1,14 @@
-# tuntun ssh
+# tunnet ssh
 
-SSH to a peer over the mesh using TunTun identity.
+SSH to a peer over the mesh using Tunnet identity.
 
 ## Usage
 
 ```bash
-tuntun ssh <target> [-u <user>] [-- <command>]
-tuntun ssh sessions
-tuntun ssh recordings
-tuntun ssh play <session_id>
+tunnet ssh <target> [-u <user>] [-- <command>]
+tunnet ssh sessions
+tunnet ssh recordings
+tunnet ssh play <session_id>
 ```
 
 ## Options
@@ -22,16 +22,16 @@ tuntun ssh play <session_id>
 
 ```bash
 # Interactive SSH
-tuntun ssh db-server
+tunnet ssh db-server
 
 # SSH as root
-tuntun ssh db-server -u root
+tunnet ssh db-server -u root
 
 # Run a command
-tuntun ssh db-server -- uname -a
+tunnet ssh db-server -- uname -a
 
 # View sessions and recordings
-tuntun ssh sessions
-tuntun ssh recordings
-tuntun ssh play abc123
+tunnet ssh sessions
+tunnet ssh recordings
+tunnet ssh play abc123
 ```

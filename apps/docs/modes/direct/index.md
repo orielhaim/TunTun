@@ -16,75 +16,75 @@ Peer discovery uses the Mainline DHT. A topic is derived from the network name a
 
 Transport authentication uses a pre-shared key (PSK). Before accepting any application-level connection, peers perform a PSK handshake to prove they know the network secret. This prevents unauthorized machines from communicating even if they discover the peer addresses.
 
-Public settings (firewall, DNS, keep-alive, open mode) live in [`tuntun.toml`](/guide/configuration) under `[direct.<name>]`. Network secrets are sealed in `state.enc`.
+Public settings (firewall, DNS, keep-alive, open mode) live in [`tunnet.toml`](/guide/configuration) under `[direct.<name>]`. Network secrets are sealed in `state.enc`.
 
 ## Multiple networks
 
 ```bash
 # First network
-sudo tuntun create --name homelab --secret "passphrase"
-sudo tuntun service start
+sudo tunnet create --name homelab --secret "passphrase"
+sudo tunnet service start
 
 # Join or create another without resetting
-sudo tuntun join <INVITE_CODE>
+sudo tunnet join <INVITE_CODE>
 # or
-sudo tuntun create --name gaming --secret "other-secret"
+sudo tunnet create --name gaming --secret "other-secret"
 ```
 
-When more than one network is active, pass the network name to commands that need it (`tuntun invite homelab`, `tuntun kick gaming <peer>`, `tuntun firewall add --network homelab …`).
+When more than one network is active, pass the network name to commands that need it (`tunnet invite homelab`, `tunnet kick gaming <peer>`, `tunnet firewall add --network homelab …`).
 
 Join order matters: if two peers in different networks share the same derived mesh IP (birthday collision), the **first-joined** network wins for outbound routing. Fix collisions with:
 
 ```bash
-tuntun override-ip --peer <hostname-or-endpoint> --ip 10.7.0.50 --network gaming
+tunnet override-ip --peer <hostname-or-endpoint> --ip 10.7.0.50 --network gaming
 ```
 
-Leave one network (not the last - use `tuntun reset --yes` for that):
+Leave one network (not the last - use `tunnet reset --yes` for that):
 
 ```bash
-tuntun leave --network gaming
+tunnet leave --network gaming
 ```
 
 ## Commands
 
 ```bash
 # Create a network (become coordinator)
-sudo tuntun create --name my-net --secret "passphrase"
+sudo tunnet create --name my-net --secret "passphrase"
 
 # Generate an invite code
-tuntun invite my-net
+tunnet invite my-net
 
 # Join with an invite code
-sudo tuntun join <INVITE_CODE>
+sudo tunnet join <INVITE_CODE>
 
 # Ephemeral 2-peer connection (contact id)
-tuntun connect <tt_…>
-tuntun connect allow <tt_…>
-tuntun connect pending
+tunnet connect <tt_…>
+tunnet connect allow <tt_…>
+tunnet connect pending
 
 # Manage join requests (coordinator)
-tuntun requests my-net
-tuntun accept my-net <endpoint_id>
-tuntun deny my-net <endpoint_id>
+tunnet requests my-net
+tunnet accept my-net <endpoint_id>
+tunnet deny my-net <endpoint_id>
 
 # Kick a peer
-tuntun kick my-net <endpoint_id>
+tunnet kick my-net <endpoint_id>
 
 # Leave / IP override
-tuntun leave --network my-net
-tuntun override-ip --peer other-host --ip 10.7.0.42 --network my-net
+tunnet leave --network my-net
+tunnet override-ip --peer other-host --ip 10.7.0.42 --network my-net
 
-# Firewall (also editable in tuntun.toml)
-tuntun firewall show
-tuntun firewall add --network my-net in allow -p tcp --port 22 --peer other-host
-tuntun firewall remove 0
+# Firewall (also editable in tunnet.toml)
+tunnet firewall show
+tunnet firewall add --network my-net in allow -p tcp --port 22 --peer other-host
+tunnet firewall remove 0
 ```
 
 ## Direct mode firewall
 
-Direct mode includes a local firewall engine. Since there is no central policy server, each peer manages its own rules (per network, in `tuntun.toml` or via `tuntun firewall`). Coordinators can publish a suggested policy with `tuntun policy`; peers accept or reject pending suggestions.
+Direct mode includes a local firewall engine. Since there is no central policy server, each peer manages its own rules (per network, in `tunnet.toml` or via `tunnet firewall`). Coordinators can publish a suggested policy with `tunnet policy`; peers accept or reject pending suggestions.
 
-After editing `tuntun.toml`, run `tuntun reload` (or restart the agent).
+After editing `tunnet.toml`, run `tunnet reload` (or restart the agent).
 
 ## Limitations
 

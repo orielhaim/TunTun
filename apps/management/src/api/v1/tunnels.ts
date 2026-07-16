@@ -4,9 +4,9 @@ import {
   createTunnelRoutingRuleBody,
   patchTunnelBody,
   patchTunnelRoutingRuleBody,
-} from "@tuntun/api/management";
-import { schema } from "@tuntun/db";
-import { formatIp } from "@tuntun/ip";
+} from "@tunnet/api/management";
+import { schema } from "@tunnet/db";
+import { formatIp } from "@tunnet/ip";
 import * as argon2 from "argon2";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { Elysia } from "elysia";
@@ -366,7 +366,7 @@ export const tunnelsRoutes = new Elysia()
           const baseDomain =
             settings?.customTunnelDomain?.trim() ||
             relay.domain ||
-            `${orgSlug}.tuntun.pub`;
+            `${orgSlug}.tunnet.pub`;
           const publicHostname = `${subdomain}.${baseDomain}`;
 
           const authToken = randomBytes(32).toString("base64url");
@@ -569,7 +569,7 @@ export const tunnelsRoutes = new Elysia()
               .join(".");
             const base =
               relayDomain ??
-              (fromExisting || `${auth.organizationId.slice(0, 8)}.tuntun.pub`);
+              (fromExisting || `${auth.organizationId.slice(0, 8)}.tunnet.pub`);
             publicHostname = `${subdomain}.${base}`;
           }
 

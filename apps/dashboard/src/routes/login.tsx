@@ -127,7 +127,7 @@ function LoginPage() {
     <div className="bg-background flex min-h-screen items-center justify-center p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle>TunTun</CardTitle>
+          <CardTitle>Tunnet</CardTitle>
           <CardDescription>
             Sign in to manage your networks and machines.
           </CardDescription>

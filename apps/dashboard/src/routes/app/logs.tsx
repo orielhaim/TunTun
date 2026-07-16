@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
-import type { AuditEntry } from "@tuntun/api/management";
+import type { AuditEntry } from "@tunnet/api/management";
 import { formatDistanceToNow } from "date-fns";
 import { useEffect, useMemo, useState } from "react";
 import { DataTable } from "@/components/app/data-table";

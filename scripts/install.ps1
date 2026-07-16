@@ -1,14 +1,14 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-  Install TunTun from GitHub Releases (Windows).
+  Install Tunnet from GitHub Releases (Windows).
 
 .DESCRIPTION
   Downloads the matching release archive, verifies SHA-256 and optionally
   GitHub attestation, installs binaries, and registers the Windows service.
 
 .EXAMPLE
-  irm https://github.com/orielhaim/TunTun/releases/latest/download/install.ps1 | iex
+  irm https://github.com/tunnetio/Tunnet/releases/latest/download/install.ps1 | iex
 #>
 [CmdletBinding()]
 param(
@@ -16,8 +16,8 @@ param(
     [string]$InstallDir = "",
     [switch]$NoService,
     [switch]$NoVerify,
-    [string[]]$Bins = @("tuntun", "tuntun-control", "tuntun-relay"),
-    [string]$Repo = $(if ($env:TUNTUN_REPO) { $env:TUNTUN_REPO } else { "orielhaim/TunTun" })
+    [string[]]$Bins = @("tunnet", "tunnet-control", "tunnet-relay"),
+    [string]$Repo = $(if ($env:TUNNET_REPO) { $env:TUNNET_REPO } else { "tunnetio/Tunnet" })
 )
 
 $ErrorActionPreference = "Stop"
@@ -53,7 +53,7 @@ function Get-Arch {
 
 function Get-LatestTag([string]$Repository) {
     $uri = "https://api.github.com/repos/$Repository/releases/latest"
-    $headers = @{ "User-Agent" = "tuntun-install/1.0" }
+    $headers = @{ "User-Agent" = "tunnet-install/1.0" }
     try {
         $release = Invoke-RestMethod -Uri $uri -Headers $headers
     }
@@ -71,11 +71,11 @@ function Get-Sha256([string]$Path) {
 }
 
 if (-not $InstallDir) {
-    if ($env:TUNTUN_INSTALL_DIR) {
-        $InstallDir = $env:TUNTUN_INSTALL_DIR
+    if ($env:TUNNET_INSTALL_DIR) {
+        $InstallDir = $env:TUNNET_INSTALL_DIR
     }
     else {
-        $InstallDir = Join-Path $env:ProgramFiles "TunTun"
+        $InstallDir = Join-Path $env:ProgramFiles "Tunnet"
     }
 }
 
@@ -96,17 +96,17 @@ else {
     $versionBare = $Version.TrimStart('v')
 }
 
-$existingBin = Join-Path $InstallDir "tuntun.exe"
+$existingBin = Join-Path $InstallDir "tunnet.exe"
 if (Test-Path $existingBin) {
     try {
         $installedOutput = & $existingBin --version 2>&1
         if ($installedOutput -match '(\d+\.\d+\.\d+)') {
             $installed = $Matches[1]
             if ($installed -eq $versionBare) {
-                Write-Info "TunTun v${versionBare} is already installed"
+                Write-Info "Tunnet v${versionBare} is already installed"
                 exit 0
             }
-            Write-Info "Upgrading TunTun v${installed} -> v${versionBare}"
+            Write-Info "Upgrading Tunnet v${installed} -> v${versionBare}"
         }
     }
     catch {
@@ -114,16 +114,16 @@ if (Test-Path $existingBin) {
     }
 }
 
-$archive = "tuntun-$versionBare-$target.zip"
+$archive = "tunnet-$versionBare-$target.zip"
 $baseUrl = "https://github.com/$Repo/releases/download/$tag"
 $url = "$baseUrl/$archive"
 $checksumUrl = "$url.sha256"
 
-Write-Info "Installing TunTun $tag ($target)"
+Write-Info "Installing Tunnet $tag ($target)"
 Write-Info "  archive: $url"
 Write-Info "  dest:    $InstallDir"
 
-$tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("tuntun-install-" + [guid]::NewGuid().ToString("n"))
+$tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("tunnet-install-" + [guid]::NewGuid().ToString("n"))
 New-Item -ItemType Directory -Path $tmp | Out-Null
 try {
     $archivePath = Join-Path $tmp $archive
@@ -166,7 +166,7 @@ try {
     }
 
     Expand-Archive -Path $archivePath -DestinationPath $tmp -Force
-    $extracted = Join-Path $tmp "tuntun-$versionBare-$target"
+    $extracted = Join-Path $tmp "tunnet-$versionBare-$target"
     if (-not (Test-Path $extracted)) {
         Die "unexpected archive layout (missing $extracted)"
     }
@@ -178,7 +178,7 @@ try {
     $svcRunning = $false
     if (Get-Service -Name $SERVICE_NAME -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Running' }) {
         Write-Info "Stopping running service before update…"
-        Stop-Service -Name "tuntun" -Force -ErrorAction SilentlyContinue
+        Stop-Service -Name "tunnet" -Force -ErrorAction SilentlyContinue
         $svcRunning = $true
     }
 
@@ -214,15 +214,15 @@ try {
         $env:Path = "$InstallDir;$env:Path"
     }
 
-    $tuntun = Join-Path $InstallDir "tuntun.exe"
-    if (-not $NoService -and (Test-Path $tuntun)) {
+    $tunnet = Join-Path $InstallDir "tunnet.exe"
+    if (-not $NoService -and (Test-Path $tunnet)) {
         if (Test-IsAdmin) {
             if ($svcRunning) {
                 Write-Info "Restarting service…"
-                Start-Service -Name "tuntun" -ErrorAction SilentlyContinue
+                Start-Service -Name "tunnet" -ErrorAction SilentlyContinue
             }
-            elseif (-not (Get-Service -Name "tuntun" -ErrorAction SilentlyContinue)) {
-                & $tuntun service install
+            elseif (-not (Get-Service -Name "tunnet" -ErrorAction SilentlyContinue)) {
+                & $tunnet service install
                 if ($LASTEXITCODE -eq 0) {
                     Write-Info "Windows service installed"
                 }
@@ -237,12 +237,12 @@ try {
     }
 
     Write-Info ""
-    Write-Info "TunTun $tag installed successfully!"
+    Write-Info "Tunnet $tag installed successfully!"
     Write-Info ""
     Write-Info "Next steps:"
-    Write-Info "  tuntun --version                                       # verify"
-    Write-Info "  tuntun enroll --control-url <url> --token <token>      # enroll"
-    Write-Info "  tuntun service start                                   # start"
+    Write-Info "  tunnet --version                                       # verify"
+    Write-Info "  tunnet enroll --control-url <url> --token <token>      # enroll"
+    Write-Info "  tunnet service start                                   # start"
 }
 finally {
     Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue

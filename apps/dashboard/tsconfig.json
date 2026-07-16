@@ -7,7 +7,7 @@
     "paths": {
       "#/*": ["./src/*"],
       "@/*": ["./src/*"],
-      "@tuntun/cloud-dashboard": [
+      "@tunnet/cloud-dashboard": [
         "../../packages/cloud-stubs/dashboard/src/index.ts"
       ]
     },

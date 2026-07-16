@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { schema } from "@tuntun/db";
-import { getDashboardUrl, getManagementUrl } from "@tuntun/env";
+import { schema } from "@tunnet/db";
+import { getDashboardUrl, getManagementUrl } from "@tunnet/env";
 import { and, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
 
@@ -131,7 +131,7 @@ async function finishWithSession(args: {
   });
   return htmlPage(
     "Authenticated",
-    "<h1>✓ Authenticated</h1><p>Return to your terminal. TunTun will continue automatically.</p>",
+    "<h1>✓ Authenticated</h1><p>Return to your terminal. Tunnet will continue automatically.</p>",
   );
 }
 
@@ -168,7 +168,7 @@ export const sshAuthBrowserRoutes = new Elysia()
         .where(eq(schema.sshAuthChallenges.token, token));
       return htmlPage(
         "Expired",
-        "<h1>Link expired</h1><p>Run <code>tuntun ssh</code> again to get a new link.</p>",
+        "<h1>Link expired</h1><p>Run <code>tunnet ssh</code> again to get a new link.</p>",
       );
     }
 
@@ -258,7 +258,7 @@ export const sshAuthBrowserRoutes = new Elysia()
         .where(eq(schema.sshAuthChallenges.token, token));
       return htmlPage(
         "Expired",
-        "<h1>Link expired</h1><p>Run <code>tuntun ssh</code> again to get a new link.</p>",
+        "<h1>Link expired</h1><p>Run <code>tunnet ssh</code> again to get a new link.</p>",
       );
     }
 

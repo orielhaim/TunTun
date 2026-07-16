@@ -1,6 +1,6 @@
 # How Mesh Works
 
-When you run `tuntun run`, the agent performs the following sequence.
+When you run `tunnet run`, the agent performs the following sequence.
 
 ## Startup flow
 
@@ -15,7 +15,7 @@ sequenceDiagram
     Agent->>Agent: Load persisted state (managed/direct)
     Agent->>Control: WebSocket connect + register
     Control-->>Agent: Network snapshot (peers, routes, policy, DNS, serves, tunnels)
-    Agent->>TUN: Create tuntun0 interface
+    Agent->>TUN: Create tunnet0 interface
     Agent->>TUN: Assign mesh IP + configure routes
     Agent->>Iroh: Start endpoint, add peers
     Agent->>Agent: Start PeerDNS resolver
@@ -31,7 +31,7 @@ sequenceDiagram
 
 When an application on Machine A sends a packet to Machine B's mesh IP (say 10.7.0.5):
 
-The packet enters the `tuntun0` TUN interface. The agent reads it, checks the destination IP against the routing table, and finds the peer with that mesh IP. It checks the ACL policy - if denied, the packet is dropped. If allowed, it sends the packet as a QUIC datagram to the peer's iroh endpoint. On Machine B, the iroh endpoint receives the datagram, and the agent writes it to Machine B's TUN interface. The OS network stack on Machine B delivers it to the target application.
+The packet enters the `tunnet0` TUN interface. The agent reads it, checks the destination IP against the routing table, and finds the peer with that mesh IP. It checks the ACL policy - if denied, the packet is dropped. If allowed, it sends the packet as a QUIC datagram to the peer's iroh endpoint. On Machine B, the iroh endpoint receives the datagram, and the agent writes it to Machine B's TUN interface. The OS network stack on Machine B delivers it to the target application.
 
 For subnet routes, the process is similar but the gateway peer receives the packet and forwards it to the actual LAN destination.
 

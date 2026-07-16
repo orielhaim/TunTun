@@ -1,11 +1,11 @@
-import { schema } from "@tuntun/db";
+import { schema } from "@tunnet/db";
 import { eq, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
-export const NOTIFY_CHANNEL = "tuntun:network_changed";
-export const ORG_NOTIFY_CHANNEL = "tuntun:org_changed";
-export const PRESENCE_NOTIFY_CHANNEL = "tuntun:device_presence";
-export const ENTITY_NOTIFY_CHANNEL = "tuntun:entity_changed";
+export const NOTIFY_CHANNEL = "tunnet:network_changed";
+export const ORG_NOTIFY_CHANNEL = "tunnet:org_changed";
+export const PRESENCE_NOTIFY_CHANNEL = "tunnet:device_presence";
+export const ENTITY_NOTIFY_CHANNEL = "tunnet:entity_changed";
 
 type Db = PostgresJsDatabase<typeof schema>;
 

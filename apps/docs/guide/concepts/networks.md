@@ -1,6 +1,6 @@
 # Networks & Peers
 
-A TunTun network is a group of machines that can reach each other over an encrypted overlay. Each network has its own IP address space, routing table, DNS suffix, and access policies.
+A Tunnet network is a group of machines that can reach each other over an encrypted overlay. Each network has its own IP address space, routing table, DNS suffix, and access policies.
 
 ## Organizations and networks
 
@@ -8,13 +8,13 @@ In Managed mode, an **organization** is the top-level entity. Users authenticate
 
 When you create an organization, a "default" network is created automatically with a 10.7.0.0/16 CIDR. You can create additional networks for segmentation - for example, separating production from staging.
 
-An agent enrolls into **one** Managed network. Switching requires `tuntun reset --yes`.
+An agent enrolls into **one** Managed network. Switching requires `tunnet reset --yes`.
 
 ## Direct mode networks
 
-In Direct mode there is no organization. Each network is identified by its name and PSK. A single agent can join **multiple Direct networks** at once (`tuntun create` / `tuntun join` without resetting). Managed and Direct modes cannot be mixed on the same machine.
+In Direct mode there is no organization. Each network is identified by its name and PSK. A single agent can join **multiple Direct networks** at once (`tunnet create` / `tunnet join` without resetting). Managed and Direct modes cannot be mixed on the same machine.
 
-Join order is stored in local state: when derived mesh IPs collide across networks, the first-joined network wins for outbound routing. Resolve collisions with `tuntun override-ip`. Per-network firewall and DNS settings live under `[direct.<name>]` in [`tuntun.toml`](/guide/configuration).
+Join order is stored in local state: when derived mesh IPs collide across networks, the first-joined network wins for outbound routing. Resolve collisions with `tunnet override-ip`. Per-network firewall and DNS settings live under `[direct.<name>]` in [`tunnet.toml`](/guide/configuration).
 
 ## Peers
 

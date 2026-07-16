@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/** Mirrors tuntun-common agent protocol shapes (documentation / client typing). */
+/** Mirrors tunnet-common agent protocol shapes (documentation / client typing). */
 
 export const enrollRequestSchema = z
   .object({

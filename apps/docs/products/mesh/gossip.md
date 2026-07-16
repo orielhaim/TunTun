@@ -1,6 +1,6 @@
 # Gossip & Presence
 
-TunTun uses a gossip protocol (iroh-gossip) alongside the control plane for real-time peer presence. Each network has a gossip topic derived from its ID. Peers join the topic and broadcast their status.
+Tunnet uses a gossip protocol (iroh-gossip) alongside the control plane for real-time peer presence. Each network has a gossip topic derived from its ID. Peers join the topic and broadcast their status.
 
 ## Why gossip alongside the control plane?
 

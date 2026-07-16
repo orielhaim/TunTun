@@ -1,19 +1,19 @@
 # Configuration
 
-Agent settings live in a single file: `tuntun.toml` in the state directory. Secrets (identity seed, network PSK, doc tickets, login tokens) are **not** in this file - they are sealed separately. See [Encryption & Secrets](/guide/concepts/encryption).
+Agent settings live in a single file: `tunnet.toml` in the state directory. Secrets (identity seed, network PSK, doc tickets, login tokens) are **not** in this file - they are sealed separately. See [Encryption & Secrets](/guide/concepts/encryption).
 
 ## State directory
 
 | Path | Typical location |
 |------|------------------|
-| User / CLI | `~/.local/state/tuntun` (Linux/macOS) or `%LOCALAPPDATA%\tuntun` (Windows) |
-| OS service | `/var/lib/tuntun` (Linux) or `%PROGRAMDATA%\tuntun` (Windows) |
+| User / CLI | `~/.local/state/tunnet` (Linux/macOS) or `%LOCALAPPDATA%\tunnet` (Windows) |
+| OS service | `/var/lib/tunnet` (Linux) or `%PROGRAMDATA%\tunnet` (Windows) |
 
-Override with `--state-dir` or `TUNTUN_STATE_DIR`.
+Override with `--state-dir` or `TUNNET_STATE_DIR`.
 
 ```
 <state-dir>/
-  tuntun.toml              # public config
+  tunnet.toml              # public config
   state.json               # public enrollment / network metadata
   state.enc                # encrypted secrets
   state.enc.meta           # seal tier + key wrapping metadata
@@ -25,7 +25,7 @@ Override with `--state-dir` or `TUNTUN_STATE_DIR`.
   update/                  # auto-update pending binary + health marker
 ```
 
-The agent creates `tuntun.toml` on first create/join/enroll if it is missing.
+The agent creates `tunnet.toml` on first create/join/enroll if it is missing.
 
 ## Example
 
@@ -46,7 +46,7 @@ rules = [
 
 [direct.homelab.dns]
 magic-ip = "100.100.100.53"
-tld = "tuntun"
+tld = "tunnet"
 upstream = ["1.1.1.1", "8.8.8.8"]
 
 [direct.gaming]
@@ -105,21 +105,21 @@ Each rule:
 | `port` / `ports` | Single port, or range string like `"443-444"` |
 | `peer` | Optional hostname or endpoint hex (omit = any) |
 
-You can also manage rules with `tuntun firewall`. Edits to TOML take effect after `tuntun reload` (or an agent restart).
+You can also manage rules with `tunnet firewall`. Edits to TOML take effect after `tunnet reload` (or an agent restart).
 
 #### DNS (`[direct.<name>.dns]`)
 
 | Key | Default | Description |
 |-----|---------|-------------|
 | `magic-ip` | `100.100.100.53` | PeerDNS listener address on the TUN |
-| `tld` | `tuntun` | DNS suffix for peer hostnames |
+| `tld` | `tunnet` | DNS suffix for peer hostnames |
 | `upstream` | `1.1.1.1`, `8.8.8.8` | Forwarders for non-mesh queries |
 
 ### `[connect]`
 
 | Key | Description |
 |-----|-------------|
-| `allow` | Pre-approved contact IDs for ephemeral `tuntun connect` |
+| `allow` | Pre-approved contact IDs for ephemeral `tunnet connect` |
 
 ### `[logging]`
 
@@ -137,7 +137,7 @@ You can also manage rules with `tuntun firewall`. Edits to TOML take effect afte
 
 ### `[update]`
 
-Automatic binary updates from GitHub Releases. See [tuntun update](/cli/update).
+Automatic binary updates from GitHub Releases. See [tunnet update](/cli/update).
 
 | Key | Default | Description |
 |-----|---------|-------------|
@@ -148,11 +148,11 @@ Automatic binary updates from GitHub Releases. See [tuntun update](/cli/update).
 ## Validate and reload
 
 ```bash
-tuntun validate
-tuntun validate --config /path/to/tuntun.toml
+tunnet validate
+tunnet validate --config /path/to/tunnet.toml
 
 # Apply firewall / DNS / logging / keep-alive without dropping connections
-tuntun reload
+tunnet reload
 ```
 
 `validate` exits non-zero on errors. `reload` requires a running agent.

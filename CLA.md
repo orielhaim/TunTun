@@ -1,9 +1,9 @@
-# TunTun Contributor License Agreement
+# Tunnet Contributor License Agreement
 
 Version 1.0
 
-Thank you for your interest in contributing to TunTun, owned
-and maintained by TunTun Ltd. ("TunTun", "we", "us").
+Thank you for your interest in contributing to Tunnet, owned
+and maintained by Tunnet Ltd. ("Tunnet", "we", "us").
 
 This Contributor License Agreement ("CLA") defines the terms
 under which you contribute to the project. By submitting a
@@ -13,7 +13,7 @@ Contribution you accept these terms.
 
 "Contribution" means any original work of authorship,
 including source code, documentation, configuration, and
-design, that you intentionally submit to a TunTun repository
+design, that you intentionally submit to a Tunnet repository
 via pull request, patch, issue, or any other means.
 
 "You" (or "Your") means the individual or legal entity making
@@ -23,17 +23,17 @@ represent that you are authorized to bind them to this CLA.
 
 ## 2. Grant of Copyright License
 
-You grant to TunTun a perpetual, worldwide, non-exclusive,
+You grant to Tunnet a perpetual, worldwide, non-exclusive,
 royalty-free, irrevocable copyright license to use, copy,
 modify, merge, publish, distribute, sublicense, and sell your
 Contributions, and to permit others to do the same, under any
 license - including the AGPL v3, any future open-source
-license, and any commercial or proprietary license that TunTun
+license, and any commercial or proprietary license that Tunnet
 offers for the Software.
 
 ## 3. Grant of Patent License
 
-You grant to TunTun a perpetual, worldwide, non-exclusive,
+You grant to Tunnet a perpetual, worldwide, non-exclusive,
 royalty-free, irrevocable patent license to make, have made,
 use, sell, import, and otherwise transfer your Contributions,
 where such license applies only to patent claims licensable by
@@ -44,7 +44,7 @@ or by combination of your Contribution with the Software.
 
 You retain all right, title, and interest in your
 Contributions. This CLA does not transfer copyright ownership
-to TunTun. You are free to use your Contributions in any other
+to Tunnet. You are free to use your Contributions in any other
 project under any terms you choose.
 
 ## 5. Representations
@@ -67,9 +67,9 @@ You represent that:
 
 ## 6. No Obligation
 
-You understand that TunTun is under no obligation to accept or
+You understand that Tunnet is under no obligation to accept or
 use any Contribution. The decision to include a Contribution
-is at TunTun's sole discretion.
+is at Tunnet's sole discretion.
 
 ## 7. "As Is"
 
@@ -79,11 +79,11 @@ Contributions, although you are welcome to do so.
 
 ## 8. Future Licensing
 
-You acknowledge that TunTun operates a dual-license model:
+You acknowledge that Tunnet operates a dual-license model:
 the Software is available under the AGPL v3 for open-source
 use, and under a separate commercial license for proprietary
 use. The broad copyright license you grant in Section 2
-enables TunTun to continue offering both licensing options for
+enables Tunnet to continue offering both licensing options for
 the Software, including your Contributions.
 
 ## 9. Signing
@@ -92,8 +92,8 @@ You agree to this CLA by adding your name and details to the
 CONTRIBUTORS file in the repository and including the
 following statement in your first pull request:
 
-    I have read and agree to the TunTun Contributor License
+    I have read and agree to the Tunnet Contributor License
     Agreement (CLA.md).
 
-Alternatively, TunTun may use a CLA-signing tool (such as
+Alternatively, Tunnet may use a CLA-signing tool (such as
 CLA Assistant) that records your agreement electronically.

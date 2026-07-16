@@ -1,0 +1,22 @@
+{
+  "name": "@tunnet/sdk-win32-arm64-msvc",
+  "version": "0.3.0",
+  "cpu": [
+    "arm64"
+  ],
+  "main": "tunnet-node.win32-arm64-msvc.node",
+  "files": [
+    "tunnet-node.win32-arm64-msvc.node"
+  ],
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">= 18"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
+  "os": [
+    "win32"
+  ]
+}

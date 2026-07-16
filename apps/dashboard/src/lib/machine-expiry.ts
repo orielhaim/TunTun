@@ -1,10 +1,10 @@
-import type { Device } from "@tuntun/api/management";
+import type { Device } from "@tunnet/api/management";
 import {
   formatDurationCompact,
   formatDurationLong,
   parseHumanDuration,
   pgIntervalToSeconds,
-} from "@tuntun/api/management";
+} from "@tunnet/api/management";
 
 export type ExpiryUrgency = "critical" | "warning" | null;
 

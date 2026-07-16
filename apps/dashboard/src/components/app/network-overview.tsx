@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
-import type { Device, TopologyNode } from "@tuntun/api/management";
+import type { Device, TopologyNode } from "@tunnet/api/management";
 import {
   ChevronRightIcon,
   PlusIcon,

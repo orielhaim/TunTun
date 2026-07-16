@@ -7,11 +7,11 @@ In the dashboard, navigate to **Relays** and create a relay registration token.
 ## 2. Register and run
 
 ```bash
-tuntun-relay register \
+tunnet-relay register \
   --control-url http://your-control-host:8080 \
   --token YOUR_RELAY_TOKEN
 
-tuntun-relay run
+tunnet-relay run
 ```
 
 ## 3. Configure DNS
@@ -24,4 +24,4 @@ The relay binds an HTTPS listener for public traffic. You can provide TLS certif
 
 ## Options
 
-See `tuntun-relay --help` for all available options including HTTPS bind address, ACME configuration, and certificate paths.
+See `tunnet-relay --help` for all available options including HTTPS bind address, ACME configuration, and certificate paths.

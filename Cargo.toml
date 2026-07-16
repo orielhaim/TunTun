@@ -1,12 +1,12 @@
 [workspace]
 resolver = "2"
 members = [
-  "crates/tuntun-common",
-  "crates/tuntun-core",
-  "crates/tuntun-control",
-  "crates/tuntun-agent",
-  "crates/tuntun-relay",
-  "crates/tuntun-node-napi",
+  "crates/tunnet-common",
+  "crates/tunnet-core",
+  "crates/tunnet-control",
+  "crates/tunnet-agent",
+  "crates/tunnet-relay",
+  "crates/tunnet-node-napi",
 ]
 
 [workspace.package]
@@ -112,8 +112,8 @@ napi-derive = "3"
 napi-build = "2"
 
 # Local
-tuntun-common = { path = "crates/tuntun-common" }
-tuntun-core = { path = "crates/tuntun-core" }
+tunnet-common = { path = "crates/tunnet-common" }
+tunnet-core = { path = "crates/tunnet-core" }
 
 [profile.release]
 opt-level = 3

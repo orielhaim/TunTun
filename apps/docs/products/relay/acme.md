@@ -11,7 +11,7 @@ For non-wildcard domains, the relay can automatically obtain and renew certifica
 For wildcard domains or when you have existing certificates, provide them directly:
 
 ```bash
-tuntun-relay run \
+tunnet-relay run \
   --cert-file /path/to/fullchain.pem \
   --key-file /path/to/privkey.pem
 ```

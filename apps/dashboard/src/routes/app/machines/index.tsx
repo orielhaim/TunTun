@@ -516,7 +516,7 @@ function MachinesPage() {
       ) : filtered.length === 0 ? (
         <EmptyState
           title="No machines yet"
-          description="Create an enrollment token and install the TunTun agent on a device."
+          description="Create an enrollment token and install the Tunnet agent on a device."
           action={
             isAdmin ? (
               <Button onClick={() => setEnrollOpen(true)}>Add machine</Button>

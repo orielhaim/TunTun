@@ -1,3 +1,3 @@
-import { getDb } from "@tuntun/db";
+import { getDb } from "@tunnet/db";
 
 export const db = getDb();

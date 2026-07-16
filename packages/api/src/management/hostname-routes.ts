@@ -1,4 +1,4 @@
-import { ipv4Schema } from "@tuntun/ip";
+import { ipv4Schema } from "@tunnet/ip";
 import { z } from "zod";
 
 const hostnameSchema = z

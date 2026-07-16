@@ -1,8 +1,8 @@
 # Consent Modes
 
-TunTun Send supports three consent modes that control how incoming file offers are handled.
+Tunnet Send supports three consent modes that control how incoming file offers are handled.
 
-**prompt** (default): incoming offers are queued as pending. You must explicitly accept or reject each transfer with `tuntun send accept <id>` or `tuntun send reject <id>`. Exception: peers that share a tag with the receiver auto-accept.
+**prompt** (default): incoming offers are queued as pending. You must explicitly accept or reject each transfer with `tunnet send accept <id>` or `tunnet send reject <id>`. Exception: peers that share a tag with the receiver auto-accept.
 
 **auto_accept**: all incoming offers are accepted automatically. Files are downloaded to the inbox without manual intervention.
 
@@ -12,10 +12,10 @@ TunTun Send supports three consent modes that control how incoming file offers a
 
 ```bash
 # View current config
-tuntun send config
+tunnet send config
 
 # Set consent mode
-tuntun send config --consent prompt --inbox ~/TunTun/inbox
+tunnet send config --consent prompt --inbox ~/Tunnet/inbox
 ```
 
 Consent mode can also be changed per-machine from the dashboard under **Transfers**.

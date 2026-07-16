@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { createRelayBody, patchRelayBody } from "@tuntun/api/management";
-import { schema } from "@tuntun/db";
+import { createRelayBody, patchRelayBody } from "@tunnet/api/management";
+import { schema } from "@tunnet/db";
 import { and, desc, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { blake3 } from "hash-wasm";

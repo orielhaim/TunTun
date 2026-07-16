@@ -6422,7 +6422,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tuntun-agent"
+name = "tunnet-agent"
 version = "0.6.0"
 dependencies = [
  "anyhow",
@@ -6458,13 +6458,13 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tun-rs",
- "tuntun-common",
- "tuntun-core",
+ "tunnet-common",
+ "tunnet-core",
  "uuid",
 ]
 
 [[package]]
-name = "tuntun-common"
+name = "tunnet-common"
 version = "0.6.0"
 dependencies = [
  "anyhow",
@@ -6481,7 +6481,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tuntun-control"
+name = "tunnet-control"
 version = "0.6.0"
 dependencies = [
  "aes-gcm",
@@ -6524,12 +6524,12 @@ dependencies = [
  "tracing-appender",
  "tracing-opentelemetry",
  "tracing-subscriber",
- "tuntun-common",
+ "tunnet-common",
  "uuid",
 ]
 
 [[package]]
-name = "tuntun-core"
+name = "tunnet-core"
 version = "0.6.0"
 dependencies = [
  "aes-gcm",
@@ -6572,14 +6572,14 @@ dependencies = [
  "tokio-util",
  "toml",
  "tracing",
- "tuntun-common",
+ "tunnet-common",
  "uuid",
  "windows 0.61.3",
  "zeroize",
 ]
 
 [[package]]
-name = "tuntun-node-napi"
+name = "tunnet-node-napi"
 version = "0.6.0"
 dependencies = [
  "anyhow",
@@ -6597,13 +6597,13 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "tuntun-common",
- "tuntun-core",
+ "tunnet-common",
+ "tunnet-core",
  "uuid",
 ]
 
 [[package]]
-name = "tuntun-relay"
+name = "tunnet-relay"
 version = "0.6.0"
 dependencies = [
  "anyhow",
@@ -6633,7 +6633,7 @@ dependencies = [
  "tokio-rustls",
  "tracing",
  "tracing-subscriber",
- "tuntun-common",
+ "tunnet-common",
  "uuid",
  "x509-parser",
 ]

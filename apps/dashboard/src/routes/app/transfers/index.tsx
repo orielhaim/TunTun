@@ -292,7 +292,7 @@ function TransfersPage() {
       ) : filtered.length === 0 ? (
         <EmptyState
           title="No transfers"
-          description="Send a file with `tuntun send ./file peer` or from the SDK."
+          description="Send a file with `tunnet send ./file peer` or from the SDK."
         />
       ) : (
         <DataTable columns={columns} data={filtered} />

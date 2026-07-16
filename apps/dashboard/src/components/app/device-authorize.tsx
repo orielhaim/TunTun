@@ -143,7 +143,7 @@ export function AuthorizeCliDialog({
               <DialogTitle>Authorize CLI</DialogTitle>
               <DialogDescription>
                 Enter the device code from{" "}
-                <code className="text-foreground">tuntun login</code> to link
+                <code className="text-foreground">tunnet login</code> to link
                 the CLI to your account.
               </DialogDescription>
             </DialogHeader>
@@ -186,9 +186,9 @@ export function AuthorizeCliDialog({
         {step === "approve" ? (
           <>
             <DialogHeader>
-              <DialogTitle>Approve TunTun CLI?</DialogTitle>
+              <DialogTitle>Approve Tunnet CLI?</DialogTitle>
               <DialogDescription>
-                A device is requesting access to your TunTun account.
+                A device is requesting access to your Tunnet account.
               </DialogDescription>
             </DialogHeader>
             <p className="text-sm">

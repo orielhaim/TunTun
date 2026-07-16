@@ -1,18 +1,13 @@
-/**
- * Pre-push guard:
- * - OSS (origin): publish filtered tree via push-oss.ts, then abort native push
- * - private (TunTun-cloud): block unless sync:private set TUNTUN_ALLOW_PRIVATE_PUSH=1
- *
- * Lefthook: bun run scripts/guard-oss-push.ts {remote}
- */
-
 function normalizeUrl(url: string): string {
   return url.replace(/\.git$/i, "").toLowerCase();
 }
 
 function isPrivateRemote(remoteName: string, remoteUrl: string): boolean {
   if (remoteName === "private") return true;
-  return normalizeUrl(remoteUrl).includes("tuntun-cloud");
+  const normalized = normalizeUrl(remoteUrl);
+  return (
+    normalized.includes("tunnet-cloud") || normalized.includes("tunnet-cloud")
+  );
 }
 
 function isOssRemote(remoteName: string, remoteUrl: string): boolean {
@@ -20,13 +15,15 @@ function isOssRemote(remoteName: string, remoteUrl: string): boolean {
   const normalized = normalizeUrl(remoteUrl);
   if (remoteName === "origin" || remoteName === "public") {
     return (
-      normalized.endsWith("orielhaim/tuntun") ||
-      normalized.includes("github.com/orielhaim/tuntun")
+      normalized.endsWith("/tunnet") ||
+      normalized.includes("github.com/tunnetio/tunnet") ||
+      normalized.endsWith("/tunnet") ||
+      normalized.includes("github.com/tunnetio/tunnet")
     );
   }
   return (
-    normalized.endsWith("orielhaim/tuntun") ||
-    normalized.includes("github.com/orielhaim/tuntun")
+    normalized.endsWith("tunnetio/tunnet") ||
+    normalized.includes("github.com/tunnetio/tunnet")
   );
 }
 
@@ -62,7 +59,7 @@ if (!remoteName) {
 const url = await getRemoteUrl(remoteName).catch(() => "");
 
 if (isPrivateRemote(remoteName, url)) {
-  if (process.env.TUNTUN_ALLOW_PRIVATE_PUSH === "1") {
+  if (process.env.TUNNET_ALLOW_PRIVATE_PUSH === "1") {
     process.exit(0);
   }
   console.error(

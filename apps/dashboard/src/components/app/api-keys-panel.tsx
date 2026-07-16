@@ -4,7 +4,7 @@ import {
   API_KEY_SCOPES,
   type ApiKey,
   type ApiKeyScope,
-} from "@tuntun/api/management";
+} from "@tunnet/api/management";
 import { PlusIcon, TrashIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";

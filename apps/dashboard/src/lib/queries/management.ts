@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Device, Network } from "@tuntun/api/management";
+import type { Device, Network } from "@tunnet/api/management";
 
 import { type AggregatedMachine, aggregateMachines } from "@/lib/machine-utils";
 import { createManagementClient } from "@/lib/management-client";

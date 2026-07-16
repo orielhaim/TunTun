@@ -1,16 +1,16 @@
-# TunTun
+# Tunnet
 
 ![badge](https://shieldcn.dev/badge/Status-In%20development.svg?theme=amber&split=true)
-[![badge](https://shieldcn.dev/badge/Read%20the%20Docs-abcde3.svg?variant=ghost&logo=readthedocs)](https://tuntun.orielhaim.com)
+[![badge](https://shieldcn.dev/badge/Read%20the%20Docs-abcde3.svg?variant=ghost&logo=readthedocs)](https://tunnet.orielhaim.com)
 [![badge](https://shieldcn.dev/badge/Join%20Discord.svg?brand=discord)](https://discord.gg/y5bNc3MYKz)
 
-TunTun connects your machines into a private network. Install an agent on each device and it gets an internal IP address. After that, ordinary tools just work: SSH, ping, curl, a browser pointed at an internal service. You do not need to teach every application about tunnels or VPNs. The network is the network.
+Tunnet connects your machines into a private network. Install an agent on each device and it gets an internal IP address. After that, ordinary tools just work: SSH, ping, curl, a browser pointed at an internal service. You do not need to teach every application about tunnels or VPNs. The network is the network.
 
 Everything is open source. Not just the agent - the control plane, the management API, the dashboard, the relay infrastructure. You can read every line, self-host the entire stack, and know exactly what your network is doing.
 
-## What TunTun does
+## What Tunnet does
 
-TunTun is not a single tool. It is a collection of networking primitives under one identity system and one access policy engine.
+Tunnet is not a single tool. It is a collection of networking primitives under one identity system and one access policy engine.
 
 **Mesh network** - Encrypted peer-to-peer connectivity over QUIC (iroh). Machines get mesh IPs, resolve each other by hostname via PeerDNS, and communicate directly. Subnet routes expose devices without agents. Exit nodes route internet traffic through a chosen peer. This is the Tailscale / NetBird / Cloudflare WARP competitor.
 
@@ -20,19 +20,19 @@ TunTun is not a single tool. It is a collection of networking primitives under o
 
 **Send** - Transfer files and directories peer-to-peer over the mesh. BLAKE3-verified via iroh-blobs, consent-based, with multicast to tagged machines.
 
-**SSH** - Identity-based SSH to peers with no keys to distribute. Auth tied to TunTun identity and organization policies. Session recording, re-auth enforcement, and full audit trails.
+**SSH** - Identity-based SSH to peers with no keys to distribute. Auth tied to Tunnet identity and organization policies. Session recording, re-auth enforcement, and full audit trails.
 
 **Relay** - Self-hosted edge servers for public tunnels. ACME support, bring your own certs, full control over your tunnel infrastructure.
 
 ## Two modes
 
-TunTun operates in two modes for fundamentally different audiences.
+Tunnet operates in two modes for fundamentally different audiences.
 
 **Managed mode** is for organizations. It includes a control plane, management API, web dashboard, SSO/OIDC, centralized access policies, audit logs, tunnel and relay infrastructure, SSH session recording, and a REST API with API key support.
 
 **Direct mode** is for individuals and small groups who want zero infrastructure. It creates a P2P mesh where membership is stored in an iroh-docs CRDT, peer discovery uses the Mainline DHT, and transport auth proves knowledge of a pre-shared key. No server needed.
 
-When you outgrow Direct mode, `tuntun upgrade-to-managed` migrates your network to the full control plane without losing connectivity.
+When you outgrow Direct mode, `tunnet upgrade-to-managed` migrates your network to the full control plane without losing connectivity.
 
 ## Quick start
 
@@ -41,25 +41,25 @@ When you outgrow Direct mode, `tuntun upgrade-to-managed` migrates your network 
 **Linux / macOS**
 
 ```bash
-curl -fsSL https://github.com/orielhaim/TunTun/releases/latest/download/install.sh | sh
+curl -fsSL https://github.com/tunnetio/Tunnet/releases/latest/download/install.sh | sh
 ```
 
 **Windows** (PowerShell as Administrator)
 
 ```powershell
-irm https://github.com/orielhaim/TunTun/releases/latest/download/install.ps1 | iex
+irm https://github.com/tunnetio/Tunnet/releases/latest/download/install.ps1 | iex
 ```
 
-Verify with `tuntun --version`. Later upgrades: `tuntun update`.
+Verify with `tunnet --version`. Later upgrades: `tunnet update`.
 
 ### Managed mode
 
 ```bash
-# Start the stack (from a TunTun checkout)
+# Start the stack (from a Tunnet checkout)
 docker compose up -d
 
 # Or run manually:
-#   ./target/release/tuntun-control
+#   ./target/release/tunnet-control
 #   bun run management:start
 #   bun run dash:build
 #   bun run dash:preview
@@ -69,98 +69,98 @@ Open the dashboard at `http://localhost:5173`. Create an account and organizatio
 
 ```bash
 # On each machine
-sudo tuntun enroll --control-url http://your-host:8080 --token TOKEN
-sudo tuntun service start
+sudo tunnet enroll --control-url http://your-host:8080 --token TOKEN
+sudo tunnet service start
 ```
 
 ### Direct mode
 
 ```bash
 # Machine A - create a network
-sudo tuntun create --name my-net --secret "a-strong-passphrase"
-sudo tuntun service start
+sudo tunnet create --name my-net --secret "a-strong-passphrase"
+sudo tunnet service start
 
 # Generate an invite
-tuntun invite --name my-net
+tunnet invite --name my-net
 
 # Machine B - join
-sudo tuntun join <INVITE_CODE>
-sudo tuntun service start
+sudo tunnet join <INVITE_CODE>
+sudo tunnet service start
 ```
 
 ### Verify
 
 ```bash
-tuntun status --peers
-tuntun ping other-machine
+tunnet status --peers
+tunnet ping other-machine
 ```
 
 ## Features at a glance
 
 ```bash
 # Mesh
-tuntun status --peers          # Network overview
-tuntun ping <peer>             # Mesh RTT
-tuntun dns status              # PeerDNS resolver state
-tuntun route list              # Subnet / hostname / exit routes
-tuntun route add 192.168.1.0/24  # Advertise a LAN
-tuntun diag                    # Full diagnostics
-tuntun netcheck                # Quick connectivity check
-tuntun update                  # Upgrade from GitHub Releases
-tuntun update --check          # Check for a newer release
+tunnet status --peers          # Network overview
+tunnet ping <peer>             # Mesh RTT
+tunnet dns status              # PeerDNS resolver state
+tunnet route list              # Subnet / hostname / exit routes
+tunnet route add 192.168.1.0/24  # Advertise a LAN
+tunnet diag                    # Full diagnostics
+tunnet netcheck                # Quick connectivity check
+tunnet update                  # Upgrade from GitHub Releases
+tunnet update --check          # Check for a newer release
 
 # Serve - internal services
-tuntun serve 3000              # Expose to mesh with TLS
-tuntun serve status
-tuntun serve off 3000
+tunnet serve 3000              # Expose to mesh with TLS
+tunnet serve status
+tunnet serve off 3000
 
 # Tunnel - public endpoints
-tuntun tunnel 3000             # Public HTTPS via relay
-tuntun tunnel status
-tuntun tunnel off 3000
+tunnet tunnel 3000             # Public HTTPS via relay
+tunnet tunnel status
+tunnet tunnel off 3000
 
 # Send - file transfer
-tuntun send ./data.tar.gz db-server
-tuntun send ./build tag:ci     # Multicast to tagged machines
-tuntun send list               # Pending offers
-tuntun send accept <id>
-tuntun send config --consent auto_accept
+tunnet send ./data.tar.gz db-server
+tunnet send ./build tag:ci     # Multicast to tagged machines
+tunnet send list               # Pending offers
+tunnet send accept <id>
+tunnet send config --consent auto_accept
 
 # SSH - identity-based
-tuntun ssh db-server
-tuntun ssh db-server -u root
-tuntun ssh db-server -- uname -a
-tuntun ssh sessions
-tuntun ssh recordings
-tuntun ssh play <session_id>
+tunnet ssh db-server
+tunnet ssh db-server -u root
+tunnet ssh db-server -- uname -a
+tunnet ssh sessions
+tunnet ssh recordings
+tunnet ssh play <session_id>
 
 # Direct mode
-tuntun create --name net --secret "pass"
-tuntun join <INVITE_CODE>
-tuntun invite --name net
-tuntun connect --name session --secret "shared"
-tuntun requests / accept / deny / kick
-tuntun firewall list / add / remove
-tuntun upgrade-to-managed
+tunnet create --name net --secret "pass"
+tunnet join <INVITE_CODE>
+tunnet invite --name net
+tunnet connect --name session --secret "shared"
+tunnet requests / accept / deny / kick
+tunnet firewall list / add / remove
+tunnet upgrade-to-managed
 
 # Service management
-tuntun service install / start / stop / restart / status
+tunnet service install / start / stop / restart / status
 
 # Auth
-tuntun login --management-url http://localhost:3000
-tuntun logout
+tunnet login --management-url http://localhost:3000
+tunnet logout
 ```
 
 ## Node SDK
 
 ```bash
-bun add @tuntun/sdk
+bun add @tunnet/sdk
 ```
 
 ```ts
-import { TunTunNode } from "@tuntun/sdk";
+import { TunnetNode } from "@tunnet/sdk";
 
-const node = await TunTunNode.create({ controlUrl: "http://control:8080" });
+const node = await TunnetNode.create({ controlUrl: "http://control:8080" });
 
 const peers = await node.listPeers();
 const stream = await node.openStream("api-server", 8080);
@@ -174,11 +174,11 @@ await node.close();
 Self-host your own public tunnel edge:
 
 ```bash
-tuntun-relay register --control-url http://control:8080 --token TOKEN
-tuntun-relay run
+tunnet-relay register --control-url http://control:8080 --token TOKEN
+tunnet-relay run
 ```
 
-Point DNS at the relay, configure ACME or bring your own certificates, and create tunnels with `tuntun tunnel` or from the dashboard. See `tuntun-relay --help` for all options.
+Point DNS at the relay, configure ACME or bring your own certificates, and create tunnels with `tunnet tunnel` or from the dashboard. See `tunnet-relay --help` for all options.
 
 ## Requirements
 

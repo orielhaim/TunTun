@@ -209,7 +209,7 @@ function SshSessionsPage() {
       ) : filtered.length === 0 ? (
         <EmptyState
           title="No SSH sessions"
-          description="Sessions appear here when peers connect with tuntun ssh."
+          description="Sessions appear here when peers connect with tunnet ssh."
         />
       ) : (
         <DataTable columns={columns} data={filtered} />

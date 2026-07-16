@@ -14,8 +14,8 @@ RUN cargo chef cook --release --recipe-path recipe.json
 
 COPY Cargo.toml Cargo.lock ./
 COPY crates/ crates/
-RUN cargo build --release --package tuntun-control \
-    && strip target/release/tuntun-control
+RUN cargo build --release --package tunnet-control \
+    && strip target/release/tunnet-control
 
 FROM debian:bookworm-slim
 
@@ -23,15 +23,15 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /src/target/release/tuntun-control /usr/local/bin/tuntun-control
+COPY --from=builder /src/target/release/tunnet-control /usr/local/bin/tunnet-control
 
-ENV TUNTUN_BIND=0.0.0.0:8080
-ENV TUNTUN_INTERNAL_BIND=0.0.0.0:9090
-ENV TUNTUN_ADMIN_BIND=0.0.0.0:9091
+ENV TUNNET_BIND=0.0.0.0:8080
+ENV TUNNET_INTERNAL_BIND=0.0.0.0:9090
+ENV TUNNET_ADMIN_BIND=0.0.0.0:9091
 
 EXPOSE 8080 9090 9091
 
 HEALTHCHECK --interval=10s --timeout=3s --start-period=15s \
-    CMD ["/usr/local/bin/tuntun-control", "--help"] || exit 1
+    CMD ["/usr/local/bin/tunnet-control", "--help"] || exit 1
 
-ENTRYPOINT ["tuntun-control"]
+ENTRYPOINT ["tunnet-control"]

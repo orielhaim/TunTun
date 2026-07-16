@@ -1,4 +1,4 @@
-import { deviceLabelsSchema } from "@tuntun/api/management";
+import { deviceLabelsSchema } from "@tunnet/api/management";
 
 export function normalizeDeviceLabels(value: unknown): Record<string, string> {
   const parsed = deviceLabelsSchema.safeParse(value);

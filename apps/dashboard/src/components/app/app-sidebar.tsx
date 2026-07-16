@@ -256,11 +256,11 @@ export function AppSidebar() {
         >
           <img
             src="/logo.png"
-            alt="Tuntun"
+            alt="Tunnet"
             className="size-7 shrink-0 rounded-md"
           />
           <p className="truncate text-sm font-semibold tracking-tight">
-            TunTun
+            Tunnet
           </p>
         </Link>
       </SidebarHeader>

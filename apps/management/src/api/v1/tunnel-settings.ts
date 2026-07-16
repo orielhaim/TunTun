@@ -1,5 +1,5 @@
-import { patchOrganizationTunnelSettingsBody } from "@tuntun/api/management";
-import { schema } from "@tuntun/db";
+import { patchOrganizationTunnelSettingsBody } from "@tunnet/api/management";
+import { schema } from "@tunnet/db";
 import { and, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
 

@@ -1,0 +1,73 @@
+{
+  "name": "@tunnet/sdk",
+  "version": "0.3.0",
+  "description": "Tunnet JavaScript SDK",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "binding.js",
+    "binding.d.ts",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">= 18"
+  },
+  "napi": {
+    "binaryName": "tunnet-node",
+    "targets": [
+      "x86_64-unknown-linux-gnu",
+      "aarch64-unknown-linux-gnu",
+      "aarch64-apple-darwin",
+      "x86_64-pc-windows-msvc",
+      "aarch64-pc-windows-msvc",
+      "x86_64-unknown-linux-musl",
+      "aarch64-unknown-linux-musl"
+    ]
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^3.0.0",
+    "@tunnet/api": "workspace:*",
+    "@tunnet/db": "workspace:*",
+    "@types/node": "^22.0.0",
+    "argon2": "^0.44.0",
+    "drizzle-orm": "^0.45.2",
+    "typescript": "7.0.2"
+  },
+  "scripts": {
+    "artifacts": "napi artifacts",
+    "build": "bun run build:native && bun run build:ts",
+    "build:native": "napi build --platform --release --manifest-path ./Cargo.toml --js binding.js --dts binding.d.ts --esm",
+    "build:debug": "napi build --platform --manifest-path ./Cargo.toml --js binding.js --dts binding.d.ts --esm && bun run build:ts",
+    "build:ts": "tsc -p tsconfig.json",
+    "create-npm-dirs": "napi create-npm-dirs",
+    "prepublishOnly": "napi prepublish -t npm --no-gh-release",
+    "version": "napi version",
+    "pretest": "bun run build:debug",
+    "test": "bun --env-file=../../.env test test",
+    "pretest:integration": "bun run build:debug",
+    "test:integration": "bun --env-file=../../.env test test"
+  },
+  "optionalDependencies": {
+    "@tunnet/sdk-linux-x64-gnu": "0.3.0",
+    "@tunnet/sdk-linux-arm64-gnu": "0.3.0",
+    "@tunnet/sdk-darwin-x64": "0.3.0",
+    "@tunnet/sdk-darwin-arm64": "0.3.0",
+    "@tunnet/sdk-win32-x64-msvc": "0.3.0",
+    "@tunnet/sdk-win32-arm64-msvc": "0.3.0",
+    "@tunnet/sdk-linux-x64-musl": "0.3.0",
+    "@tunnet/sdk-linux-arm64-musl": "0.3.0"
+  }
+}

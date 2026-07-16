@@ -1,5 +1,5 @@
 {
-  "name": "@tuntun/api",
+  "name": "@tunnet/api",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "./agent": "./src/agent/index.ts"
   },
   "dependencies": {
-    "@tuntun/ip": "workspace:*",
+    "@tunnet/ip": "workspace:*",
     "parse-duration": "^2.1.8",
     "zod": "^4.4.3"
   }

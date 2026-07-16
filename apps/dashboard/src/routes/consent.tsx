@@ -51,8 +51,8 @@ function ConsentPage() {
           <CardTitle>Authorize application</CardTitle>
           <CardDescription>
             {clientId
-              ? `Allow this application (${clientId}) to access your TunTun account?`
-              : "Allow this application to access your TunTun account?"}
+              ? `Allow this application (${clientId}) to access your Tunnet account?`
+              : "Allow this application to access your Tunnet account?"}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

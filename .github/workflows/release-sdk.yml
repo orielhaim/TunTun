@@ -28,7 +28,7 @@ permissions:
 env:
   RUST_TOOLCHAIN: "1.96"
   CARGO_TERM_COLOR: always
-  APP_NAME: tuntun-node
+  APP_NAME: tunnet-node
   MACOSX_DEPLOYMENT_TARGET: "10.13"
 
 jobs:
@@ -87,7 +87,7 @@ jobs:
     environment: production
     defaults:
       run:
-        working-directory: crates/tuntun-node-napi
+        working-directory: crates/tunnet-node-napi
     strategy:
       fail-fast: false
       matrix:
@@ -155,7 +155,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: sdk-${{ matrix.target }}
-          path: crates/tuntun-node-napi/${{ env.APP_NAME }}.*.node
+          path: crates/tunnet-node-napi/${{ env.APP_NAME }}.*.node
           if-no-files-found: error
 
   publish-sdk:
@@ -165,7 +165,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: crates/tuntun-node-napi
+        working-directory: crates/tunnet-node-napi
     steps:
       - uses: actions/checkout@v7
         with:
@@ -188,16 +188,46 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           pattern: sdk-*
-          path: crates/tuntun-node-napi/artifacts
+          path: crates/tunnet-node-napi/artifacts
           merge-multiple: true
 
       - name: Move artifacts
         run: bun run artifacts
 
+      - name: Build TypeScript wrapper
+        run: bun run build:ts
+
       - name: List packages
         run: ls -R ./npm
 
-      - name: Publish
+      - name: Publish @tunnet/sdk
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        shell: bash
+        run: |
+          if [ "${{ needs.validate.outputs.prerelease }}" = "true" ]; then
+            npm publish --tag next --access public --provenance
+          else
+            npm publish --access public --provenance
+          fi
+
+      - name: Sync tunnet alias version
+        working-directory: packages/tunnet
+        shell: bash
+        run: |
+          version="${{ needs.validate.outputs.version }}"
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            pkg.version = process.env.VERSION;
+            pkg.dependencies['@tunnet/sdk'] = process.env.VERSION;
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+
+      - name: Publish tunnet
+        working-directory: packages/tunnet
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         shell: bash

@@ -3,7 +3,7 @@
 You can send files to multiple machines at once by targeting a tag instead of a specific peer:
 
 ```bash
-tuntun send ./build.tar.gz tag:ci
+tunnet send ./build.tar.gz tag:ci
 ```
 
 This sends the file to every machine with the `ci` tag. Each peer receives an independent transfer offer.

@@ -18,7 +18,7 @@ function findRepoRoot(start = import.meta.dirname): string {
   return join(start, "../../..");
 }
 
-/** Repo root (TunTun/). */
+/** Repo root (Tunnet/). */
 export function getRepoRoot(from = import.meta.dirname): string {
   return findRepoRoot(from);
 }

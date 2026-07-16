@@ -1,11 +1,11 @@
-# tuntun status
+# tunnet status
 
 Show agent and network status.
 
 ## Usage
 
 ```bash
-tuntun status [--peers]
+tunnet status [--peers]
 ```
 
 ## Options

@@ -1,8 +1,8 @@
 # Streams & Fetch
 
-## TunTunStream
+## TunnetStream
 
-`TunTunStream` is a duplex byte stream over the overlay network. It wraps an iroh QUIC stream.
+`TunnetStream` is a duplex byte stream over the overlay network. It wraps an iroh QUIC stream.
 
 ```ts
 const stream = await node.openStream("api-server", 8080);
@@ -19,7 +19,7 @@ await stream.end();
 
 ## Web Streams integration
 
-`TunTunStream` can be converted to Web API `ReadableStream` and `WritableStream`:
+`TunnetStream` can be converted to Web API `ReadableStream` and `WritableStream`:
 
 ```ts
 const readable = stream.toReadableStream();

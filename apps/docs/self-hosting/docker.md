@@ -1,16 +1,16 @@
 # Docker Compose Deployment
 
-TunTun ships a production-ready `docker-compose.yml` at the repository root and four Dockerfiles in the `deploy/` directory. This is the fastest way to get the entire managed stack running.
+Tunnet ships a production-ready `docker-compose.yml` at the repository root and four Dockerfiles in the `deploy/` directory. This is the fastest way to get the entire managed stack running.
 
 ## Quick start
 
 ```bash
 # Clone the repository
-git clone https://github.com/orielhaim/TunTun.git
-cd TunTun
+git clone https://github.com/tunnetio/Tunnet.git
+cd Tunnet
 
 # Set secrets (or use the defaults for local development)
-export TUNTUN_SERVICE_SECRET="$(openssl rand -base64 32)"
+export TUNNET_SERVICE_SECRET="$(openssl rand -base64 32)"
 export BETTER_AUTH_SECRET="$(openssl rand -base64 32)"
 
 # Start everything
@@ -47,9 +47,9 @@ The `docker-compose.yml` sets sensible defaults for local development. For produ
 
 | Variable | Where | What to do |
 |----------|-------|------------|
-| `TUNTUN_SERVICE_SECRET` | control, management | Set to a random string of at least 32 characters. Must match on both services. |
+| `TUNNET_SERVICE_SECRET` | control, management | Set to a random string of at least 32 characters. Must match on both services. |
 | `BETTER_AUTH_SECRET` | management | Set to a random string of at least 32 characters. |
-| `POSTGRES_PASSWORD` | postgres | Change from the default `tuntun`. |
+| `POSTGRES_PASSWORD` | postgres | Change from the default `tunnet`. |
 | `DASHBOARD_URL` | management, dashboard, control | Public dashboard URL (CORS, OAuth, SSH browser auth). |
 | `MANAGEMENT_URL` | management, dashboard | Public management API URL. |
 | `CONTROL_PLANE_URL` | management, dashboard, control | Control plane URL for agents. |
@@ -57,7 +57,7 @@ The `docker-compose.yml` sets sensible defaults for local development. For produ
 You can set these in a `.env` file next to `docker-compose.yml`:
 
 ```env
-TUNTUN_SERVICE_SECRET=your-random-secret-here-at-least-32-chars
+TUNNET_SERVICE_SECRET=your-random-secret-here-at-least-32-chars
 BETTER_AUTH_SECRET=another-random-secret-here-at-least-32-chars
 ```
 
@@ -66,11 +66,11 @@ BETTER_AUTH_SECRET=another-random-secret-here-at-least-32-chars
 Once the stack is running, open the dashboard at `http://localhost:5173`, create an account and organization, then generate an enrollment token. On the machine you want to add:
 
 ```bash
-sudo tuntun enroll \
+sudo tunnet enroll \
   --control-url http://your-docker-host:8080 \
   --token YOUR_TOKEN
 
-sudo tuntun run
+sudo tunnet run
 ```
 
 ## Production considerations
@@ -79,7 +79,7 @@ sudo tuntun run
 
 **Database backups** - the `pgdata` volume contains all state. Back it up regularly.
 
-**Secret rotation** - if `TUNTUN_SERVICE_SECRET` or `BETTER_AUTH_SECRET` change, all containers that reference them must be restarted.
+**Secret rotation** - if `TUNNET_SERVICE_SECRET` or `BETTER_AUTH_SECRET` change, all containers that reference them must be restarted.
 
 **Remove exposed ports** - in production, remove the `ports` mapping for `postgres` (5432) and `control` admin (9091). Only expose 8080 (agent WebSocket), 3000 (management API), and 5173 (dashboard).
 
@@ -89,7 +89,7 @@ All Dockerfiles live in `deploy/` and use multi-stage builds:
 
 ### Dockerfile.control
 
-Uses `rust:1.96-bookworm` with cargo-chef for layer caching. Builds the `tuntun-control` binary, strips symbols, and copies it into `debian:bookworm-slim` with just `ca-certificates`. Exposes ports 8080, 9090, and 9091.
+Uses `rust:1.96-bookworm` with cargo-chef for layer caching. Builds the `tunnet-control` binary, strips symbols, and copies it into `debian:bookworm-slim` with just `ca-certificates`. Exposes ports 8080, 9090, and 9091.
 
 ### Dockerfile.management
 
@@ -101,7 +101,7 @@ Uses `oven/bun:1` for building - installs dependencies with the full workspace g
 
 ### Dockerfile.relay
 
-Uses `rust:1.96-bookworm` for building. Simpler than the control plane Dockerfile (no cargo-chef). Builds and strips `tuntun-relay`, copies into `debian:bookworm-slim`. Exposes ports 80 and 443. Entry point is `tuntun-relay run`.
+Uses `rust:1.96-bookworm` for building. Simpler than the control plane Dockerfile (no cargo-chef). Builds and strips `tunnet-relay`, copies into `debian:bookworm-slim`. Exposes ports 80 and 443. Entry point is `tunnet-relay run`.
 
 ## Adding the relay
 
@@ -121,9 +121,9 @@ relay:
     - "443:443"
     - "80:80"
   environment:
-    TUNTUN_RELAY_CONTROL_URL: "http://control:8080"
+    TUNNET_RELAY_CONTROL_URL: "http://control:8080"
   volumes:
-    - relay-certs:/etc/tuntun/certs
+    - relay-certs:/etc/tunnet/certs
 ```
 
 Then register and run the relay. See the [Relay self-hosted setup](/products/relay/self-hosted) for DNS and certificate configuration.

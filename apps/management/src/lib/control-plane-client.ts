@@ -10,22 +10,22 @@ import {
   registerDeviceResponse,
   type ValidateNetworkResponse,
   validateNetworkResponse,
-} from "@tuntun/api/internal";
-import { getControlPlaneAdminUrl } from "@tuntun/env";
+} from "@tunnet/api/internal";
+import { getControlPlaneAdminUrl } from "@tunnet/env";
 import ky, { isHTTPError, type KyInstance } from "ky";
 
-const HDR_TIMESTAMP = "x-tuntun-timestamp";
-const HDR_NONCE = "x-tuntun-nonce";
-const HDR_SIGNATURE = "x-tuntun-signature";
+const HDR_TIMESTAMP = "x-tunnet-timestamp";
+const HDR_NONCE = "x-tunnet-nonce";
+const HDR_SIGNATURE = "x-tunnet-signature";
 
 function getAdminUrl(): string {
   return getControlPlaneAdminUrl();
 }
 
 function getServiceSecret(): string {
-  const secret = process.env.TUNTUN_SERVICE_SECRET;
+  const secret = process.env.TUNNET_SERVICE_SECRET;
   if (!secret || secret.length < 32) {
-    throw new Error("TUNTUN_SERVICE_SECRET must be at least 32 characters");
+    throw new Error("TUNNET_SERVICE_SECRET must be at least 32 characters");
   }
   return secret;
 }

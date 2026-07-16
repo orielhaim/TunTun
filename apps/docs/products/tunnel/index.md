@@ -1,22 +1,22 @@
 # Tunnel
 
-`tuntun tunnel` gives a local port a public HTTPS URL through a TunTun relay. The URL is reachable from the public internet, but the traffic flows through the relay to your agent - no inbound firewall rules needed.
+`tunnet tunnel` gives a local port a public HTTPS URL through a Tunnet relay. The URL is reachable from the public internet, but the traffic flows through the relay to your agent - no inbound firewall rules needed.
 
 ## How it competes
 
-Tunnel competes directly with **ngrok** (public tunnels to local services), **Cloudflare Tunnel** (exposing internal services to the internet), and **Tailscale Funnel** (public access to tailnet services). TunTun's advantage is self-hosted relay infrastructure and integration with the mesh network.
+Tunnel competes directly with **ngrok** (public tunnels to local services), **Cloudflare Tunnel** (exposing internal services to the internet), and **Tailscale Funnel** (public access to tailnet services). Tunnet's advantage is self-hosted relay infrastructure and integration with the mesh network.
 
 ## Quick start
 
 ```bash
 # Expose port 3000 to the internet
-tuntun tunnel 3000
+tunnet tunnel 3000
 
 # Check active tunnels
-tuntun tunnel status
+tunnet tunnel status
 
 # Stop the tunnel
-tuntun tunnel off 3000
+tunnet tunnel off 3000
 ```
 
 The CLI outputs a public URL like `https://abc123.your-relay.example.com` that anyone can access.
@@ -26,8 +26,8 @@ The CLI outputs a public URL like `https://abc123.your-relay.example.com` that a
 ```mermaid
 sequenceDiagram
     participant Browser as Public Browser
-    participant Relay as tuntun-relay
-    participant Agent as tuntun agent
+    participant Relay as tunnet-relay
+    participant Agent as tunnet agent
     participant App as localhost:3000
 
     Agent->>Relay: Reverse tunnel (QUIC stream, RELAY_ALPN)

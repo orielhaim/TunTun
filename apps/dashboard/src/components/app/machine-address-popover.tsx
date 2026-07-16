@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { deviceAddressesResponse } from "@tuntun/api/management";
+import { deviceAddressesResponse } from "@tunnet/api/management";
 import { memo, useState } from "react";
 
 import { CopyField } from "@/components/app/copy-field";

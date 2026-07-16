@@ -1,6 +1,6 @@
 # Control Plane
 
-The control plane (`tuntun-control`) is the Rust server that coordinates managed networks.
+The control plane (`tunnet-control`) is the Rust server that coordinates managed networks.
 
 ## What it does
 
@@ -25,7 +25,7 @@ The control plane image is built from `deploy/Dockerfile.control` using a multi-
 ## Running manually
 
 ```bash
-./target/release/tuntun-control
+./target/release/tunnet-control
 ```
 
 ## Configuration
@@ -33,8 +33,8 @@ The control plane image is built from `deploy/Dockerfile.control` using a multi-
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `DATABASE_URL` | - | PostgreSQL connection string (required) |
-| `TUNTUN_BIND` | `0.0.0.0:8080` | Agent WebSocket bind address |
-| `TUNTUN_INTERNAL_BIND` | `0.0.0.0:9090` | Internal metrics bind |
-| `TUNTUN_ADMIN_BIND` | `0.0.0.0:9091` | Admin API bind |
-| `TUNTUN_SERVICE_SECRET` | - | Shared secret for internal API auth (required, must match management) |
-| `TUNTUN_JSON_LOGS` | `false` | Enable structured JSON logs |
+| `TUNNET_BIND` | `0.0.0.0:8080` | Agent WebSocket bind address |
+| `TUNNET_INTERNAL_BIND` | `0.0.0.0:9090` | Internal metrics bind |
+| `TUNNET_ADMIN_BIND` | `0.0.0.0:9091` | Admin API bind |
+| `TUNNET_SERVICE_SECRET` | - | Shared secret for internal API auth (required, must match management) |
+| `TUNNET_JSON_LOGS` | `false` | Enable structured JSON logs |

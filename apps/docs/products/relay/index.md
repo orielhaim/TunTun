@@ -1,6 +1,6 @@
 # Relay
 
-The TunTun relay (`tuntun-relay`) is a self-hosted edge server that terminates public tunnels. Agents establish reverse tunnels to the relay, and the relay accepts public HTTPS (and TCP) connections and forwards them to the appropriate agent.
+The Tunnet relay (`tunnet-relay`) is a self-hosted edge server that terminates public tunnels. Agents establish reverse tunnels to the relay, and the relay accepts public HTTPS (and TCP) connections and forwards them to the appropriate agent.
 
 ## How it competes
 
@@ -10,7 +10,7 @@ The relay competes with **Cloudflare Tunnel's edge network** and **ngrok's infra
 
 ```mermaid
 graph LR
-    Internet((Internet)) -->|HTTPS| Relay[tuntun-relay]
+    Internet((Internet)) -->|HTTPS| Relay[tunnet-relay]
     Relay -->|WebSocket| CP[Control Plane]
     Relay <-->|QUIC reverse tunnel| Agent[Agent]
     Agent -->|Proxy| App[localhost:PORT]

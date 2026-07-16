@@ -1,6 +1,6 @@
 # Access Policies & ACLs
 
-TunTun enforces access control at two levels: organization-wide policies and per-network policies. Policies define which peers can communicate with which other peers, and optionally restrict communication to specific ports or protocols.
+Tunnet enforces access control at two levels: organization-wide policies and per-network policies. Policies define which peers can communicate with which other peers, and optionally restrict communication to specific ports or protocols.
 
 ## Policy structure
 

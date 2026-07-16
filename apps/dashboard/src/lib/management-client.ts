@@ -102,7 +102,7 @@ import {
   type UpsertOrganizationSsoProviderBody,
   updateSendSettingsBody,
   upsertOrganizationSsoProviderBody,
-} from "@tuntun/api/management";
+} from "@tunnet/api/management";
 import type { z } from "zod";
 import { z as zod } from "zod";
 

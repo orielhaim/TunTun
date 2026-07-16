@@ -1,11 +1,11 @@
-# TunTunNode
+# TunnetNode
 
-`TunTunNode` is the main SDK class. It represents a handle to the overlay network from a single process.
+`TunnetNode` is the main SDK class. It represents a handle to the overlay network from a single process.
 
 ## Creation
 
 ```ts
-const node = await TunTunNode.create({
+const node = await TunnetNode.create({
   stateDir: "/path/to/state",       // Where to persist identity
   hostname: "my-app",               // Hostname on the mesh
   controlUrl: "http://control:8080", // Control plane URL

@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { entitlementsSchema } from "@tuntun/api/management";
+import { entitlementsSchema } from "@tunnet/api/management";
 import {
   COMMUNITY_ENTITLEMENTS,
   type Entitlements,
-} from "@tuntun/entitlements";
+} from "@tunnet/entitlements";
 
 import { getManagementApiUrl } from "@/lib/env";
 

@@ -1,7 +1,7 @@
 import { defineConfig } from "vitepress";
 
 export default defineConfig({
-  title: "TunTun",
+  title: "Tunnet",
   description:
     "Open-source private mesh networking. Replace everything with a single stack.",
 
@@ -12,7 +12,7 @@ export default defineConfig({
       "meta",
       {
         name: "og:title",
-        content: "TunTun - Open-Source Mesh Networking",
+        content: "Tunnet - Open-Source Mesh Networking",
       },
     ],
     [
@@ -49,10 +49,10 @@ export default defineConfig({
 
   themeConfig: {
     logo: "/logo.png",
-    siteTitle: "TunTun",
+    siteTitle: "Tunnet",
 
     nav: [
-      { text: "Guide", link: "/guide/what-is-tuntun" },
+      { text: "Guide", link: "/guide/what-is-tunnet" },
       {
         text: "Products",
         items: [
@@ -81,8 +81,8 @@ export default defineConfig({
         {
           text: "Introduction",
           items: [
-            { text: "What is TunTun?", link: "/guide/what-is-tuntun" },
-            { text: "Why TunTun?", link: "/guide/why-tuntun" },
+            { text: "What is Tunnet?", link: "/guide/what-is-tunnet" },
+            { text: "Why Tunnet?", link: "/guide/why-tunnet" },
             {
               text: "Comparison with Alternatives",
               link: "/guide/comparison",
@@ -243,23 +243,23 @@ export default defineConfig({
           text: "CLI Reference",
           items: [
             { text: "Overview", link: "/cli/" },
-            { text: "tuntun enroll", link: "/cli/enroll" },
-            { text: "tuntun run", link: "/cli/run" },
-            { text: "tuntun status", link: "/cli/status" },
-            { text: "tuntun ping", link: "/cli/ping" },
-            { text: "tuntun serve", link: "/cli/serve" },
-            { text: "tuntun tunnel", link: "/cli/tunnel" },
-            { text: "tuntun send", link: "/cli/send" },
-            { text: "tuntun ssh", link: "/cli/ssh" },
-            { text: "tuntun route", link: "/cli/route" },
-            { text: "tuntun dns", link: "/cli/dns" },
-            { text: "tuntun login / logout", link: "/cli/login" },
-            { text: "tuntun validate", link: "/cli/validate" },
-            { text: "tuntun reload", link: "/cli/reload" },
+            { text: "tunnet enroll", link: "/cli/enroll" },
+            { text: "tunnet run", link: "/cli/run" },
+            { text: "tunnet status", link: "/cli/status" },
+            { text: "tunnet ping", link: "/cli/ping" },
+            { text: "tunnet serve", link: "/cli/serve" },
+            { text: "tunnet tunnel", link: "/cli/tunnel" },
+            { text: "tunnet send", link: "/cli/send" },
+            { text: "tunnet ssh", link: "/cli/ssh" },
+            { text: "tunnet route", link: "/cli/route" },
+            { text: "tunnet dns", link: "/cli/dns" },
+            { text: "tunnet login / logout", link: "/cli/login" },
+            { text: "tunnet validate", link: "/cli/validate" },
+            { text: "tunnet reload", link: "/cli/reload" },
             { text: "Direct Mode Commands", link: "/cli/direct" },
-            { text: "tuntun service", link: "/cli/service" },
-            { text: "tuntun update", link: "/cli/update" },
-            { text: "tuntun-relay", link: "/cli/relay" },
+            { text: "tunnet service", link: "/cli/service" },
+            { text: "tunnet update", link: "/cli/update" },
+            { text: "tunnet-relay", link: "/cli/relay" },
           ],
         },
       ],
@@ -269,7 +269,7 @@ export default defineConfig({
           text: "Node SDK",
           items: [
             { text: "Overview", link: "/sdk/" },
-            { text: "TunTunNode", link: "/sdk/node" },
+            { text: "TunnetNode", link: "/sdk/node" },
             { text: "Streams & Fetch", link: "/sdk/streams" },
             { text: "File Transfer", link: "/sdk/file-transfer" },
           ],
@@ -294,12 +294,12 @@ export default defineConfig({
     },
 
     socialLinks: [
-      { icon: "github", link: "https://github.com/orielhaim/TunTun" },
+      { icon: "github", link: "https://github.com/tunnetio/Tunnet" },
       { icon: "discord", link: "https://discord.gg/y5bNc3MYKz" },
     ],
 
     editLink: {
-      pattern: "https://github.com/orielhaim/TunTun/edit/main/apps/docs/:path",
+      pattern: "https://github.com/tunnetio/Tunnet/edit/main/apps/docs/:path",
       text: "Edit this page on GitHub",
     },
 
@@ -309,7 +309,7 @@ export default defineConfig({
 
     footer: {
       message: "Released under the AGPL-3.0 License.",
-      copyright: "Copyright © 2025 orielhaim",
+      copyright: "Copyright © 2025 Tunnet.io",
     },
   },
 
