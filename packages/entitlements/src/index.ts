@@ -3,10 +3,16 @@ export type LicenseTier = "community" | "cloud" | "enterprise";
 /** Tiers that require a signed license certificate. */
 export type PaidTier = Exclude<LicenseTier, "community">;
 
+/**
+ * Boolean product features unlocked by license tier.
+ * Resolved once from `TUNNET_LICENSE` (or community defaults).
+ */
+export type Feature = "multiOrganization" | "cloudLanding" | "openSignUp";
+
 export type Entitlements = {
   tier: LicenseTier;
   multiOrganization: boolean;
-  /** SaaS marketing landing (needs private `cloud/` packages). */
+  /** SaaS marketing landing on `/`. */
   cloudLanding: boolean;
   /** Public signup + org invitations. */
   openSignUp: boolean;
@@ -62,4 +68,21 @@ export function entitlementsForTier(
     ...FEATURES[tier],
     licenseExpiresAt: tier === "community" ? null : licenseExpiresAt,
   };
+}
+
+/** Whether a feature is unlocked for the resolved license. */
+export function hasFeature(
+  entitlements: Entitlements,
+  feature: Feature,
+): boolean {
+  return entitlements[feature] === true;
+}
+
+/** Features unlocked for a tier (ignores expiry). */
+export function featuresForTier(tier: LicenseTier): ReadonlySet<Feature> {
+  const row = FEATURES[tier];
+  const unlocked = (Object.keys(row) as Array<keyof typeof row>).filter(
+    (key): key is Feature => key !== "tier" && row[key] === true,
+  );
+  return new Set(unlocked);
 }

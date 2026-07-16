@@ -6,7 +6,6 @@ import {
   entitlementsForTier,
 } from "@tunnet/entitlements";
 import { verifyLicense } from "@tunnet/entitlements/license";
-import { getRepoRoot, hasCloudPackages } from "@tunnet/env/cloud-paths";
 
 type Cache = {
   entitlements: Entitlements;
@@ -48,13 +47,6 @@ async function loadLicenseText(env: NodeJS.ProcessEnv): Promise<string | null> {
   }
 }
 
-function applyCloudPackageGuard(entitlements: Entitlements): Entitlements {
-  if (entitlements.cloudLanding && !hasCloudPackages(getRepoRoot())) {
-    return { ...entitlements, cloudLanding: false };
-  }
-  return entitlements;
-}
-
 export async function hasAnyUsers(): Promise<boolean> {
   const row = await getDb().query.user.findFirst({ columns: { id: true } });
   return row != null;
@@ -66,28 +58,30 @@ export async function resolveEntitlements(
   nowMs: number = Date.now(),
 ): Promise<Entitlements> {
   const text = await loadLicenseText(env);
-  if (!text) return applyCloudPackageGuard(COMMUNITY_ENTITLEMENTS);
+  if (!text) return COMMUNITY_ENTITLEMENTS;
 
   const verified = verifyLicense(text, Math.floor(nowMs / 1000));
   if (!verified) {
     console.warn(
       "[entitlements] TUNNET_LICENSE invalid or malformed; using community",
     );
-    return applyCloudPackageGuard(COMMUNITY_ENTITLEMENTS);
+    return COMMUNITY_ENTITLEMENTS;
   }
 
   if (verified.expired) {
     console.warn(
       `[entitlements] license expired at ${new Date(verified.payload.exp * 1000).toISOString()}; using community`,
     );
-    return applyCloudPackageGuard(COMMUNITY_ENTITLEMENTS);
+    return COMMUNITY_ENTITLEMENTS;
   }
 
-  return applyCloudPackageGuard(
-    entitlementsForTier(verified.payload.tier, verified.payload.exp),
-  );
+  return entitlementsForTier(verified.payload.tier, verified.payload.exp);
 }
 
+/**
+ * License status for this process — resolved once and cached until expiry.
+ * Use `hasFeature(entitlements, "…")` at call sites.
+ */
 export async function getEntitlements(): Promise<Entitlements> {
   const now = Date.now();
   if (cache && (cache.refreshAtMs === null || now < cache.refreshAtMs)) {
@@ -109,4 +103,4 @@ export function clearEntitlementsCache(): void {
   cache = null;
 }
 
-export { COMMUNITY_ENTITLEMENTS };
+export { COMMUNITY_ENTITLEMENTS, hasFeature } from "@tunnet/entitlements";

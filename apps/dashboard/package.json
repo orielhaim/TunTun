@@ -28,7 +28,6 @@
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/router-plugin": "^1.168.20",
     "@tunnet/api": "workspace:*",
-    "@tunnet/cloud-dashboard": "workspace:*",
     "@tunnet/db": "workspace:*",
     "@tunnet/entitlements": "workspace:*",
     "@tunnet/env": "workspace:*",

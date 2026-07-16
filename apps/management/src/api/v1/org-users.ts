@@ -4,7 +4,7 @@ import { z } from "zod";
 import { auth } from "../../auth";
 import { writeAudit } from "../../lib/audit";
 import { db } from "../../lib/db";
-import { getEntitlements } from "../../lib/entitlements";
+import { getEntitlements, hasFeature } from "../../lib/entitlements";
 import { getAuth, requireAdmin, requireAuth } from "./middleware/authz";
 import { badRequest, sessionPlugin } from "./middleware/session";
 
@@ -31,7 +31,7 @@ export const orgUsersRoutes = new Elysia()
       const { email, password, name, role } = parsed.data;
 
       const entitlements = await getEntitlements();
-      if (entitlements.openSignUp) {
+      if (hasFeature(entitlements, "openSignUp")) {
         return badRequest(
           "Use invitations to add users when public signup is enabled",
         );

@@ -4,11 +4,10 @@
   "workspaces": [
     "apps/*",
     "packages/*",
-    "packages/cloud-stubs/*",
     "crates/tunnet-node-napi"
   ],
   "scripts": {
-    "prepare": "bun run scripts/prepare-git.ts",
+    "prepare": "bun run scripts/prepare.ts",
     "management:dev": "bun --env-file=.env --filter @tunnet/management dev",
     "management:start": "bun --env-file=.env --filter @tunnet/management start",
     "dash:dev": "bun --env-file=.env --filter @tunnet/dashboard dev",
@@ -23,9 +22,7 @@
     "test:sdk": "bun --env-file=.env --filter @tunnet/sdk test",
     "test": "bun --env-file=.env --filter @tunnet/sdk test",
     "test:sdk:integration": "bun --env-file=.env --filter @tunnet/sdk test:integration",
-    "check": "biome check",
-    "sync:private": "bun run scripts/sync-private.ts",
-    "push:oss": "bun run scripts/push-oss.ts"
+    "check": "biome check"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.4",

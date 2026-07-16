@@ -1,4 +1,5 @@
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
+import type { Entitlements } from "@tunnet/entitlements";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -13,7 +14,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useEntitlements } from "@/hooks/use-entitlements";
+import { hasFeature, useEntitlements } from "@/hooks/use-entitlements";
 import { getEntitlements, getSession } from "@/lib/auth.functions";
 import { authClient, signIn, signUp } from "@/lib/auth-client";
 
@@ -41,16 +42,14 @@ function LoginPage() {
   const routeEntitlements = Route.useRouteContext({
     select: (ctx) =>
       "entitlements" in ctx
-        ? (
-            ctx as {
-              entitlements?: { openSignUp?: boolean };
-            }
-          ).entitlements
+        ? (ctx as { entitlements?: Entitlements }).entitlements
         : undefined,
   });
   const { data: liveEntitlements } = useEntitlements();
   const entitlements = liveEntitlements ?? routeEntitlements;
-  const showSignup = Boolean(entitlements?.openSignUp);
+  const showSignup = entitlements
+    ? hasFeature(entitlements, "openSignUp")
+    : false;
 
   const [loading, setLoading] = useState(false);
   const [ssoLoading, setSsoLoading] = useState(false);

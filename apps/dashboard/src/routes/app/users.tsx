@@ -41,7 +41,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useEntitlements } from "@/hooks/use-entitlements";
+import { hasFeature, useEntitlements } from "@/hooks/use-entitlements";
 import { isAdminRole, useMemberRole } from "@/hooks/use-member-role";
 import { authClient, useActiveOrganization } from "@/lib/auth-client";
 import {
@@ -68,8 +68,10 @@ function UsersPage() {
   const { data: role } = useMemberRole(orgId);
   const isAdmin = isAdminRole(role);
   const { data: entitlements } = useEntitlements();
-  /** Cloud: invite + signup. Community/enterprise: admin createUser only. */
-  const cloudInvites = Boolean(entitlements?.openSignUp);
+  /** Cloud license: invite + signup. Community/enterprise: admin createUser only. */
+  const cloudInvites = entitlements
+    ? hasFeature(entitlements, "openSignUp")
+    : false;
   const canCreateUsers = !cloudInvites;
   const queryClient = useQueryClient();
   const [inviteOpen, setInviteOpen] = useState(false);

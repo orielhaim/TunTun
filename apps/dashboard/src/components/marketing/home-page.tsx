@@ -1,9 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
-/** When true, `/` renders this marketing page instead of redirecting. */
-export const hasMarketingLanding = true;
-
+/** Cloud-tier marketing landing — shown when `cloudLanding` is entitled. */
 export function HomePage(): ReactNode {
   return (
     <div className="relative min-h-svh overflow-hidden bg-[#0c1210] text-[#e8f0ea]">

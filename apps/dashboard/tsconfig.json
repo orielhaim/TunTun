@@ -6,10 +6,7 @@
     "module": "ESNext",
     "paths": {
       "#/*": ["./src/*"],
-      "@/*": ["./src/*"],
-      "@tunnet/cloud-dashboard": [
-        "../../packages/cloud-stubs/dashboard/src/index.ts"
-      ]
+      "@/*": ["./src/*"]
     },
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["vite/client"],

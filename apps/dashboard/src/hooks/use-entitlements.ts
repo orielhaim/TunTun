@@ -3,6 +3,7 @@ import { entitlementsSchema } from "@tunnet/api/management";
 import {
   COMMUNITY_ENTITLEMENTS,
   type Entitlements,
+  hasFeature,
 } from "@tunnet/entitlements";
 
 import { getManagementApiUrl } from "@/lib/env";
@@ -26,3 +27,5 @@ export function useEntitlements() {
     staleTime: 60_000,
   });
 }
+
+export { hasFeature };

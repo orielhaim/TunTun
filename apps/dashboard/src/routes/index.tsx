@@ -1,13 +1,13 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { HomePage, hasMarketingLanding } from "@tunnet/cloud-dashboard";
+import { hasFeature } from "@tunnet/entitlements";
 
+import { HomePage } from "@/components/marketing/home-page";
 import { getEntitlements, getSession } from "@/lib/auth.functions";
 
 export const Route = createFileRoute("/")({
   loader: async () => {
     const entitlements = await getEntitlements();
-    const showLanding = entitlements.cloudLanding && hasMarketingLanding;
-    if (!showLanding) {
+    if (!hasFeature(entitlements, "cloudLanding")) {
       const session = await getSession();
       throw redirect({ to: session ? "/app" : "/login" });
     }

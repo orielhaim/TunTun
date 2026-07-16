@@ -3,24 +3,18 @@ import tailwindcss from "@tailwindcss/vite";
 import { devtools } from "@tanstack/devtools-vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import { getManagementUrl } from "@tunnet/env";
-import { resolveCloudDashboardRoot } from "@tunnet/env/cloud-paths";
 
 import viteReact from "@vitejs/plugin-react";
 import { nitro } from "nitro/vite";
 import { defineConfig } from "vite";
 
 const managementApiUrl = getManagementUrl();
-const repoRoot = path.resolve(import.meta.dirname, "../..");
-const cloudDashboardSrc = path.join(resolveCloudDashboardRoot(repoRoot), "src");
 
 const config = defineConfig({
   envDir: path.resolve(import.meta.dirname, "../.."),
   envPrefix: ["VITE_", "DASHBOARD_", "MANAGEMENT_", "CONTROL_PLANE_"],
   resolve: {
     tsconfigPaths: true,
-    alias: {
-      "@tunnet/cloud-dashboard": cloudDashboardSrc,
-    },
   },
   preview: {
     port: 5173,

@@ -37,7 +37,6 @@
         "@tanstack/react-table": "^8.21.3",
         "@tanstack/router-plugin": "^1.168.20",
         "@tunnet/api": "workspace:*",
-        "@tunnet/cloud-dashboard": "workspace:*",
         "@tunnet/db": "workspace:*",
         "@tunnet/entitlements": "workspace:*",
         "@tunnet/env": "workspace:*",
@@ -89,7 +88,6 @@
         "@elysiajs/cors": "^1.4.2",
         "@peculiar/x509": "^2.0.0",
         "@tunnet/api": "workspace:*",
-        "@tunnet/cloud-management": "workspace:*",
         "@tunnet/db": "workspace:*",
         "@tunnet/entitlements": "workspace:*",
         "@tunnet/env": "workspace:*",
@@ -135,18 +133,6 @@
         "parse-duration": "^2.1.8",
         "zod": "^4.4.3",
       },
-    },
-    "packages/cloud-stubs/dashboard": {
-      "name": "@tunnet/cloud-dashboard",
-      "version": "0.0.0",
-      "peerDependencies": {
-        "@tanstack/react-router": "*",
-        "react": "*",
-      },
-    },
-    "packages/cloud-stubs/management": {
-      "name": "@tunnet/cloud-management",
-      "version": "0.0.0",
     },
     "packages/db": {
       "name": "@tunnet/db",
@@ -881,10 +867,6 @@
     "@ts-morph/common": ["@ts-morph/common@0.27.0", "", { "dependencies": { "fast-glob": "^3.3.3", "minimatch": "^10.0.1", "path-browserify": "^1.0.1" } }, "sha512-Wf29UqxWDpc+i61k3oIOzcUfQt79PIT9y/MWfAGlrkjg6lBC1hwDECLXPVJAhWjiGbfBCxZd65F/LIZF3+jeJQ=="],
 
     "@tunnet/api": ["@tunnet/api@workspace:packages/api"],
-
-    "@tunnet/cloud-dashboard": ["@tunnet/cloud-dashboard@workspace:packages/cloud-stubs/dashboard"],
-
-    "@tunnet/cloud-management": ["@tunnet/cloud-management@workspace:packages/cloud-stubs/management"],
 
     "@tunnet/dashboard": ["@tunnet/dashboard@workspace:apps/dashboard"],
 

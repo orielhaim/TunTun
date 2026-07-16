@@ -13,7 +13,6 @@
     "@elysiajs/cors": "^1.4.2",
     "@peculiar/x509": "^2.0.0",
     "@tunnet/api": "workspace:*",
-    "@tunnet/cloud-management": "workspace:*",
     "@tunnet/db": "workspace:*",
     "@tunnet/entitlements": "workspace:*",
     "@tunnet/env": "workspace:*",

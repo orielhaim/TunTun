@@ -3,11 +3,13 @@ import {
   clearEntitlementsCache,
   getEntitlements,
   hasAnyUsers,
+  hasFeature,
 } from "./entitlements";
 
 export async function ensureBootstrapUser(): Promise<void> {
   const entitlements = await getEntitlements();
-  if (entitlements.tier === "cloud") {
+  // Cloud SaaS: first user signs up publicly; no bootstrap owner seed.
+  if (hasFeature(entitlements, "openSignUp")) {
     return;
   }
 
