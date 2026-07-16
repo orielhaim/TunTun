@@ -1,10 +1,21 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
+import { HomePage, hasMarketingLanding } from "@tuntun/cloud-dashboard";
 
-import { getSession } from "@/lib/auth.functions";
+import { getEntitlements, getSession } from "@/lib/auth.functions";
 
 export const Route = createFileRoute("/")({
-  beforeLoad: async () => {
-    const session = await getSession();
-    throw redirect({ to: session ? "/app" : "/login" });
+  loader: async () => {
+    const entitlements = await getEntitlements();
+    const showLanding = entitlements.cloudLanding && hasMarketingLanding;
+    if (!showLanding) {
+      const session = await getSession();
+      throw redirect({ to: session ? "/app" : "/login" });
+    }
+    return { showLanding: true as const };
   },
+  component: IndexPage,
 });
+
+function IndexPage() {
+  return <HomePage />;
+}

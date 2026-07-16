@@ -1,7 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
+import { entitlementsSchema } from "@tuntun/api/management";
+import {
+  COMMUNITY_ENTITLEMENTS,
+  type Entitlements,
+} from "@tuntun/entitlements";
 
 import { authClient } from "@/lib/auth-client";
+import { getManagementApiUrl } from "@/lib/env";
 
 function authFetchOptions() {
   return {
@@ -19,6 +25,23 @@ async function fetchSession() {
 
 export const getSession = createServerFn({ method: "GET" }).handler(async () =>
   fetchSession(),
+);
+
+export const getEntitlements = createServerFn({ method: "GET" }).handler(
+  async (): Promise<Entitlements> => {
+    try {
+      const response = await fetch(
+        `${getManagementApiUrl()}/api/v1/entitlements`,
+        { headers: getRequestHeaders() },
+      );
+      if (!response.ok) return COMMUNITY_ENTITLEMENTS;
+      const data: unknown = await response.json();
+      const parsed = entitlementsSchema.safeParse(data);
+      return parsed.success ? parsed.data : COMMUNITY_ENTITLEMENTS;
+    } catch {
+      return COMMUNITY_ENTITLEMENTS;
+    }
+  },
 );
 
 export const ensureSession = createServerFn({ method: "GET" }).handler(

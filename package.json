@@ -4,6 +4,7 @@
   "workspaces": [
     "apps/*",
     "packages/*",
+    "packages/cloud-stubs/*",
     "crates/tuntun-node-napi"
   ],
   "scripts": {
@@ -21,7 +22,9 @@
     "test:sdk": "bun --env-file=.env --filter @tuntun/core test",
     "test": "bun --env-file=.env --filter @tuntun/core test",
     "test:sdk:integration": "bun --env-file=.env --filter @tuntun/core test:integration",
-    "check": "biome check"
+    "check": "biome check",
+    "sync:private": "bun run scripts/sync-private.ts",
+    "push:oss": "bun run scripts/push-oss.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.4",
