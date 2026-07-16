@@ -7,7 +7,7 @@
  *   bun run scripts/sync-public.ts --force   # only when public history must be rewritten
  */
 
-import { cp, mkdtemp, readdir, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -59,30 +59,30 @@ async function main() {
       await git(["remote", "add", "origin", remoteUrl], { cwd: tmp });
     }
 
-    // Clear tracked files in the public clone
+    // Clear public clone contents
     await git(["rm", "-rf", "--ignore-unmatch", "."], {
       cwd: tmp,
       allowFail: true,
     });
 
-    // Export HEAD into a staging dir, then copy everything except cloud/
-    const exportDir = await mkdtemp(join(tmpdir(), "tuntun-export-"));
-    try {
-      await git(
-        ["--work-tree", exportDir, "checkout", "-f", "HEAD", "--", "."],
-        { cwd: repoRoot },
+    // Export HEAD via archive (does not touch the main worktree/index)
+    const archive = Bun.spawn(
+      ["git", "-C", repoRoot, "archive", "--format=tar", "HEAD"],
+      { stdout: "pipe", stderr: "pipe" },
+    );
+    const extract = Bun.spawn(["tar", "-xf", "-", "-C", tmp], {
+      stdin: archive.stdout,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const archiveCode = await archive.exited;
+    const extractCode = await extract.exited;
+    if (archiveCode !== 0 || extractCode !== 0) {
+      const err = await new Response(extract.stderr).text();
+      const aerr = await new Response(archive.stderr).text();
+      throw new Error(
+        `Failed to export archive: ${aerr || err || `codes ${archiveCode}/${extractCode}`}`,
       );
-
-      const entries = await readdir(exportDir);
-      for (const name of entries) {
-        if (name === "cloud") continue;
-        await cp(join(exportDir, name), join(tmp, name), {
-          recursive: true,
-          force: true,
-        });
-      }
-    } finally {
-      await rm(exportDir, { recursive: true, force: true });
     }
 
     await rm(join(tmp, "cloud"), { recursive: true, force: true });
