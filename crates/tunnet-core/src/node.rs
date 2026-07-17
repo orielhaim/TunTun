@@ -200,6 +200,7 @@ impl CoreNode {
             snapshot.version,
             &my_id_hex,
             &cfg.hostname,
+            Some(paths.dir.as_path()),
         );
 
         let secret = SecretKey::from_bytes(&identity.secret_bytes);
@@ -263,6 +264,7 @@ impl CoreNode {
             managed.network_id,
             my_id_hex.clone(),
             cfg.hostname.clone(),
+            Some(paths.dir.clone()),
         );
 
         let _ = persisted;
@@ -399,6 +401,7 @@ impl CoreNode {
                 joined_at: chrono::Utc::now(),
                 coordinator: direct.coordinator,
                 status: "online".into(),
+                ssh_host_key: None,
             };
 
             let (docs, new_ticket, new_ns) = DocsMembership::bootstrap(DocsBootstrap {
@@ -524,7 +527,6 @@ fn build_alpns(cfg: &CoreNodeConfig, direct: bool, enable_gossip: bool) -> Vec<V
     let mut alpns: Vec<Vec<u8>> = vec![TUNNEL_STREAM_ALPN.to_vec()];
     if cfg.advertise_datagram_alpn {
         alpns.push(TUNNEL_ALPN.to_vec());
-        alpns.push(tunnet_common::SSH_ALPN.to_vec());
     }
     if cfg.advertise_recording_alpn {
         alpns.push(tunnet_common::RECORDING_ALPN.to_vec());

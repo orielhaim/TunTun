@@ -11,7 +11,7 @@ use hickory_proto::op::{
 };
 use hickory_proto::rr::{
     Name, RData, Record, RecordType,
-    rdata::{A, NS, PTR, SOA},
+    rdata::{A, NS, PTR, SOA, TXT},
 };
 use hickory_proto::serialize::binary::{BinDecodable, BinEncodable};
 use tokio::net::UdpSocket;
@@ -144,7 +144,7 @@ async fn handle_query(
     if our_zone
         && matches!(
             qtype,
-            RecordType::A | RecordType::AAAA | RecordType::SOA | RecordType::NS
+            RecordType::A | RecordType::AAAA | RecordType::SOA | RecordType::NS | RecordType::TXT
         )
     {
         let mut response = Message::response(query.metadata.id, OpCode::Query);
@@ -167,6 +167,19 @@ async fn handle_query(
             RecordType::AAAA => {
                 // No AAAA yet - NODATA for our zone.
                 response.metadata.response_code = ResponseCode::NoError;
+            }
+            RecordType::TXT => {
+                if let Some(key) = routes.resolve_dns_txt(&name_str) {
+                    let txt = TXT::new(vec![format!("ssh-hostkey={key}")]);
+                    let rr = Record::from_rdata(qname.clone(), TTL_SECS, RData::TXT(txt));
+                    response.add_answer(rr);
+                    response.metadata.response_code = ResponseCode::NoError;
+                } else if routes.resolve_dns_a(&name_str).is_some() {
+                    // Name exists but no host key yet - NODATA.
+                    response.metadata.response_code = ResponseCode::NoError;
+                } else {
+                    response.metadata.response_code = ResponseCode::NXDomain;
+                }
             }
             RecordType::SOA => {
                 if let Some(soa) = zone_soa(qname, suffix, routes) {

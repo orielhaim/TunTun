@@ -99,6 +99,9 @@ iroh-blobs = "0.103"
 iroh-docs = "0.101"
 tun-rs = { version = "2", features = ["async_tokio"] }
 portable-pty = "0.9"
+russh = { version = "0.61.2", default-features = false, features = ["ring"] }
+russh-sftp = "2.3"
+async-trait = "0.1"
 rusqlite = { version = "0.39", features = ["bundled"] }
 
 # napi-rs

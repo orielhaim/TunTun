@@ -2,9 +2,21 @@
 
 use std::io::{Read, Write};
 
-use anyhow::{Context, bail};
+use anyhow::Context;
+#[cfg(not(any(unix, windows)))]
+use anyhow::bail;
 use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
-use tunnet_common::ssh::SshRequestHeader;
+
+use super::user;
+
+pub struct PtyRequest {
+    pub target_user: String,
+    pub term_type: String,
+    pub width: u16,
+    pub height: u16,
+    pub env_vars: Vec<(String, String)>,
+    pub command: Option<String>,
+}
 
 pub struct PtySession {
     pub reader: Box<dyn Read + Send>,
@@ -13,7 +25,7 @@ pub struct PtySession {
     pub master: Box<dyn MasterPty + Send>,
 }
 
-pub fn spawn_pty(req: &SshRequestHeader) -> anyhow::Result<PtySession> {
+pub fn spawn_pty(req: &PtyRequest) -> anyhow::Result<PtySession> {
     let pty_system = native_pty_system();
     let pair = pty_system
         .openpty(PtySize {
@@ -39,7 +51,6 @@ pub fn spawn_pty(req: &SshRequestHeader) -> anyhow::Result<PtySession> {
     let writer = pair.master.take_writer().context("take pty writer")?;
     let killer = child.clone_killer();
 
-    // Keep the child handle alive by leaking a wait thread.
     std::thread::spawn(move || {
         let mut child = child;
         let _ = child.wait();
@@ -53,7 +64,7 @@ pub fn spawn_pty(req: &SshRequestHeader) -> anyhow::Result<PtySession> {
     })
 }
 
-fn build_command(req: &SshRequestHeader) -> anyhow::Result<CommandBuilder> {
+fn build_command(req: &PtyRequest) -> anyhow::Result<CommandBuilder> {
     #[cfg(unix)]
     {
         build_unix_command(req)
@@ -70,38 +81,13 @@ fn build_command(req: &SshRequestHeader) -> anyhow::Result<CommandBuilder> {
 }
 
 #[cfg(unix)]
-fn build_unix_command(req: &SshRequestHeader) -> anyhow::Result<CommandBuilder> {
-    use std::ffi::CString;
+fn build_unix_command(req: &PtyRequest) -> anyhow::Result<CommandBuilder> {
+    let info = user::lookup(&req.target_user)?;
+    let shell = info.shell.to_string_lossy().into_owned();
+    let home = info.home_dir.to_string_lossy().into_owned();
+    let name = info.username.clone();
 
-    let user = CString::new(req.target_user.as_str()).context("username")?;
-    // SAFETY: getpwnam is the standard libc lookup; we only read the returned struct.
-    let passwd = unsafe { libc::getpwnam(user.as_ptr()) };
-    if passwd.is_null() {
-        bail!("user `{}` not found", req.target_user);
-    }
-    let (uid, _gid, shell, home, name) = unsafe {
-        let pw = &*passwd;
-        let shell = if pw.pw_shell.is_null() {
-            "/bin/sh".to_string()
-        } else {
-            std::ffi::CStr::from_ptr(pw.pw_shell)
-                .to_string_lossy()
-                .into_owned()
-        };
-        let home = if pw.pw_dir.is_null() {
-            "/".to_string()
-        } else {
-            std::ffi::CStr::from_ptr(pw.pw_dir)
-                .to_string_lossy()
-                .into_owned()
-        };
-        let name = std::ffi::CStr::from_ptr(pw.pw_name)
-            .to_string_lossy()
-            .into_owned();
-        (pw.pw_uid, pw.pw_gid, shell, home, name)
-    };
-
-    let mut cmd = if uid != unsafe { libc::getuid() } {
+    let mut cmd = if info.uid != unsafe { libc::getuid() } {
         build_user_switched_command(&name, &shell, req.command.as_deref())?
     } else if let Some(command) = &req.command {
         let mut c = CommandBuilder::new(&shell);
@@ -118,6 +104,7 @@ fn build_unix_command(req: &SshRequestHeader) -> anyhow::Result<CommandBuilder> 
     cmd.env("USER", &name);
     cmd.env("LOGNAME", &name);
     cmd.env("SHELL", &shell);
+    let _ = info;
     Ok(cmd)
 }
 
@@ -160,19 +147,8 @@ fn build_user_switched_command(
 }
 
 #[cfg(windows)]
-fn build_windows_command(req: &SshRequestHeader) -> anyhow::Result<CommandBuilder> {
-    let current = whoami_windows();
-    if !req.target_user.eq_ignore_ascii_case(&current)
-        && req.target_user != "autogroup:local"
-        && !current.is_empty()
-    {
-        // ConPTY cannot switch Windows users without a full logon token.
-        bail!(
-            "user `{}` not found (Windows SSH currently supports only the agent user `{current}`)",
-            req.target_user
-        );
-    }
-
+fn build_windows_command(req: &PtyRequest) -> anyhow::Result<CommandBuilder> {
+    let _info: user::UserInfo = user::lookup(&req.target_user)?;
     if let Some(command) = &req.command {
         let mut cmd = CommandBuilder::new("cmd.exe");
         cmd.arg("/C");
@@ -181,11 +157,6 @@ fn build_windows_command(req: &SshRequestHeader) -> anyhow::Result<CommandBuilde
     } else {
         Ok(CommandBuilder::new("powershell.exe"))
     }
-}
-
-#[cfg(windows)]
-fn whoami_windows() -> String {
-    std::env::var("USERNAME").unwrap_or_default()
 }
 
 fn is_safe_env_key(key: &str) -> bool {

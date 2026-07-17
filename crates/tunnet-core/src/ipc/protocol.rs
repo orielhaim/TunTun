@@ -76,23 +76,6 @@ pub enum IpcRequest {
         port: u16,
     },
 
-    /// Open a mesh SSH session. After `Ready`, the connection becomes a raw
-    /// bidirectional byte pipe (with in-band resize frames).
-    Ssh {
-        target: String,
-        user: String,
-        local_user: String,
-        term_type: String,
-        width: u16,
-        height: u16,
-        #[serde(default)]
-        env_vars: Vec<(String, String)>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        auth_token: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        command: Option<String>,
-    },
-
     /// List SSH sessions from the control plane.
     SshSessions {
         #[serde(default = "default_ssh_list_limit")]
@@ -331,11 +314,6 @@ pub enum IpcResponse {
         cast_text: String,
         content_sha256: String,
     },
-    SshReauthRequired {
-        reauth_url: String,
-        challenge_token: String,
-        message: String,
-    },
     SshAuthPoll {
         status: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -477,6 +455,9 @@ pub struct PeerLite {
     pub last_seen_secs_ago: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keep_alive: Option<bool>,
+    /// OpenSSH public host key line when advertised by the peer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ssh_host_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

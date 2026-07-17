@@ -78,6 +78,7 @@ fn install_peer_route(
         tags: vec!["connect".into()],
         network_id,
         network_name: network_name.clone(),
+        ssh_host_key: None,
     });
     // Merge into routing table via replace with existing peers + this one.
     let mut peers: Vec<tunnet_common::PeerEntry> = state
@@ -91,6 +92,7 @@ fn install_peer_route(
             endpoint_id: p.endpoint_hex.clone(),
             hostname: p.hostname.clone(),
             tags: p.tags.clone(),
+            ssh_host_key: p.ssh_host_key.clone(),
         })
         .collect();
     peers.push(tunnet_common::PeerEntry {
@@ -98,6 +100,7 @@ fn install_peer_route(
         endpoint_id: hex.clone(),
         hostname: hostname.to_string(),
         tags: vec!["connect".into()],
+        ssh_host_key: None,
     });
     let version = state.node.routes.version() + 1;
     let self_id = state.node.endpoint_id_hex();

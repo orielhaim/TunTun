@@ -423,10 +423,11 @@ async fn load_ipv4_peers(
     self_endpoint_id: &str,
     _network_name: &str,
 ) -> anyhow::Result<Vec<PeerEntry>> {
-    let peer_rows: Vec<(String, String, PgIp)> = sqlx::query_as(
+    let peer_rows: Vec<(String, String, PgIp, Option<String>)> = sqlx::query_as(
         "SELECT e.endpoint_id, \
             COALESCE(NULLIF(e.metadata->>'hostname', ''), left(e.endpoint_id, 8)) AS hostname, \
-            nm.assigned_ip::inet \
+            nm.assigned_ip::inet, \
+            NULLIF(e.metadata->>'sshHostKey', '') AS ssh_host_key \
          FROM network_memberships nm \
          JOIN devices e ON e.endpoint_id = nm.endpoint_id \
          WHERE nm.network_id = $1 AND nm.status = 'active' AND nm.endpoint_id <> $2 \
@@ -438,7 +439,7 @@ async fn load_ipv4_peers(
     .await?;
 
     let mut peers = Vec::with_capacity(peer_rows.len());
-    for (eid, host, assigned_ip) in peer_rows {
+    for (eid, host, assigned_ip, ssh_host_key) in peer_rows {
         let ip = match pg_inet::to_ipv4_addr(assigned_ip) {
             Ok(ip) => ip,
             Err(_) => continue,
@@ -453,6 +454,7 @@ async fn load_ipv4_peers(
             endpoint_id: eid,
             hostname: host,
             tags: tag_rows.into_iter().map(|(t,)| t).collect(),
+            ssh_host_key,
         });
     }
     Ok(peers)

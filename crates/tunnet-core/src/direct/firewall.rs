@@ -474,6 +474,36 @@ impl FirewallEngine {
         self.inner.suggested_rules.load().as_ref().clone()
     }
 
+    /// Ensure inbound TCP to `port` is allowed (e.g. SSH external port 22).
+    /// Merges into local rules in-memory without persisting to disk.
+    pub fn ensure_inbound_tcp_allow(&self, port: u16) {
+        let mut rules = self.local_rules_snapshot();
+        let already = rules.iter().any(|r| {
+            r.direction == FirewallDirection::In
+                && r.action == FirewallAction::Allow
+                && r.protocol == Protocol::Tcp
+                && (r.ports.is_empty() || r.ports.iter().any(|p| p.start <= port && port <= p.end))
+                && matches!(r.peer, PeerFilter::Any)
+        });
+        if already {
+            return;
+        }
+        rules.push(FirewallRule {
+            direction: FirewallDirection::In,
+            action: FirewallAction::Allow,
+            protocol: Protocol::Tcp,
+            ports: vec![PortRange {
+                start: port,
+                end: port,
+            }],
+            peer: PeerFilter::Any,
+        });
+        let version = self.inner.version.fetch_add(1, Ordering::Relaxed) + 1;
+        self.inner.local_rules.store(Arc::new(rules));
+        self.inner.version.store(version, Ordering::Relaxed);
+        tracing::info!(port, "firewall: ensured inbound TCP allow for SSH");
+    }
+
     /// Evaluate a packet. `peer_endpoint_hex` is the remote mesh peer (if known).
     /// `network_id` is the peer's Direct network (for `PeerFilter::NetworkId`).
     pub fn evaluate(

@@ -1,12 +1,13 @@
-//! `tunnet ssh` - mesh SSH client + session/recording helpers.
+//! `tunnet ssh` - OpenSSH wrapper + session/recording helpers.
 
 use anyhow::{Context, bail};
 use clap::{Args, Subcommand};
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
-use tunnet_common::ssh::{encode_resize, escape_ssh_data};
+use tokio::io::AsyncWriteExt;
 use tunnet_core::ipc::IpcClient;
 use tunnet_core::ipc::protocol::{IpcRequest, IpcResponse};
-use tunnet_core::ipc::transport;
+use tunnet_core::state::StatePaths;
+
+use crate::ssh::known_hosts_path;
 
 #[derive(Args, Debug)]
 #[command(args_conflicts_with_subcommands = true)]
@@ -21,6 +22,27 @@ pub struct SshArgs {
     /// Command to run non-interactively (after `--`)
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     pub command_args: Vec<String>,
+    #[arg(long, env = "TUNNET_STATE_DIR")]
+    pub state_dir: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct SshKeyscanArgs {
+    /// Targets (hostname, mesh IP, or endpoint id). Empty = all peers with a host key.
+    pub targets: Vec<String>,
+    /// Also write entries into the Tunnet known_hosts file
+    #[arg(short = 'f', long)]
+    pub write: bool,
+    #[arg(long, env = "TUNNET_STATE_DIR")]
+    pub state_dir: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct SshProxyArgs {
+    /// Hostname, mesh IP, or `*.tunnet` name (OpenSSH `%h`)
+    pub host: String,
+    /// TCP port (OpenSSH `%p`, usually 22)
+    pub port: u16,
     #[arg(long, env = "TUNNET_STATE_DIR")]
     pub state_dir: Option<String>,
 }
@@ -49,6 +71,14 @@ pub enum SshSubcommand {
         #[arg(long, env = "TUNNET_STATE_DIR")]
         state_dir: Option<String>,
     },
+    /// Write / update a `Host *.tunnet` block in `~/.ssh/config`
+    Config {
+        /// Path to OpenSSH config (default: ~/.ssh/config)
+        #[arg(long)]
+        path: Option<String>,
+        #[arg(long, env = "TUNNET_STATE_DIR")]
+        state_dir: Option<String>,
+    },
 }
 
 pub async fn run_ssh(args: SshArgs) -> anyhow::Result<()> {
@@ -65,9 +95,12 @@ pub async fn run_ssh(args: SshArgs) -> anyhow::Result<()> {
             session_id,
             state_dir,
         }) => run_play(session_id, state_dir.or(args.state_dir)).await,
+        Some(SshSubcommand::Config { path, state_dir }) => {
+            run_ssh_config(path, state_dir.or(args.state_dir)).await
+        }
         None => {
             let target = args.target.context(
-                "missing target - usage: tunnet ssh <target> | sessions | recordings | play <id>",
+                "missing target - usage: tunnet ssh <target> | sessions | recordings | play <id> | config",
             )?;
             run_connect(target, args.user, args.command_args, args.state_dir).await
         }
@@ -173,7 +206,6 @@ async fn play_cast(cast_text: &str) -> anyhow::Result<()> {
             Err(_) => continue,
         };
         if v.get("version").is_some() {
-            // header
             continue;
         }
         let arr = match v.as_array() {
@@ -212,331 +244,351 @@ async fn run_connect(
     command: Vec<String>,
     state_dir: Option<String>,
 ) -> anyhow::Result<()> {
-    let local_user = local_username();
-    let user = user.unwrap_or_else(|| local_user.clone());
-    let command = if command.is_empty() {
-        None
-    } else {
-        Some(command.join(" "))
-    };
-    let interactive = command.is_none();
-
-    let (cols, rows) = terminal_size();
-    let term_type = std::env::var("TERM").unwrap_or_else(|_| "xterm-256color".into());
-    let env_vars = collect_env();
-
-    let _network_id = (); // fixed IPC path
-    let mut auth_token: Option<String> = None;
-
-    // Up to 2 attempts: initial + one after re-auth proof.
-    for attempt in 0..2 {
-        let client = IpcClient::connect();
-        let stream = transport::connect(client.path()).await.with_context(|| {
-            format!(
-                "cannot connect to agent IPC at {} - is the agent running?",
-                client.path().display()
-            )
-        })?;
-
-        let (read, mut write) = stream.split();
-        let req = IpcRequest::Ssh {
-            target: target.clone(),
-            user: user.clone(),
-            local_user: local_user.clone(),
-            term_type: term_type.clone(),
-            width: cols,
-            height: rows,
-            env_vars: env_vars.clone(),
-            auth_token: auth_token.clone(),
-            command: command.clone(),
-        };
-        let mut buf = serde_json::to_vec(&req)?;
-        buf.push(b'\n');
-        write.write_all(&buf).await?;
-        write.flush().await?;
-
-        let mut reader = BufReader::new(read);
-        let mut line = String::new();
-        let n = reader.read_line(&mut line).await?;
-        if n == 0 {
-            bail!("agent closed IPC without a response");
-        }
-        let resp: IpcResponse = serde_json::from_str(line.trim())
-            .with_context(|| format!("bad IPC response: {}", line.trim()))?;
-
-        match resp {
-            IpcResponse::Ready => {
-                return splice_ssh_session(reader, write, interactive).await;
-            }
-            IpcResponse::SshReauthRequired {
-                reauth_url,
-                challenge_token,
-                message,
-            } => {
-                if attempt > 0 {
-                    bail!("{message} (re-authentication still required)");
-                }
-                eprintln!("{message}");
-                if reauth_url.is_empty() || challenge_token.is_empty() {
-                    bail!("re-authentication required but no challenge URL was provided");
-                }
-                eprintln!("Opening browser... ({reauth_url})");
-                open_browser(&reauth_url)?;
-                eprint!("Waiting for authentication...");
-                let proof = wait_for_proof(state_dir.as_deref(), &challenge_token).await?;
-                eprintln!(" ✓");
-                auth_token = Some(proof);
-                continue;
-            }
-            IpcResponse::Error { message } => {
-                eprintln!("{message}");
-                std::process::exit(1);
-            }
-            other => bail!("unexpected IPC response: {other:?}"),
-        }
-    }
-    bail!("re-authentication failed");
-}
-
-async fn wait_for_proof(state_dir: Option<&str>, challenge_token: &str) -> anyhow::Result<String> {
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5 * 60);
-    loop {
-        if std::time::Instant::now() > deadline {
-            bail!("timed out waiting for re-authentication");
-        }
-        let resp = ipc_request(
-            state_dir,
-            IpcRequest::SshAuthPoll {
-                challenge_token: challenge_token.to_string(),
-            },
-        )
-        .await?;
-        match resp {
-            IpcResponse::SshAuthPoll {
-                status,
-                proof_token,
-            } => match status.as_str() {
-                "ready" => {
-                    return proof_token.context("missing proof token");
-                }
-                "pending" => {
-                    eprint!(".");
-                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                }
-                "expired" => bail!("re-authentication challenge expired"),
-                other => bail!("re-authentication failed ({other})"),
-            },
-            IpcResponse::Error { message } => bail!("{message}"),
-            other => bail!("unexpected poll response: {other:?}"),
-        }
-    }
-}
-
-fn open_browser(url: &str) -> anyhow::Result<()> {
-    #[cfg(target_os = "windows")]
-    {
-        std::process::Command::new("cmd")
-            .args(["/C", "start", "", url])
-            .spawn()
-            .context("failed to open browser")?;
-        Ok(())
-    }
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open")
-            .arg(url)
-            .spawn()
-            .context("failed to open browser")?;
-        Ok(())
-    }
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        std::process::Command::new("xdg-open")
-            .arg(url)
-            .spawn()
-            .context("failed to open browser")?;
-        Ok(())
-    }
-    #[cfg(not(any(target_os = "windows", unix)))]
-    {
-        let _ = url;
-        bail!("cannot open browser on this platform");
-    }
-}
-
-async fn splice_ssh_session<R, W>(
-    reader: BufReader<R>,
-    mut write: W,
-    interactive: bool,
-) -> anyhow::Result<()>
-where
-    R: tokio::io::AsyncRead + Unpin + Send + 'static,
-    W: tokio::io::AsyncWrite + Unpin + Send + 'static,
-{
-    let _raw_guard = if interactive {
-        Some(RawModeGuard::enter()?)
-    } else {
-        None
-    };
-
-    let mut ipc_read = reader.into_inner();
-    let (out_tx, mut out_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(256);
-
-    let stdin_task = {
-        let out_tx = out_tx.clone();
-        tokio::spawn(async move {
-            let mut stdin = tokio::io::stdin();
-            let mut buf = vec![0u8; 16 * 1024];
-            loop {
-                let n = match stdin.read(&mut buf).await {
-                    Ok(0) => break,
-                    Ok(n) => n,
-                    Err(_) => break,
-                };
-                let escaped = escape_ssh_data(&buf[..n]);
-                if out_tx.send(escaped).await.is_err() {
-                    break;
-                }
-            }
-        })
-    };
-
-    let resize_task = tokio::spawn(async move {
-        if !interactive {
-            return;
-        }
-        loop {
-            wait_for_resize().await;
-            let (cols, rows) = terminal_size();
-            if out_tx
-                .send(encode_resize(cols, rows).to_vec())
-                .await
-                .is_err()
-            {
-                break;
-            }
-        }
-    });
-
-    let writer_task = tokio::spawn(async move {
-        while let Some(chunk) = out_rx.recv().await {
-            if write.write_all(&chunk).await.is_err() {
-                break;
-            }
-            let _ = write.flush().await;
-        }
-        let _ = write.shutdown().await;
-    });
-
-    let mut stdout = tokio::io::stdout();
-    let mut buf = vec![0u8; 16 * 1024];
-    loop {
-        let n = match ipc_read.read(&mut buf).await {
-            Ok(0) => break,
-            Ok(n) => n,
-            Err(_) => break,
-        };
-        if stdout.write_all(&buf[..n]).await.is_err() {
-            break;
-        }
-        let _ = stdout.flush().await;
+    let paths = StatePaths::resolve(state_dir.as_deref());
+    let known_hosts = known_hosts_path(&paths.dir);
+    if let Some(parent) = known_hosts.parent() {
+        let _ = std::fs::create_dir_all(parent);
     }
 
-    stdin_task.abort();
-    resize_task.abort();
-    let _ = writer_task.await;
+    let host = args_target_for_ssh(&target);
+    let user = user.unwrap_or_else(local_username);
+    let proxy = proxy_command_string(state_dir.as_deref())?;
+
+    let mut args = vec![
+        "-o".into(),
+        "StrictHostKeyChecking=yes".into(),
+        "-o".into(),
+        format!("UserKnownHostsFile={}", known_hosts.display()),
+        "-o".into(),
+        format!("ProxyCommand={proxy}"),
+        "-o".into(),
+        "PreferredAuthentications=none,keyboard-interactive".into(),
+        "-o".into(),
+        "PubkeyAuthentication=no".into(),
+        "-o".into(),
+        "PasswordAuthentication=no".into(),
+        "-l".into(),
+        user,
+        host,
+    ];
+    if !command.is_empty() {
+        args.push("--".into());
+        args.extend(command);
+    }
+
+    let status = std::process::Command::new("ssh")
+        .args(&args)
+        .status()
+        .context("failed to exec ssh - is OpenSSH client installed?")?;
+    if !status.success() {
+        std::process::exit(status.code().unwrap_or(1));
+    }
     Ok(())
 }
 
+/// OpenSSH ProxyCommand: splice stdin/stdout to TCP `host:port` over the mesh TUN.
+pub async fn run_ssh_proxy(args: SshProxyArgs) -> anyhow::Result<()> {
+    let ip = resolve_host(&args.host).await.with_context(|| {
+        format!(
+            "cannot resolve mesh host `{}` - is the agent running?",
+            args.host
+        )
+    })?;
+    let addr = format!("{}:{}", ip, args.port);
+    let stream = tokio::net::TcpStream::connect(&addr)
+        .await
+        .with_context(|| {
+            format!("cannot connect to {addr} over the mesh - is the data plane up (`tunnet up`)?")
+        })?;
+    let _ = stream.set_nodelay(true);
+
+    let (mut reader, mut writer) = stream.into_split();
+    let mut stdin = tokio::io::stdin();
+    let mut stdout = tokio::io::stdout();
+
+    let upload = async {
+        tokio::io::copy(&mut stdin, &mut writer).await?;
+        let _ = writer.shutdown().await;
+        Ok::<_, anyhow::Error>(())
+    };
+    let download = async {
+        tokio::io::copy(&mut reader, &mut stdout).await?;
+        Ok::<_, anyhow::Error>(())
+    };
+
+    tokio::select! {
+        r = upload => r?,
+        r = download => r?,
+    }
+    Ok(())
+}
+
+const SSH_CONFIG_BEGIN: &str = "# BEGIN TUNNET";
+const SSH_CONFIG_END: &str = "# END TUNNET";
+
+async fn run_ssh_config(path: Option<String>, state_dir: Option<String>) -> anyhow::Result<()> {
+    let paths = StatePaths::resolve(state_dir.as_deref());
+    let known_hosts = known_hosts_path(&paths.dir);
+    if let Some(parent) = known_hosts.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+
+    let config_path = match path {
+        Some(p) => std::path::PathBuf::from(p),
+        None => default_ssh_config_path()?,
+    };
+    if let Some(parent) = config_path.parent() {
+        std::fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+    }
+
+    let block = ssh_config_block(&known_hosts, state_dir.as_deref())?;
+    let existing = if config_path.is_file() {
+        std::fs::read_to_string(&config_path)
+            .with_context(|| format!("read {}", config_path.display()))?
+    } else {
+        String::new()
+    };
+    let updated = upsert_marked_block(&existing, SSH_CONFIG_BEGIN, SSH_CONFIG_END, &block);
+    std::fs::write(&config_path, updated)
+        .with_context(|| format!("write {}", config_path.display()))?;
+    println!("Wrote Tunnet SSH config block to {}", config_path.display());
+    println!("You can now: ssh user@hostname.tunnet");
+    Ok(())
+}
+
+fn proxy_command_string(state_dir: Option<&str>) -> anyhow::Result<String> {
+    let exe = std::env::current_exe().context("resolve tunnet binary path")?;
+    let exe = exe.display().to_string().replace('\\', "/");
+    let mut cmd = format!("\"{exe}\" ssh-proxy %h %p");
+    if let Some(dir) = state_dir.filter(|d| !d.is_empty()) {
+        let dir = dir.replace('\\', "/");
+        cmd.push_str(&format!(" --state-dir \"{dir}\""));
+    }
+    Ok(cmd)
+}
+
+/// Prefer `name.tunnet` so OpenSSH HostKeyChecking matches known_hosts FQDNs.
+fn args_target_for_ssh(target: &str) -> String {
+    if target.parse::<std::net::Ipv4Addr>().is_ok() {
+        return target.to_string();
+    }
+    if target.contains('.') {
+        return target.to_string();
+    }
+    format!("{target}.tunnet")
+}
+
+fn ssh_config_block(
+    known_hosts: &std::path::Path,
+    state_dir: Option<&str>,
+) -> anyhow::Result<String> {
+    let proxy = proxy_command_string(state_dir)?;
+    let kh = known_hosts.display().to_string().replace('\\', "/");
+    Ok(format!(
+        "{SSH_CONFIG_BEGIN}\n\
+Host *.tunnet\n\
+\tProxyCommand {proxy}\n\
+\tUserKnownHostsFile {kh}\n\
+\tStrictHostKeyChecking yes\n\
+\tPreferredAuthentications none,keyboard-interactive\n\
+\tPubkeyAuthentication no\n\
+\tPasswordAuthentication no\n\
+{SSH_CONFIG_END}\n"
+    ))
+}
+
+fn upsert_marked_block(existing: &str, begin: &str, end: &str, block: &str) -> String {
+    if let Some(start) = existing.find(begin) {
+        let after_start = &existing[start..];
+        if let Some(rel_end) = after_start.find(end) {
+            let end_idx = start + rel_end + end.len();
+            let mut end_idx = end_idx;
+            if existing[end_idx..].starts_with('\r') {
+                end_idx += 1;
+            }
+            if existing[end_idx..].starts_with('\n') {
+                end_idx += 1;
+            }
+            let mut out = String::with_capacity(existing.len() + block.len());
+            out.push_str(&existing[..start]);
+            out.push_str(block);
+            if !block.ends_with('\n') {
+                out.push('\n');
+            }
+            out.push_str(&existing[end_idx..]);
+            return out;
+        }
+    }
+    let mut out = existing.to_string();
+    if !out.is_empty() && !out.ends_with('\n') {
+        out.push('\n');
+    }
+    if !out.is_empty() {
+        out.push('\n');
+    }
+    out.push_str(block);
+    if !block.ends_with('\n') {
+        out.push('\n');
+    }
+    out
+}
+
+fn default_ssh_config_path() -> anyhow::Result<std::path::PathBuf> {
+    #[cfg(windows)]
+    {
+        let home = std::env::var("USERPROFILE").context("USERPROFILE not set")?;
+        Ok(std::path::PathBuf::from(home).join(".ssh").join("config"))
+    }
+    #[cfg(not(windows))]
+    {
+        let home = std::env::var("HOME").context("HOME not set")?;
+        Ok(std::path::PathBuf::from(home).join(".ssh").join("config"))
+    }
+}
+
+async fn resolve_host(target: &str) -> Option<String> {
+    if target.parse::<std::net::Ipv4Addr>().is_ok() {
+        return Some(target.to_string());
+    }
+    let resp = ipc_request(None, IpcRequest::Status { peers: true })
+        .await
+        .ok()?;
+    let IpcResponse::Status(status) = resp else {
+        return None;
+    };
+    let peers = status.peers.unwrap_or_default();
+    let needle = target.trim_end_matches(".tunnet");
+    for peer in peers {
+        if peer.hostname.eq_ignore_ascii_case(needle)
+            || peer.hostname.eq_ignore_ascii_case(target)
+            || peer.endpoint_id.eq_ignore_ascii_case(target)
+        {
+            if !peer.ip.is_empty() {
+                return Some(peer.ip);
+            }
+            return Some(peer.hostname);
+        }
+    }
+    None
+}
+
 fn local_username() -> String {
-    std::env::var("USER")
-        .or_else(|_| std::env::var("USERNAME"))
-        .unwrap_or_else(|_| "user".into())
-}
-
-fn collect_env() -> Vec<(String, String)> {
-    let keys = [
-        "LANG",
-        "LC_ALL",
-        "LC_CTYPE",
-        "COLORTERM",
-        "TERM_PROGRAM",
-        "TERM_PROGRAM_VERSION",
-    ];
-    keys.iter()
-        .filter_map(|k| std::env::var(k).ok().map(|v| ((*k).to_string(), v)))
-        .collect()
-}
-
-fn terminal_size() -> (u16, u16) {
+    #[cfg(windows)]
+    {
+        std::env::var("USERNAME").unwrap_or_else(|_| "user".into())
+    }
     #[cfg(unix)]
     {
-        unsafe {
-            let mut ws: libc::winsize = std::mem::zeroed();
-            if libc::ioctl(libc::STDOUT_FILENO, libc::TIOCGWINSZ, &mut ws) == 0
-                && ws.ws_col > 0
-                && ws.ws_row > 0
-            {
-                return (ws.ws_col, ws.ws_row);
-            }
-        }
+        std::env::var("USER").unwrap_or_else(|_| "user".into())
     }
-    (120, 40)
-}
-
-struct RawModeGuard {
-    #[cfg(unix)]
-    original: libc::termios,
-}
-
-impl RawModeGuard {
-    fn enter() -> anyhow::Result<Self> {
-        #[cfg(unix)]
-        {
-            unsafe {
-                let mut term: libc::termios = std::mem::zeroed();
-                if libc::tcgetattr(libc::STDIN_FILENO, &mut term) != 0 {
-                    bail!("tcgetattr failed");
-                }
-                let original = term;
-                libc::cfmakeraw(&mut term);
-                if libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, &term) != 0 {
-                    bail!("tcsetattr failed");
-                }
-                Ok(Self { original })
-            }
-        }
-        #[cfg(not(unix))]
-        {
-            Ok(Self {})
-        }
-    }
-}
-
-impl Drop for RawModeGuard {
-    fn drop(&mut self) {
-        #[cfg(unix)]
-        unsafe {
-            let _ = libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, &self.original);
-        }
-    }
-}
-
-async fn wait_for_resize() {
-    #[cfg(unix)]
+    #[cfg(not(any(unix, windows)))]
     {
-        use tokio::signal::unix::{SignalKind, signal};
-        match signal(SignalKind::window_change()) {
-            Ok(mut sig) => {
-                sig.recv().await;
-            }
-            Err(_) => {
-                std::future::pending::<()>().await;
+        "user".into()
+    }
+}
+
+pub async fn run_ssh_keyscan(args: SshKeyscanArgs) -> anyhow::Result<()> {
+    let paths = StatePaths::resolve(args.state_dir.as_deref());
+    let resp = ipc_request(
+        args.state_dir.as_deref(),
+        IpcRequest::Status { peers: true },
+    )
+    .await?;
+    let IpcResponse::Status(status) = resp else {
+        bail!("unexpected IPC response: {resp:?}");
+    };
+    let peers = status.peers.unwrap_or_default();
+    let suffix = "tunnet".to_string();
+
+    let selected: Vec<_> = if args.targets.is_empty() {
+        peers
+            .into_iter()
+            .filter(|p| {
+                p.ssh_host_key
+                    .as_ref()
+                    .is_some_and(|k| !k.trim().is_empty())
+            })
+            .collect()
+    } else {
+        let mut out = Vec::new();
+        for target in &args.targets {
+            let needle = target.trim_end_matches(".tunnet");
+            let peer = peers.iter().find(|p| {
+                p.hostname.eq_ignore_ascii_case(needle)
+                    || p.hostname.eq_ignore_ascii_case(target)
+                    || p.endpoint_id.eq_ignore_ascii_case(target)
+                    || p.ip.eq_ignore_ascii_case(target)
+            });
+            match peer {
+                Some(p) => out.push(p.clone()),
+                None => bail!("no peer matches {target}"),
             }
         }
+        out
+    };
+
+    if selected.is_empty() {
+        bail!("no SSH host keys available yet (peers must be online and publishing keys)");
     }
-    #[cfg(not(unix))]
-    {
-        std::future::pending::<()>().await;
+
+    let mut entries = Vec::new();
+    for p in &selected {
+        let Some(key) = p.ssh_host_key.as_deref().filter(|k| !k.trim().is_empty()) else {
+            eprintln!("# {target}: no host key advertised", target = p.hostname);
+            continue;
+        };
+        let fqdn = format!("{}.{}", p.hostname, suffix.trim_matches('.'));
+        let hosts = [p.ip.as_str(), p.hostname.as_str(), fqdn.as_str()];
+        if let Some(line) = tunnet_core::known_hosts::known_hosts_line(&hosts, key) {
+            println!("{line}");
+            entries.push((hosts.map(|s| s.to_string()), key.to_string()));
+        }
+    }
+
+    if args.write {
+        for (hosts, key) in entries {
+            let host_refs: Vec<&str> = hosts.iter().map(|s| s.as_str()).collect();
+            tunnet_core::known_hosts::upsert_known_hosts_entry(&paths.dir, &host_refs, &key)?;
+        }
+        eprintln!(
+            "# wrote {} entr{} to {}",
+            selected.len(),
+            if selected.len() == 1 { "y" } else { "ies" },
+            known_hosts_path(&paths.dir).display()
+        );
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn upsert_replaces_existing_block() {
+        let existing =
+            "Host *\n\tForwardAgent yes\n\n# BEGIN TUNNET\nold\n# END TUNNET\n\nHost other\n";
+        let block = "# BEGIN TUNNET\nnew\n# END TUNNET\n";
+        let out = upsert_marked_block(existing, SSH_CONFIG_BEGIN, SSH_CONFIG_END, block);
+        assert!(out.contains("new"));
+        assert!(!out.contains("old"));
+        assert!(out.contains("ForwardAgent yes"));
+        assert!(out.contains("Host other"));
+    }
+
+    #[test]
+    fn upsert_appends_when_missing() {
+        let existing = "Host *\n";
+        let block = "# BEGIN TUNNET\nnew\n# END TUNNET\n";
+        let out = upsert_marked_block(existing, SSH_CONFIG_BEGIN, SSH_CONFIG_END, block);
+        assert!(out.ends_with("# END TUNNET\n") || out.contains("# END TUNNET\n"));
+        assert!(out.starts_with("Host *\n"));
+    }
+
+    #[test]
+    fn args_target_adds_tunnet_suffix() {
+        assert_eq!(args_target_for_ssh("db"), "db.tunnet");
+        assert_eq!(args_target_for_ssh("db.tunnet"), "db.tunnet");
+        assert_eq!(args_target_for_ssh("10.0.0.1"), "10.0.0.1");
     }
 }

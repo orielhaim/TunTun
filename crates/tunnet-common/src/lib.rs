@@ -5,7 +5,6 @@ pub mod recording;
 pub mod relay;
 pub mod send;
 pub mod signing;
-pub mod ssh;
 pub mod ws;
 
 use serde::{Deserialize, Serialize};
@@ -20,9 +19,6 @@ pub const TUNNEL_ALPN: &[u8] = b"tunnet/tunnel/1";
 
 /// ALPN for agent ↔ public relay reverse tunnels.
 pub const RELAY_ALPN: &[u8] = b"tunnet/relay/1";
-
-/// ALPN for mesh SSH sessions.
-pub use ssh::SSH_ALPN;
 
 /// ALPN for SSH session recording streams.
 pub use recording::RECORDING_ALPN;
@@ -120,6 +116,9 @@ pub struct PeerEntry {
     pub endpoint_id: EndpointIdHex,
     pub hostname: String,
     pub tags: Vec<String>,
+    /// OpenSSH public host key line (`ssh-ed25519 AAAA...`), when advertised.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ssh_host_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

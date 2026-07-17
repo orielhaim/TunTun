@@ -61,6 +61,14 @@ pub enum Command {
     ///
     /// Examples: `tunnet ssh db-server`, `tunnet ssh db-server -u root`, `tunnet ssh db-server -- uname -a`
     Ssh(crate::cmds_ssh::SshArgs),
+    /// Print mesh SSH host keys
+    ///
+    /// Examples: `tunnet ssh-keyscan`, `tunnet ssh-keyscan db-server`, `tunnet ssh-keyscan -f`
+    SshKeyscan(crate::cmds_ssh::SshKeyscanArgs),
+    /// OpenSSH ProxyCommand helper: splice stdin/stdout to mesh `host:port`
+    ///
+    /// Examples: used as `ProxyCommand=tunnet ssh-proxy %h %p` (see `tunnet ssh config`)
+    SshProxy(crate::cmds_ssh::SshProxyArgs),
     /// Send a file or directory to a peer over the mesh (P2P via iroh-blobs)
     ///
     /// Examples: `tunnet send ./file.txt db-server`, `tunnet send ./dir tag:production`

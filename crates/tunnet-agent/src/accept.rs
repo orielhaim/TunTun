@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use iroh::Endpoint;
 use tunnet_common::ws::ClientMsg;
-use tunnet_common::{RECORDING_ALPN, SEND_ALPN, SSH_ALPN, TUNNEL_ALPN};
+use tunnet_common::{RECORDING_ALPN, SEND_ALPN, TUNNEL_ALPN};
 use tunnet_core::direct::{
     AUTH_ALPN, AuthCache, DOCS_ALPN, DocsMembership, FirewallEngine, GOSSIP_ALPN, SecretResolver,
     SpoofTracker, run_psk_handshake_server,
@@ -20,7 +20,6 @@ use uuid::Uuid;
 use crate::dataplane::TunSlot;
 use crate::metrics::AgentMetrics;
 use crate::recorder::{RecordingStore, serve_recording_connection};
-use crate::ssh::{SshServeDeps, SshSessionRegistry, serve_ssh_connection};
 use crate::tun_io::{InboundDeps, serve_tunnel_connection};
 
 pub struct AcceptDeps {
@@ -30,13 +29,9 @@ pub struct AcceptDeps {
     pub metrics: AgentMetrics,
     pub tun: TunSlot,
     pub stream_handler: StreamHandler,
-    pub ssh_sessions: SshSessionRegistry,
     pub cp_tx: Option<tokio::sync::mpsc::Sender<ClientMsg>>,
-    pub pool: ConnPool,
     pub recording_store: Option<Arc<RecordingStore>>,
     pub signed: Option<SignedClient>,
-    pub hostname: String,
-    pub network_name: String,
     pub self_endpoint_id: String,
     pub recorder_enabled: bool,
     pub send: SendManager,
@@ -59,13 +54,9 @@ pub fn spawn(deps: AcceptDeps) {
             let metrics = deps.metrics.clone();
             let tun = deps.tun.clone();
             let stream_handler = deps.stream_handler.clone();
-            let ssh_sessions = deps.ssh_sessions.clone();
             let cp_tx = deps.cp_tx.clone();
-            let pool = deps.pool.clone();
             let recording_store = deps.recording_store.clone();
             let signed = deps.signed.clone();
-            let hostname = deps.hostname.clone();
-            let network_name = deps.network_name.clone();
             let self_endpoint_id = deps.self_endpoint_id.clone();
             let recorder_enabled = deps.recorder_enabled;
             let send = deps.send.clone();
@@ -165,23 +156,6 @@ pub fn spawn(deps: AcceptDeps) {
                         metrics,
                         direct_auth,
                     })
-                    .await;
-                } else if alpn == SSH_ALPN {
-                    serve_ssh_connection(
-                        conn,
-                        SshServeDeps {
-                            routes,
-                            acl,
-                            sessions: ssh_sessions,
-                            cp_tx,
-                            pool,
-                            store: recording_store,
-                            signed,
-                            hostname,
-                            network_name,
-                            self_endpoint_id,
-                        },
-                    )
                     .await;
                 } else if alpn == RECORDING_ALPN {
                     if recorder_enabled {

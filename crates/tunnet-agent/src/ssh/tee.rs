@@ -8,7 +8,6 @@ use tunnet_common::policy::Selector;
 use tunnet_common::recording::{
     RecordingMeta, asciinema_header_line, asciinema_output_event, asciinema_resize_event,
 };
-use tunnet_common::ssh::SshResponseHeader;
 use tunnet_core::recording::dial_recording;
 use tunnet_core::{AclEngine, ConnPool, RoutingTable};
 
@@ -164,6 +163,7 @@ impl RecordingTee {
         }
     }
 
+    #[allow(dead_code)]
     pub fn write_resize(&mut self, cols: u16, rows: u16) -> anyhow::Result<()> {
         match self {
             Self::Local(w) => w.write_resize(cols, rows),
@@ -221,16 +221,9 @@ impl RecordingTee {
     }
 }
 
-pub fn recorder_unavailable(enforce: bool) -> SshResponseHeader {
-    if enforce {
-        SshResponseHeader {
-            status: tunnet_common::ssh::SshStatus::RecorderUnavailable as u8,
-            reauth_url: None,
-            message: Some("session recording required but recorder is unavailable".into()),
-        }
-    } else {
-        SshResponseHeader::ok()
-    }
+/// Returns true if the session must abort because recording is required.
+pub fn recorder_unavailable(enforce: bool) -> bool {
+    enforce
 }
 
 #[allow(clippy::too_many_arguments)]

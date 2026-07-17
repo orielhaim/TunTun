@@ -23,6 +23,7 @@ pub fn membership_for_network(
         .with_context(|| format!("network {network_id} not in snapshot"))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn apply_membership(
     membership: &NetworkMembershipSnapshot,
     routes: &RoutingTable,
@@ -31,6 +32,7 @@ pub fn apply_membership(
     org_version: u64,
     self_endpoint_id: &str,
     self_hostname: &str,
+    known_hosts_dir: Option<&std::path::Path>,
 ) {
     // Control plane excludes this endpoint from ipv4_peers (no mesh self-route).
     // Inject self so PeerDNS can resolve our own hostname → assigned mesh IP.
@@ -47,6 +49,7 @@ pub fn apply_membership(
             endpoint_id: self_endpoint_id.to_string(),
             hostname: hostname.to_string(),
             tags: membership.self_tags.clone(),
+            ssh_host_key: None,
         });
     }
 
@@ -65,6 +68,12 @@ pub fn apply_membership(
     acl.replace_bundle(membership.policy.clone());
     acl.replace_self_tags(membership.self_tags.clone());
     version.store(Arc::new(org_version));
+
+    if let Some(dir) = known_hosts_dir
+        && let Err(e) = crate::known_hosts::sync_known_hosts(dir, &peers, &membership.dns.suffix)
+    {
+        tracing::debug!(?e, "known_hosts sync skipped");
+    }
 }
 
 pub struct SyncHandles {
@@ -113,6 +122,7 @@ pub fn spawn_ws_processor(
                                     snap.version,
                                     &self_endpoint_id,
                                     &self_hostname,
+                                    Some(paths.dir.as_path()),
                                 );
                                 save_snapshot_cache(&paths, &snap).ok();
                                 tracing::info!(
@@ -151,6 +161,7 @@ pub fn spawn_ws_processor(
                                                 snap.version,
                                                 &self_endpoint_id,
                                                 &self_hostname,
+                                                Some(paths.dir.as_path()),
                                             );
                                             save_snapshot_cache(&paths, &snap).ok();
                                             tracing::info!(
@@ -372,6 +383,7 @@ pub fn spawn_poll_fallback(
     network_id: Uuid,
     self_endpoint_id: String,
     self_hostname: String,
+    known_hosts_dir: Option<std::path::PathBuf>,
 ) {
     tokio::spawn(async move {
         let mut ticker = tokio::time::interval(Duration::from_secs(poll_secs));
@@ -391,6 +403,7 @@ pub fn spawn_poll_fallback(
                             snap.version,
                             &self_endpoint_id,
                             &self_hostname,
+                            known_hosts_dir.as_deref(),
                         );
                         tracing::info!(
                             v = m.version,

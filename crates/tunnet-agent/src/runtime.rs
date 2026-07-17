@@ -160,6 +160,74 @@ pub async fn run(
         .map(|(id, rt)| (*id, rt.docs.clone()))
         .collect();
 
+    let network_name = node
+        .persisted
+        .primary_network_name()
+        .unwrap_or("tunnet")
+        .to_string();
+
+    // Direct mode: allow inbound TCP/22 (pre-NAT) so stock SSH clients reach us.
+    for rt in node.direct.values() {
+        rt.firewall
+            .ensure_inbound_tcp_allow(crate::ssh_nat::SSH_EXTERNAL_PORT);
+    }
+
+    let ssh_deps = crate::ssh::SshServeDeps {
+        routes: node.routes.clone(),
+        acl: node.acl.clone(),
+        sessions: ssh_sessions.clone(),
+        cp_tx: node.serves.client_tx(),
+        pool: node.pool.clone(),
+        store: recording_store.clone(),
+        signed: node.signed.clone(),
+        hostname: hostname.clone(),
+        network_name: network_name.clone(),
+        self_endpoint_id: node.endpoint_id_hex(),
+    };
+    match crate::ssh::spawn_ssh_listener(assigned_ipv4, &node.paths.dir, ssh_deps).await {
+        Ok(_handle) => {}
+        Err(e) => tracing::error!(?e, "failed to start SSH listener"),
+    }
+
+    // Publish host pubkey: control-plane metadata (managed) / iroh-docs (direct).
+    let ssh_pubkey = match crate::ssh::host_pubkey_openssh(&node.paths.dir) {
+        Ok(k) => Some(k),
+        Err(e) => {
+            tracing::warn!(?e, "SSH host pubkey unavailable for distribution");
+            None
+        }
+    };
+    if let Some(ref pubkey) = ssh_pubkey {
+        if let Some(signed) = node.signed.clone() {
+            let hostname = hostname.clone();
+            let pubkey = pubkey.clone();
+            tokio::spawn(async move {
+                let mut meta = tunnet_core::control::basic_metadata(
+                    &hostname,
+                    env!("CARGO_PKG_VERSION"),
+                    "agent",
+                );
+                if let Some(obj) = meta.as_object_mut() {
+                    obj.insert("sshHostKey".into(), serde_json::Value::String(pubkey));
+                }
+                match signed
+                    .register(&hostname, env!("CARGO_PKG_VERSION"), Some(meta))
+                    .await
+                {
+                    Ok(_) => tracing::info!("published SSH host key to control plane"),
+                    Err(e) => tracing::warn!(?e, "failed to publish SSH host key"),
+                }
+            });
+        }
+        for rt in node.direct.values() {
+            if let Err(e) = rt.docs.set_ssh_host_key(pubkey).await {
+                tracing::warn!(?e, "failed to publish SSH host key to iroh-docs");
+            } else {
+                tracing::info!("published SSH host key to iroh-docs");
+            }
+        }
+    }
+
     crate::accept::spawn(AcceptDeps {
         endpoint: node.endpoint.clone(),
         routes: node.routes.clone(),
@@ -167,17 +235,9 @@ pub async fn run(
         metrics: metrics.clone(),
         tun: tun_slot.clone(),
         stream_handler,
-        ssh_sessions,
         cp_tx: node.serves.client_tx(),
-        pool: node.pool.clone(),
         recording_store,
         signed: node.signed.clone(),
-        hostname: hostname.clone(),
-        network_name: node
-            .persisted
-            .primary_network_name()
-            .unwrap_or("tunnet")
-            .to_string(),
         self_endpoint_id: node.endpoint_id_hex(),
         recorder_enabled: args.recorder,
         send: node.send.clone(),
@@ -294,9 +354,24 @@ pub async fn run(
             let topic = tunnet_common::network_topic_hex(&network_id);
             let ep = node.endpoint.clone();
             let hostname = hostname.clone();
+            let state_dir = node.paths.dir.clone();
+            let dns_suffix = dns_cfg.suffix.clone();
+            let ssh_host_key = ssh_pubkey.clone();
+            let mesh_ip = Some(assigned_ipv4.to_string());
             tokio::spawn(async move {
                 if let Err(e) =
-                    crate::gossip_presence::spawn(ep, gossip, topic, peers, hostname).await
+                    crate::gossip_presence::spawn(crate::gossip_presence::GossipPresenceArgs {
+                        endpoint: ep,
+                        gossip,
+                        topic_hex: topic,
+                        bootstrap: peers,
+                        self_hostname: hostname,
+                        mesh_ip,
+                        ssh_host_key,
+                        state_dir,
+                        dns_suffix,
+                    })
+                    .await
                 {
                     tracing::warn!(?e, "gossip presence disabled");
                 }

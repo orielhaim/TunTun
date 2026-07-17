@@ -20,6 +20,7 @@ pub struct PeerInfo {
     pub tags: Vec<String>,
     pub network_id: Uuid,
     pub network_name: String,
+    pub ssh_host_key: Option<String>,
 }
 
 /// Resolved hostname route (exact or wildcard).
@@ -262,6 +263,53 @@ impl RoutingTable {
             + self.dynamic_synth.len()
     }
 
+    /// Resolve a PeerDNS name to an advertised SSH host pubkey (TXT).
+    pub fn resolve_dns_txt(&self, name: &str) -> Option<String> {
+        let tables = self.inner.load();
+        let suffix = format!(".{}", tables.dns_suffix);
+        let lower = name.trim_end_matches('.').to_ascii_lowercase();
+        let bare = lower
+            .strip_suffix(&suffix)
+            .unwrap_or(lower.as_str())
+            .trim_end_matches('.');
+
+        for peer in tables.by_network_ip.values() {
+            if peer.hostname.is_empty() {
+                continue;
+            }
+            let host = peer.hostname.to_ascii_lowercase();
+            let fqdn = if peer.network_name.is_empty() {
+                host.clone()
+            } else {
+                format!("{host}.{}", peer.network_name)
+            };
+            if bare == host || bare == fqdn {
+                return peer.ssh_host_key.clone();
+            }
+        }
+
+        let network_suffix = if tables.network_name.is_empty() {
+            None
+        } else {
+            Some(format!(".{}", tables.network_name))
+        };
+        let peer_name = network_suffix
+            .as_ref()
+            .and_then(|s| bare.strip_suffix(s.as_str()))
+            .unwrap_or(bare);
+
+        tables
+            .by_hostname
+            .get(peer_name)
+            .and_then(|p| p.ssh_host_key.clone())
+            .or_else(|| {
+                tables
+                    .by_hostname
+                    .get(bare)
+                    .and_then(|p| p.ssh_host_key.clone())
+            })
+    }
+
     /// Resolve a PeerDNS name to an IPv4 address (peer mesh IP or synthetic).
     pub fn resolve_dns_a(&self, name: &str) -> Option<Ipv4Addr> {
         let tables = self.inner.load();
@@ -470,6 +518,7 @@ impl RoutingTable {
                     tags: p.tags.clone(),
                     network_id: *network_id,
                     network_name: slice.network_name.clone(),
+                    ssh_host_key: p.ssh_host_key.clone(),
                 });
                 by_network_ip.insert((*network_id, ip), info.clone());
                 // First-joined wins on outbound by_ip.
@@ -645,6 +694,7 @@ fn peer_for_via(
         tags: Vec::new(),
         network_id,
         network_name: network_name.to_string(),
+        ssh_host_key: None,
     }))
 }
 
@@ -667,6 +717,7 @@ mod tests {
             endpoint_id: endpoint.to_string(),
             hostname: hostname.to_string(),
             tags: vec![],
+            ssh_host_key: None,
         }
     }
 

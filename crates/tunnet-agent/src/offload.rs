@@ -10,6 +10,7 @@ use tun_rs::{DeviceBuilder, SyncDevice};
 
 use crate::ip;
 use crate::metrics::AgentMetrics;
+use crate::ssh_nat;
 use tunnet_common::policy::Direction;
 use tunnet_core::{AclEngine, ConnPool, RoutingTable, iroh_pool::send_datagram};
 
@@ -113,6 +114,8 @@ fn run_outbound_thread(
         if n == 0 {
             continue;
         }
+        let self_ip = acl.self_id.load().ip;
+        let _ = ssh_nat::rewrite_outbound(&mut buf[..n], self_ip);
         let packet = &buf[..n];
         let Some(parsed) = ip::parse_ipv4(packet) else {
             metrics.dropped_inc("non_ipv4");

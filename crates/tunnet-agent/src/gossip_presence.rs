@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::Context;
@@ -14,15 +15,37 @@ struct Beacon {
     hostname: String,
     agent_version: String,
     ts: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    mesh_ip: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ssh_host_key: Option<String>,
 }
 
-pub async fn spawn(
-    endpoint: Endpoint,
-    gossip: Gossip,
-    topic_hex: String,
-    bootstrap: Vec<EndpointId>,
-    self_hostname: String,
-) -> anyhow::Result<()> {
+pub struct GossipPresenceArgs {
+    pub endpoint: Endpoint,
+    pub gossip: Gossip,
+    pub topic_hex: String,
+    pub bootstrap: Vec<EndpointId>,
+    pub self_hostname: String,
+    pub mesh_ip: Option<String>,
+    pub ssh_host_key: Option<String>,
+    pub state_dir: PathBuf,
+    pub dns_suffix: String,
+}
+
+pub async fn spawn(args: GossipPresenceArgs) -> anyhow::Result<()> {
+    let GossipPresenceArgs {
+        endpoint,
+        gossip,
+        topic_hex,
+        bootstrap,
+        self_hostname,
+        mesh_ip,
+        ssh_host_key,
+        state_dir,
+        dns_suffix,
+    } = args;
+
     let topic_bytes = hex::decode(&topic_hex).context("topic hex")?;
     let arr: [u8; 32] = topic_bytes
         .as_slice()
@@ -33,6 +56,8 @@ pub async fn spawn(
     let self_id = format!("{}", endpoint.id());
     let (sender, mut receiver) = gossip.subscribe(topic, bootstrap).await?.split();
 
+    let recv_dir = state_dir.clone();
+    let recv_suffix = dns_suffix.clone();
     let recv = tokio::spawn(async move {
         while let Some(ev) = receiver.next().await {
             match ev {
@@ -43,6 +68,19 @@ pub async fn spawn(
                             host = %beacon.hostname,
                             "gossip presence"
                         );
+                        if let Some(key) = beacon.ssh_host_key.as_deref().filter(|k| !k.is_empty())
+                        {
+                            let fqdn = format!("{}.{}", beacon.hostname, recv_suffix);
+                            let mut hosts = vec![beacon.hostname.as_str(), fqdn.as_str()];
+                            if let Some(ip) = beacon.mesh_ip.as_deref() {
+                                hosts.insert(0, ip);
+                            }
+                            if let Err(e) = tunnet_core::known_hosts::upsert_known_hosts_entry(
+                                &recv_dir, &hosts, key,
+                            ) {
+                                tracing::debug!(?e, "gossip known_hosts upsert skipped");
+                            }
+                        }
                     }
                 }
                 Ok(_) => {}
@@ -66,6 +104,8 @@ pub async fn spawn(
                 hostname: self_hostname.clone(),
                 agent_version: env!("CARGO_PKG_VERSION").into(),
                 ts: chrono::Utc::now().timestamp(),
+                mesh_ip: mesh_ip.clone(),
+                ssh_host_key: ssh_host_key.clone(),
             };
             let Ok(bytes) = serde_json::to_vec(&b) else {
                 continue;

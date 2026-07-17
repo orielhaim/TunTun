@@ -86,23 +86,6 @@ async fn handle_connection(stream: IpcStream, state: Arc<AgentIpcState>) -> anyh
         IpcRequest::OpenStream { host, port } => {
             handle_open_stream(host, port, state, reader, write).await
         }
-        IpcRequest::Ssh {
-            target,
-            user,
-            local_user,
-            term_type,
-            width,
-            height,
-            env_vars,
-            auth_token,
-            command,
-        } => {
-            handle_ssh(
-                target, user, local_user, term_type, width, height, env_vars, auth_token, command,
-                state, reader, write,
-            )
-            .await
-        }
         IpcRequest::Ping {
             peer,
             count,
@@ -575,11 +558,9 @@ async fn dispatch(req: IpcRequest, state: &AgentIpcState) -> IpcResponse {
             },
         },
         // Handled earlier:
-        IpcRequest::OpenStream { .. } | IpcRequest::Ssh { .. } | IpcRequest::Ping { .. } => {
-            IpcResponse::Error {
-                message: "internal: request should have been handled specially".into(),
-            }
-        }
+        IpcRequest::OpenStream { .. } | IpcRequest::Ping { .. } => IpcResponse::Error {
+            message: "internal: request should have been handled specially".into(),
+        },
     }
 }
 
@@ -629,6 +610,7 @@ async fn reload_config(state: &AgentIpcState) -> anyhow::Result<String> {
                 endpoint_id: p.endpoint_hex.clone(),
                 hostname: p.hostname.clone(),
                 tags: p.tags.clone(),
+                ssh_host_key: p.ssh_host_key.clone(),
             })
             .collect();
         let version = state.node.routes.version() + 1;
@@ -833,6 +815,7 @@ fn peer_lites(state: &AgentIpcState) -> Vec<PeerLite> {
                 bytes_out: Some(bytes_out),
                 last_seen_secs_ago: last_seen,
                 keep_alive: Some(snap.keep_alive),
+                ssh_host_key: p.ssh_host_key.clone(),
             }
         })
         .collect()
@@ -1177,88 +1160,6 @@ async fn handle_open_stream(
             .await?;
             Err(e)
         }
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-async fn handle_ssh(
-    target: String,
-    user: String,
-    local_user: String,
-    term_type: String,
-    width: u16,
-    height: u16,
-    env_vars: Vec<(String, String)>,
-    auth_token: Option<String>,
-    command: Option<String>,
-    state: Arc<AgentIpcState>,
-    reader: BufReader<Box<dyn tokio::io::AsyncRead + Unpin + Send>>,
-    mut write: Box<dyn tokio::io::AsyncWrite + Unpin + Send>,
-) -> anyhow::Result<()> {
-    let peer = resolve_peer(&state.node, &target)
-        .ok_or_else(|| anyhow::anyhow!("no peer matches target {target}"))?;
-    let header = tunnet_common::ssh::SshRequestHeader {
-        target_user: user,
-        term_type,
-        width,
-        height,
-        env_vars,
-        auth_token,
-        command,
-        local_user,
-    };
-    match crate::ssh::dial_ssh(&state.node.pool, peer.endpoint, &header).await {
-        Ok((send, recv, response)) => {
-            if response.status == tunnet_common::ssh::SshStatus::ReauthRequired as u8 {
-                let reauth_url = response.reauth_url.unwrap_or_default();
-                let challenge_token = challenge_token_from_url(&reauth_url).unwrap_or_default();
-                let message = response
-                    .message
-                    .unwrap_or_else(|| "Re-authentication required".into());
-                write_response(
-                    &mut write,
-                    &IpcResponse::SshReauthRequired {
-                        reauth_url,
-                        challenge_token,
-                        message,
-                    },
-                )
-                .await?;
-                return Ok(());
-            }
-            if response.status != tunnet_common::ssh::SshStatus::Ok as u8 {
-                let message = response
-                    .message
-                    .unwrap_or_else(|| format!("ssh failed with status {}", response.status));
-                write_response(&mut write, &IpcResponse::Error { message }).await?;
-                return Ok(());
-            }
-            write_response(&mut write, &IpcResponse::Ready).await?;
-            let local_read = reader.into_inner();
-            crate::stream::splice_bidirectional(recv, send, local_read, write).await
-        }
-        Err(e) => {
-            write_response(
-                &mut write,
-                &IpcResponse::Error {
-                    message: e.to_string(),
-                },
-            )
-            .await?;
-            Err(e)
-        }
-    }
-}
-
-fn challenge_token_from_url(url: &str) -> Option<String> {
-    let idx = url.find("token=")?;
-    let rest = &url[idx + "token=".len()..];
-    let end = rest.find(['&', '#']).unwrap_or(rest.len());
-    let token = &rest[..end];
-    if token.is_empty() {
-        None
-    } else {
-        Some(token.to_string())
     }
 }
 

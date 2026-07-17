@@ -1,7 +1,7 @@
 # Tunnet
 
 ![badge](https://shieldcn.dev/badge/Status-In%20development.svg?theme=amber&split=true)
-[![badge](https://shieldcn.dev/badge/Read%20the%20Docs-abcde3.svg?variant=ghost&logo=readthedocs)](https://tunnet.orielhaim.com)
+[![badge](https://shieldcn.dev/badge/Read%20the%20Docs-abcde3.svg?variant=ghost&logo=readthedocs)](https://docs.tunnet.io)
 [![badge](https://shieldcn.dev/badge/Join%20Discord.svg?brand=discord)](https://discord.gg/y5bNc3MYKz)
 
 Tunnet connects your machines into a private network. Install an agent on each device and it gets an internal IP address. After that, ordinary tools just work: SSH, ping, curl, a browser pointed at an internal service. You do not need to teach every application about tunnels or VPNs. The network is the network.
@@ -187,7 +187,3 @@ Rust 1.96+, Bun, and PostgreSQL. The agent needs root/admin privileges to create
 ## License
 
 AGPL-3.0. See [LICENSE](LICENSE) for details. Commercial licenses are available for use cases where the AGPL does not fit.
-
-## Contributing
-
-Contributions require a signed Contributor License Agreement. See [CLA.md](CLA.md).

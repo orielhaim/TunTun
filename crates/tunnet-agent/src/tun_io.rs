@@ -14,6 +14,7 @@ use uuid::Uuid;
 
 use crate::ip;
 use crate::metrics::AgentMetrics;
+use crate::ssh_nat;
 pub fn build_tun(
     ifname: &str,
     ipv4: std::net::Ipv4Addr,
@@ -65,6 +66,9 @@ pub async fn run_outbound(deps: OutboundDeps) -> anyhow::Result<()> {
         if n == 0 {
             continue;
         }
+        // SSH port NAT: replies from internal listen port → external :22.
+        let self_ip = acl.self_id.load().ip;
+        let _ = ssh_nat::rewrite_outbound(&mut buf[..n], self_ip);
         let packet = &buf[..n];
         let Some(parsed) = ip::parse_ipv4(packet) else {
             metrics.dropped_inc("non_ipv4");
@@ -269,7 +273,11 @@ pub async fn serve_tunnel_connection(deps: InboundDeps) {
                 }
 
                 let n = dg.len() as u64;
-                if let Err(e) = tun.send(&dg).await {
+                // SSH port NAT: inbound :22 → internal listen port before kernel.
+                let self_ip = acl.self_id.load().ip;
+                let mut packet = dg.to_vec();
+                let _ = ssh_nat::rewrite_inbound(&mut packet, self_ip);
+                if let Err(e) = tun.send(&packet).await {
                     tracing::warn!(?e, "tun send failed");
                     metrics.dropped_inc("tun_send_failed");
                     break;

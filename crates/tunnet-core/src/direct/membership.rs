@@ -2,7 +2,7 @@
 //!
 //! One document per Direct network. Keys:
 //! - `meta/name`, `meta/coordinator`, `meta/subnet`, `meta/created_at`
-//! - `peers/<endpoint_id>/{hostname,ip,collision_index,tags,status,joined_at,coordinator}`
+//! - `peers/<endpoint_id>/{hostname,ip,collision_index,tags,status,joined_at,coordinator,ssh_host_key}`
 
 use std::collections::HashMap;
 use std::net::Ipv4Addr;
@@ -51,6 +51,8 @@ pub struct MembershipEntry {
     pub coordinator: bool,
     #[serde(default = "default_online")]
     pub status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ssh_host_key: Option<String>,
 }
 
 fn default_online() -> String {
@@ -340,6 +342,33 @@ impl DocsMembership {
             &Utc::now().to_rfc3339(),
         )
         .await?;
+        if let Some(key) = &entry.ssh_host_key {
+            set_str(doc, author, peer_key(id, "ssh_host_key"), key).await?;
+        }
+        Ok(())
+    }
+
+    /// Publish this node's SSH host pubkey into the membership doc.
+    pub async fn set_ssh_host_key(&self, openssh_pubkey: &str) -> anyhow::Result<()> {
+        let key = openssh_pubkey.trim();
+        if key.is_empty() {
+            return Ok(());
+        }
+        set_str(
+            &self.inner.doc,
+            self.inner.author,
+            peer_key(&self.inner.self_endpoint_id, "ssh_host_key"),
+            key,
+        )
+        .await?;
+        if let Some(entry) = self
+            .inner
+            .members
+            .lock()
+            .get_mut(&self.inner.self_endpoint_id)
+        {
+            entry.ssh_host_key = Some(key.to_string());
+        }
         Ok(())
     }
 
@@ -410,6 +439,10 @@ impl DocsMembership {
                 .map(|d| d.with_timezone(&Utc))
                 .unwrap_or_else(Utc::now);
             let coordinator = f.get("coordinator").map(|s| s == "true").unwrap_or(false);
+            let ssh_host_key = f
+                .get("ssh_host_key")
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty());
             map.insert(
                 endpoint_id.clone(),
                 MembershipEntry {
@@ -421,6 +454,7 @@ impl DocsMembership {
                     joined_at,
                     coordinator,
                     status,
+                    ssh_host_key,
                 },
             );
         }
@@ -445,6 +479,7 @@ impl DocsMembership {
                 endpoint_id: m.endpoint_id.clone(),
                 hostname: m.hostname.clone(),
                 tags: m.tags.clone(),
+                ssh_host_key: m.ssh_host_key.clone(),
             })
             .collect();
         let version = members.len() as u64;
@@ -467,6 +502,11 @@ impl DocsMembership {
         // Cache for offline CLI (upgrade, etc.).
         if let Ok(json) = serde_json::to_vec_pretty(&members) {
             let _ = std::fs::write(self.inner.paths.dir.join("direct_members_cache.json"), json);
+        }
+        if let Err(e) =
+            crate::known_hosts::sync_known_hosts(&self.inner.paths.dir, &peers, &dns.suffix)
+        {
+            tracing::debug!(?e, "known_hosts sync skipped");
         }
     }
 
