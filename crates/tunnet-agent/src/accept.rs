@@ -47,7 +47,6 @@ pub struct AcceptDeps {
     pub firewalls: HashMap<Uuid, FirewallEngine>,
     pub spoofs: HashMap<Uuid, SpoofTracker>,
     pub dgram_pool: ConnPool,
-    /// Managed-mode shared Gossip (None in Direct — use docs gossip).
     pub agent_gossip: Option<iroh_gossip::net::Gossip>,
 }
 

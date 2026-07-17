@@ -71,7 +71,6 @@ async function resolveEntitlements(
   return entitlementsForTier(verified.payload.tier, verified.payload.exp);
 }
 
-/** License status — resolved once and cached until expiry. */
 export async function getEntitlements(): Promise<Entitlements> {
   const now = Date.now();
   if (cache && (cache.refreshAtMs === null || now < cache.refreshAtMs)) {

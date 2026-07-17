@@ -17,7 +17,6 @@ pub enum ScanEvent {
     Remove { fullname: String },
 }
 
-/// Fullnames we registered as the mesh responder — ignored by the scanner.
 pub type AdvertisedSet = Arc<Mutex<HashSet<String>>>;
 
 pub fn spawn_scanner(

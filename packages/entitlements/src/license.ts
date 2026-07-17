@@ -11,11 +11,8 @@ export const TUNNET_LICENSE_PUBLIC_KEY_B64 =
 export type LicensePayload = {
   v: typeof VERSION;
   tier: PaidTier;
-  /** Unix seconds — not valid after. */
   exp: number;
-  /** Unix seconds — issued at. */
   iat: number;
-  /** Optional customer id. */
   sub?: string;
 };
 

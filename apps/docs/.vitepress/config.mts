@@ -325,7 +325,7 @@ export default defineConfig({
           return `<MermaidCode code="${encodeURIComponent(code)}" />`;
         }
 
-        return defaultRender!(tokens, idx, options, env, self);
+        return defaultRender?.(tokens, idx, options, env, self);
       };
     },
   },

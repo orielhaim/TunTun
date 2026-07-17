@@ -306,109 +306,105 @@ function MachinesPage() {
                     View details
                   </DropdownMenuItem>
                   {canManage ? (
-                    <>
-                      {machine.status === "pending" ? (
-                        <>
-                          <DropdownMenuItem
-                            onClick={() =>
-                              void deviceMutations.approve
-                                .mutateAsync({
-                                  networkId: machine.networkId,
-                                  endpointId: machine.endpointId,
-                                })
-                                .then(() => toast.success("Machine approved"))
-                                .catch((err: Error) => toast.error(err.message))
-                            }
-                          >
-                            Approve
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            variant="destructive"
-                            onClick={() =>
-                              void deviceMutations.reject
-                                .mutateAsync({
-                                  networkId: machine.networkId,
-                                  endpointId: machine.endpointId,
-                                })
-                                .then(() => toast.success("Machine rejected"))
-                                .catch((err: Error) => toast.error(err.message))
-                            }
-                          >
-                            Reject
-                          </DropdownMenuItem>
-                        </>
-                      ) : (
-                        <>
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setActionEndpointId(machine.endpointId);
-                              setActionNetworkId(machine.networkId);
-                              setActionHostname(machine.name);
-                              setTunnelOpen(true);
-                            }}
-                          >
-                            Create tunnel
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setActionEndpointId(machine.endpointId);
-                              setActionNetworkId(machine.networkId);
-                              setActionHostname(machine.name);
-                              setServeOpen(true);
-                            }}
-                          >
-                            Create serve
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => setLabelsEditor(machine)}
-                          >
-                            Edit labels
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => setExpiryEditor(machine)}
-                          >
-                            Set expiry
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() =>
-                              void deviceMutations.updateMembership
-                                .mutateAsync({
-                                  networkId: machine.networkId,
-                                  endpointId: machine.endpointId,
-                                  status:
-                                    machine.status === "active"
-                                      ? "suspended"
-                                      : "active",
-                                })
-                                .then(() =>
-                                  toast.success(
-                                    machine.status === "active"
-                                      ? "Machine suspended"
-                                      : "Machine activated",
-                                  ),
-                                )
-                                .catch((err: Error) => toast.error(err.message))
-                            }
-                          >
-                            {machine.status === "active"
-                              ? "Suspend"
-                              : "Activate"}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            variant="destructive"
-                            onClick={() =>
-                              setConfirmRemove({
+                    machine.status === "pending" ? (
+                      <>
+                        <DropdownMenuItem
+                          onClick={() =>
+                            void deviceMutations.approve
+                              .mutateAsync({
                                 networkId: machine.networkId,
                                 endpointId: machine.endpointId,
-                                name: machine.name,
                               })
-                            }
-                          >
-                            Remove
-                          </DropdownMenuItem>
-                        </>
-                      )}
-                    </>
+                              .then(() => toast.success("Machine approved"))
+                              .catch((err: Error) => toast.error(err.message))
+                          }
+                        >
+                          Approve
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={() =>
+                            void deviceMutations.reject
+                              .mutateAsync({
+                                networkId: machine.networkId,
+                                endpointId: machine.endpointId,
+                              })
+                              .then(() => toast.success("Machine rejected"))
+                              .catch((err: Error) => toast.error(err.message))
+                          }
+                        >
+                          Reject
+                        </DropdownMenuItem>
+                      </>
+                    ) : (
+                      <>
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setActionEndpointId(machine.endpointId);
+                            setActionNetworkId(machine.networkId);
+                            setActionHostname(machine.name);
+                            setTunnelOpen(true);
+                          }}
+                        >
+                          Create tunnel
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setActionEndpointId(machine.endpointId);
+                            setActionNetworkId(machine.networkId);
+                            setActionHostname(machine.name);
+                            setServeOpen(true);
+                          }}
+                        >
+                          Create serve
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => setLabelsEditor(machine)}
+                        >
+                          Edit labels
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => setExpiryEditor(machine)}
+                        >
+                          Set expiry
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() =>
+                            void deviceMutations.updateMembership
+                              .mutateAsync({
+                                networkId: machine.networkId,
+                                endpointId: machine.endpointId,
+                                status:
+                                  machine.status === "active"
+                                    ? "suspended"
+                                    : "active",
+                              })
+                              .then(() =>
+                                toast.success(
+                                  machine.status === "active"
+                                    ? "Machine suspended"
+                                    : "Machine activated",
+                                ),
+                              )
+                              .catch((err: Error) => toast.error(err.message))
+                          }
+                        >
+                          {machine.status === "active" ? "Suspend" : "Activate"}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={() =>
+                            setConfirmRemove({
+                              networkId: machine.networkId,
+                              endpointId: machine.endpointId,
+                              name: machine.name,
+                            })
+                          }
+                        >
+                          Remove
+                        </DropdownMenuItem>
+                      </>
+                    )
                   ) : null}
                 </DropdownMenuGroup>
               </DropdownMenuContent>

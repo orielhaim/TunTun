@@ -55,7 +55,7 @@ function TransfersPage() {
 
   useEffect(() => {
     if (!consentEndpointId && machines && machines.length > 0) {
-      setConsentEndpointId(machines[0]!.endpointId);
+      setConsentEndpointId(machines[0]?.endpointId);
     }
   }, [machines, consentEndpointId]);
 

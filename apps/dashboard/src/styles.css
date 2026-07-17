@@ -63,6 +63,60 @@ body {
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+  --animate-marquee: marquee var(--duration) infinite linear;
+  --animate-marquee-vertical: marquee-vertical var(--duration) linear infinite;
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(calc(-100% - var(--gap)));
+    }
+  }
+  @keyframes marquee-vertical {
+    from {
+      transform: translateY(0);
+    }
+    to {
+      transform: translateY(calc(-100% - var(--gap)));
+    }
+  }
+  --animate-orbit: orbit calc(var(--duration) * 1s) linear infinite;
+  --animate-shiny-text: shiny-text 8s infinite;
+  --animate-shine: shine var(--duration) infinite linear;
+  @keyframes orbit {
+    0% {
+      transform: rotate(calc(var(--angle) * 1deg))
+        translateY(calc(var(--radius) * 1px)) rotate(calc(var(--angle) * -1deg));
+    }
+    100% {
+      transform: rotate(calc(var(--angle) * 1deg + 360deg))
+        translateY(calc(var(--radius) * 1px))
+        rotate(calc((var(--angle) * -1deg) - 360deg));
+    }
+  }
+  @keyframes shiny-text {
+    0%,
+    90%,
+    100% {
+      background-position: calc(-100% - var(--shiny-width)) 0;
+    }
+    30%,
+    60% {
+      background-position: calc(100% + var(--shiny-width)) 0;
+    }
+  }
+  @keyframes shine {
+    0% {
+      background-position: 0% 0%;
+    }
+    50% {
+      background-position: 100% 100%;
+    }
+    to {
+      background-position: 0% 0%;
+    }
+  }
 }
 
 :root {
@@ -170,4 +224,138 @@ body {
 
 .panel {
   @apply rounded-xl border border-border/70 bg-card;
+}
+
+/* Marketing landing: light surface even when html.dark is set */
+.marketing-root {
+  --m-fg: oklch(0.2 0.018 240);
+  --m-muted: oklch(0.5 0.016 240);
+  --m-border: oklch(0.9 0.008 230);
+  --m-surface: oklch(0.997 0.002 220);
+  --m-accent: oklch(0.5 0.07 195);
+  --m-accent-fg: oklch(0.99 0.005 195);
+  --m-accent-soft: oklch(0.95 0.025 195);
+  --m-ink: oklch(0.2 0.02 240);
+  --m-ink-fg: oklch(0.985 0.004 220);
+  --background: var(--m-bg);
+  --foreground: var(--m-fg);
+  --primary: var(--m-accent);
+  --primary-foreground: var(--m-accent-fg);
+  --secondary: var(--m-accent-soft);
+  --secondary-foreground: var(--m-fg);
+  --muted: oklch(0.95 0.008 220);
+  --muted-foreground: var(--m-muted);
+  --border: var(--m-border);
+  --card: var(--m-surface);
+  --card-foreground: var(--m-fg);
+  --ring: var(--m-accent);
+  background-color: var(--m-bg);
+  color: var(--m-fg);
+}
+
+.marketing-root .typer {
+  --typer-fg: var(--m-fg);
+  --typer-bg: var(--m-bg);
+  --typer-accent: var(--m-accent);
+}
+
+.marketing-root .typer .word {
+  display: inline-flex;
+  white-space: pre;
+}
+
+.marketing-root .typer .char {
+  display: inline-block;
+  position: relative;
+  padding-inline: 0.045em;
+  line-height: 1.05;
+  transition: none;
+  will-change: color, background-color, box-shadow;
+}
+
+.marketing-root .typer .charInit {
+  opacity: 0;
+}
+
+.marketing-root .typer .charFill {
+  background: var(--typer-fg);
+  color: var(--typer-bg);
+  border-radius: 0.28em;
+}
+
+.marketing-root .typer .charInverse {
+  background: var(--typer-bg);
+  color: var(--typer-fg);
+  box-shadow: inset 0 0 0 1.5px var(--typer-fg);
+  border-radius: 0.28em;
+}
+
+.marketing-root .typer .charAccent {
+  color: var(--typer-accent);
+}
+
+.marketing-root .typer .charAccentInverse {
+  background: var(--typer-accent);
+  color: var(--typer-bg);
+  border-radius: 0.28em;
+}
+
+.marketing-root .typer .charAccentFill {
+  background: color-mix(in oklch, var(--typer-accent) 22%, var(--typer-bg));
+  color: var(--typer-accent);
+  border-radius: 0.28em;
+}
+
+.marketing-root .typer .charBorder {
+  box-shadow: inset 0 0 0 1.5px var(--typer-accent);
+  color: var(--typer-fg);
+  border-radius: 0.28em;
+}
+
+/* Merge adjacent pill states into one bar */
+.marketing-root .typer .charFill + .charFill,
+.marketing-root .typer .charInverse + .charInverse,
+.marketing-root .typer .charAccentInverse + .charAccentInverse,
+.marketing-root .typer .charAccentFill + .charAccentFill,
+.marketing-root .typer .charBorder + .charBorder {
+  margin-inline-start: -0.06em;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.marketing-root .typer .charFill:has(+ .charFill),
+.marketing-root .typer .charInverse:has(+ .charInverse),
+.marketing-root .typer .charAccentInverse:has(+ .charAccentInverse),
+.marketing-root .typer .charAccentFill:has(+ .charAccentFill),
+.marketing-root .typer .charBorder:has(+ .charBorder) {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marketing-root .typer .charInit {
+    opacity: 1;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 1;
+      transform: none;
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
 }

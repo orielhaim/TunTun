@@ -114,7 +114,7 @@ async function enforceUpdateMemberRole(ctx: HookCtx) {
   const organizationId = requireOrgId(ctx);
   const session = ctx.context.session!;
   const adapter = ctx.context.adapter;
-  const actor = await requireActor(adapter, organizationId, session.user!.id);
+  const actor = await requireActor(adapter, organizationId, session.user?.id);
 
   const memberId = asString(ctx.body?.memberId);
   if (!memberId) {
@@ -143,7 +143,7 @@ async function enforceRemoveMember(ctx: HookCtx) {
   const organizationId = requireOrgId(ctx);
   const session = ctx.context.session!;
   const adapter = ctx.context.adapter;
-  const actor = await requireActor(adapter, organizationId, session.user!.id);
+  const actor = await requireActor(adapter, organizationId, session.user?.id);
 
   const memberIdOrEmail = asString(ctx.body?.memberIdOrEmail);
   if (!memberIdOrEmail) {
@@ -184,7 +184,7 @@ async function enforceInviteMember(ctx: HookCtx) {
   const organizationId = requireOrgId(ctx);
   const session = ctx.context.session!;
   const adapter = ctx.context.adapter;
-  const actor = await requireActor(adapter, organizationId, session.user!.id);
+  const actor = await requireActor(adapter, organizationId, session.user?.id);
 
   const dynamicRoles = await loadDynamicRoles(adapter, organizationId);
   const actorRank = getHighestRolePosition(String(actor.role), dynamicRoles);
@@ -210,7 +210,7 @@ async function enforceCreateRole(ctx: HookCtx) {
     });
   }
 
-  const actor = await requireActor(adapter, organizationId, session.user!.id);
+  const actor = await requireActor(adapter, organizationId, session.user?.id);
   const dynamicRoles = await loadDynamicRoles(adapter, organizationId);
   const actorRank = getHighestRolePosition(String(actor.role), dynamicRoles);
 
@@ -236,7 +236,7 @@ async function enforceUpdateRole(ctx: HookCtx) {
   const organizationId = requireOrgId(ctx);
   const session = ctx.context.session!;
   const adapter = ctx.context.adapter;
-  const actor = await requireActor(adapter, organizationId, session.user!.id);
+  const actor = await requireActor(adapter, organizationId, session.user?.id);
 
   const dynamicRoles = await loadDynamicRoles(adapter, organizationId);
   const actorRank = getHighestRolePosition(String(actor.role), dynamicRoles);
@@ -291,7 +291,7 @@ async function enforceDeleteRole(ctx: HookCtx) {
   const organizationId = requireOrgId(ctx);
   const session = ctx.context.session!;
   const adapter = ctx.context.adapter;
-  const actor = await requireActor(adapter, organizationId, session.user!.id);
+  const actor = await requireActor(adapter, organizationId, session.user?.id);
 
   const dynamicRoles = await loadDynamicRoles(adapter, organizationId);
   const actorRank = getHighestRolePosition(String(actor.role), dynamicRoles);
@@ -342,7 +342,6 @@ export const hierarchyBeforeHook = createAuthMiddleware(async (ctx) => {
     return;
   }
 
-  // Global before-hooks run before endpoint session middleware — load session explicitly.
   const sessionBundle = await getSessionFromCtx(ctx);
   if (!sessionBundle) {
     throw new APIError("UNAUTHORIZED");
