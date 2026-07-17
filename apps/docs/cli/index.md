@@ -28,7 +28,8 @@ The `tunnet` CLI is the primary interface for interacting with Tunnet from the c
 | `tunnet serve` | Expose a local port on the mesh |
 | `tunnet tunnel` | Expose a local port via a public relay |
 | `tunnet send` | P2P file transfer over the mesh |
-| `tunnet ssh` | Identity-based SSH to a peer |
+| `tunnet ssh` | Identity-based SSH (OpenSSH wrapper; sessions / recordings / config) |
+| `tunnet ssh-keyscan` | Print or refresh mesh SSH host keys |
 | `tunnet login` | Sign in to management (device auth) |
 | `tunnet logout` | Clear stored management tokens |
 | `tunnet validate` | Validate `tunnet.toml` |

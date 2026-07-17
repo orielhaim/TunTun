@@ -22,4 +22,4 @@ The ACL engine runs on every agent. When a packet arrives at the TUN interface d
 
 ## SSH policies
 
-SSH access has its own policy layer configured under **Networks → Access → SSH Rules**. SSH policies can require re-authentication (check mode), where the user must confirm their identity through a browser flow before the SSH session is established. They can also mandate session recording.
+SSH access has its own policy layer configured under **Networks → Access → SSH Rules**. These rules apply whether you connect with `tunnet ssh` or stock OpenSSH. SSH policies can require re-authentication (check mode), where the user must confirm their identity through a browser flow before the session is established. They can also mandate session recording.

@@ -6,7 +6,7 @@ Tunnet does not use WireGuard. All mesh traffic is encrypted using QUIC, powered
 
 WireGuard is excellent for point-to-point VPN tunnels, but mesh networking on top of it requires workarounds: userspace implementations for NAT traversal, separate relay protocols, and no native support for multiplexed streams.
 
-iroh provides QUIC connections with built-in NAT traversal (STUN, relay fallback), multiplexed bidirectional streams (used for serve, tunnel, SSH, and file transfer), and datagram support (used for mesh packet forwarding). The encryption is TLS 1.3 under the hood.
+iroh provides QUIC connections with built-in NAT traversal (STUN, relay fallback), multiplexed bidirectional streams (used for serve, tunnel, and file transfer), and datagram support (used for mesh packet forwarding). The encryption is TLS 1.3 under the hood.
 
 ## Connection establishment
 
@@ -14,7 +14,7 @@ When peer A wants to reach peer B, the iroh endpoint uses the peer's endpoint ID
 
 ## ALPN protocol negotiation
 
-Tunnet uses QUIC ALPN (Application-Layer Protocol Negotiation) to multiplex different protocols over the same iroh endpoint. Each protocol has its own ALPN identifier: `tunnet/tunnel/1` for mesh datagrams, `tunnet/relay/1` for relay reverse tunnels, `tunnet/ssh/1` for SSH sessions, `tunnet/send/1` for file transfers, and `tunnet/recording/1` for SSH session recordings.
+Tunnet uses QUIC ALPN (Application-Layer Protocol Negotiation) to multiplex different protocols over the same iroh endpoint. Each protocol has its own ALPN identifier: `tunnet/tunnel/1` for mesh datagrams, `tunnet/relay/1` for relay reverse tunnels, `tunnet/send/1` for file transfers, and `tunnet/recording/1` for SSH session recordings.
 
 ## Direct mode transport auth
 

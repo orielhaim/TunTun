@@ -68,4 +68,9 @@ tunnet status --peers
 tunnet ping other-machine
 ```
 
-From another enrolled machine, you can now `ping`, `curl`, or `ssh` using the mesh IP or hostname.
+From another enrolled machine, you can now `ping`, `curl`, or SSH using the mesh IP or hostname:
+
+```bash
+tunnet ssh other-machine
+ssh user@other-machine.tunnet
+```

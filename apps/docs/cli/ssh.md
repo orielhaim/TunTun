@@ -1,6 +1,8 @@
 # tunnet ssh
 
-SSH to a peer over the mesh using Tunnet identity.
+SSH to a peer over the mesh using Tunnet identity. Uses your system OpenSSH client under the hood.
+
+Also see [SSH product overview](/products/ssh/) for stock `ssh` / `scp` / `sftp` against `*.tunnet`.
 
 ## Usage
 
@@ -9,29 +11,73 @@ tunnet ssh <target> [-u <user>] [-- <command>]
 tunnet ssh sessions
 tunnet ssh recordings
 tunnet ssh play <session_id>
+tunnet ssh config [--path <file>]
+tunnet ssh-keyscan [targets...] [-f]
+tunnet ssh-proxy <host> <port>
 ```
 
-## Options
+## Connect
 
 | Option | Description |
 |--------|-------------|
 | `-u <user>` | Remote username (default: current user) |
-| `-- <command>` | Run a command instead of interactive shell |
-
-## Examples
+| `-- <command>` | Run a command instead of an interactive shell |
 
 ```bash
-# Interactive SSH
+# Interactive session
 tunnet ssh db-server
 
-# SSH as root
+# As root
 tunnet ssh db-server -u root
 
-# Run a command
+# One-shot command
 tunnet ssh db-server -- uname -a
+```
 
-# View sessions and recordings
+Targets can be a hostname, mesh IP, or `hostname.tunnet` name.
+
+## Config for stock OpenSSH
+
+Writes (or updates) a marked `# BEGIN TUNNET` … `# END TUNNET` block in your OpenSSH config so `Host *.tunnet` routes through Tunnet:
+
+```bash
+tunnet ssh config
+
+# Custom path
+tunnet ssh config --path ~/.ssh/config
+```
+
+After this, normal clients work without remembering Tunnet-specific flags:
+
+```bash
+ssh alice@db-server.tunnet
+```
+
+## Host keys
+
+```bash
+# Print keys for peers that advertise them
+tunnet ssh-keyscan
+
+# One peer
+tunnet ssh-keyscan db-server
+
+# Also write into Tunnet’s known_hosts file
+tunnet ssh-keyscan -f
+```
+
+## Sessions and recordings
+
+```bash
 tunnet ssh sessions
 tunnet ssh recordings
-tunnet ssh play abc123
+tunnet ssh play <session_id>
+```
+
+## ssh-proxy
+
+OpenSSH ProxyCommand helper used by `tunnet ssh` and by `tunnet ssh config`. You normally do not run this yourself:
+
+```text
+ProxyCommand=tunnet ssh-proxy %h %p
 ```

@@ -16,7 +16,7 @@ Tunnet is not a single tool. It is a collection of networking primitives that co
 
 **Send** is peer-to-peer file transfer over the mesh, verified with BLAKE3 via iroh-blobs. No intermediate storage, no cloud upload - direct machine-to-machine transfer with consent controls.
 
-**SSH** provides identity-based SSH over the mesh. No SSH keys to distribute. Auth is tied to Tunnet identity and organization policies. Sessions can be recorded and replayed from the dashboard.
+**SSH** provides identity-based SSH over the mesh. No SSH keys to distribute. Use `tunnet ssh` or stock OpenSSH (`ssh`, `scp`, `sftp`) against `*.tunnet` names. Auth is tied to Tunnet identity and organization policies. Sessions can be recorded and replayed from the dashboard.
 
 **Relay** is a self-hosted edge server that terminates public tunnels. You point DNS at it, optionally configure Let's Encrypt, and it becomes your tunnel infrastructure. This competes with Cloudflare Tunnel's edge network, except you own the servers.
 

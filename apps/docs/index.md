@@ -35,7 +35,7 @@ features:
     link: /products/send/
   - icon: 🔑
     title: SSH
-    details: Identity-based SSH with no keys to distribute. Session recording, re-auth policies, and full audit trails in the dashboard.
+    details: Identity-based SSH with no keys to distribute. Works with stock OpenSSH, session recording, re-auth policies, and full audit trails in the dashboard.
     link: /products/ssh/
   - icon: 🏗️
     title: Self-Hosted Relay

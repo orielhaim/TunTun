@@ -37,7 +37,7 @@ Raw WireGuard requires manual key exchange, manual IP allocation, and manual con
 | Public tunnels | Yes | Funnel (limited) | Yes | Yes |
 | Internal services | Serve | Serve (Funnel) | No | Access |
 | File transfer | Send | Taildrop | No | No |
-| SSH (identity-based) | Yes | Yes | No | No |
+| SSH (identity-based, OpenSSH-compatible) | Yes | Yes | No | No |
 | Self-hosted relay | Yes | DERP (partial) | No | No |
 | SSO / OIDC | Yes | Yes | Yes | Yes |
 | ACL policies | Yes | Yes | No | Yes |
