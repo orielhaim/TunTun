@@ -1,4 +1,5 @@
 mod admin;
+mod agent_config;
 mod audit;
 mod auth;
 mod ca_crypto;

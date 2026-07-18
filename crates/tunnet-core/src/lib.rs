@@ -7,6 +7,7 @@ pub mod coordinator;
 pub mod direct;
 #[cfg(feature = "dns")]
 pub mod dns_stub;
+pub mod effective_config;
 pub mod identity;
 pub mod ipc;
 pub mod iroh_pool;
@@ -34,6 +35,7 @@ pub mod tunnel;
 pub mod ws_client;
 
 pub use agent_config::{TunnetConfig, load_dns, load_firewall};
+pub use effective_config::{EffectiveAgentConfigState, EffectiveConfigStore};
 pub use secret_store::{
     AgentSecrets, NetworkSecrets, SealPolicy, SealTier, load_agent, persist_agent,
 };
@@ -46,7 +48,7 @@ pub use identity::AgentIdentity;
 pub use iroh_pool::ConnPool;
 #[cfg(feature = "direct")]
 pub use node::DirectNetworkRuntime;
-pub use node::{CoreNode, CoreNodeConfig, KillSshHook, PostureHooks};
+pub use node::{AgentConfigHooks, CoreNode, CoreNodeConfig, KillSshHook, PostureHooks};
 pub use routing::{PeerInfo, RoutingTable};
 #[cfg(feature = "send")]
 pub use send::{SendConfig, SendManager, TransferDirection, TransferRecord, TransferStatus};

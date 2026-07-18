@@ -12,6 +12,7 @@ import { CreateTunnelDialog } from "@/components/app/create-tunnel-dialog";
 import { EmptyState } from "@/components/app/empty-state";
 import { EntityStatus } from "@/components/app/entity-status";
 import { LastSeenCell } from "@/components/app/last-seen-cell";
+import { MachineConfigTab } from "@/components/app/machine-config-tab";
 import {
   MachineExpiryCountdown,
   MachineExpirySettings,
@@ -538,6 +539,9 @@ function MachineDetailPage() {
             <TabsTrigger value="posture" className="rounded-none px-3">
               Posture
             </TabsTrigger>
+            <TabsTrigger value="config" className="rounded-none px-3">
+              Config
+            </TabsTrigger>
             <TabsTrigger value="system" className="rounded-none px-3">
               System
             </TabsTrigger>
@@ -873,6 +877,10 @@ function MachineDetailPage() {
 
         <TabsContent value="posture">
           <MachinePostureTab orgId={orgId} endpointId={endpointId} />
+        </TabsContent>
+
+        <TabsContent value="config">
+          <MachineConfigTab orgId={orgId} endpointId={endpointId} />
         </TabsContent>
 
         <TabsContent value="system">

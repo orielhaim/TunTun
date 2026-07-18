@@ -48,9 +48,16 @@ export const patchCustomPostureBody = z.object({
   expiresIn: z.number().int().min(1).optional(),
 });
 
+/** Optional `networkId` filter: org-level (`networkId` null) + that network's definitions. */
+export const listPostureDefinitionsQuery = z.object({
+  networkId: z.string().uuid().optional(),
+});
+
 export const postureDefinitionSchema = z.object({
   id: z.string().uuid(),
   organizationId: z.string(),
+  /** Null = organization-level definition. */
+  networkId: z.string().uuid().nullable(),
   name: z.string(),
   description: z.string().nullable(),
   assertions: z.array(z.string()),
@@ -62,6 +69,8 @@ export const createPostureDefinitionBody = z.object({
   name: z.string().min(1).max(128),
   description: z.string().max(1024).optional(),
   assertions: z.array(z.string().min(1)).min(1),
+  /** Omit or null for org-level; set for network-scoped definition. */
+  networkId: z.string().uuid().nullable().optional(),
 });
 
 export const updatePostureDefinitionBody = z
@@ -152,6 +161,9 @@ export const postureScoringWeightSchema = z.object({
 });
 
 export const postureOrgSettingsSchema = z.object({
+  id: z.string().uuid(),
+  /** Null = organization default row. */
+  networkId: z.string().uuid().nullable(),
   mode: postureEnforcementModeSchema,
   gracePeriodMinutes: z.number().int().min(0),
   recheckOnFailSeconds: z.number().int().min(1),
@@ -162,14 +174,23 @@ export const postureOrgSettingsSchema = z.object({
   scoringWeights: z.record(z.string(), postureScoringWeightSchema).nullable(),
 });
 
+export const postureOrgSettingsFieldsSchema = postureOrgSettingsSchema.omit({
+  id: true,
+  networkId: true,
+});
+
 export const postureOrgSettingsResponse = z.object({
   organizationId: z.string(),
-  settings: postureOrgSettingsSchema,
+  networkId: z.string().uuid().nullable().optional(),
+  settings: postureOrgSettingsFieldsSchema,
+  orgSettings: postureOrgSettingsFieldsSchema.optional(),
+  networkSettings: postureOrgSettingsFieldsSchema.nullable().optional(),
   updatedAt: z.string().datetime(),
 });
 
 export const patchPostureOrgSettingsBody = z
   .object({
+    networkId: z.string().uuid().nullable().optional(),
     mode: postureEnforcementModeSchema.optional(),
     gracePeriodMinutes: z.number().int().min(0).optional(),
     recheckOnFailSeconds: z.number().int().min(1).optional(),
@@ -182,9 +203,15 @@ export const patchPostureOrgSettingsBody = z
       .nullable()
       .optional(),
   })
-  .refine((b) => Object.keys(b).length > 0, {
-    message: "At least one field must be provided",
-  });
+  .refine(
+    (b) => {
+      const { networkId: _networkId, ...rest } = b;
+      return Object.keys(rest).length > 0;
+    },
+    {
+      message: "At least one field must be provided",
+    },
+  );
 
 export const postureWebhookEventSchema = z.enum([
   "posture.failed",
@@ -239,6 +266,12 @@ export type UpdatePostureIntegrationBody = z.infer<
   typeof updatePostureIntegrationBody
 >;
 export type PostureOrgSettings = z.infer<typeof postureOrgSettingsSchema>;
+export type PostureOrgSettingsFields = z.infer<
+  typeof postureOrgSettingsFieldsSchema
+>;
+export type ListPostureDefinitionsQuery = z.infer<
+  typeof listPostureDefinitionsQuery
+>;
 export type PatchPostureOrgSettingsBody = z.infer<
   typeof patchPostureOrgSettingsBody
 >;

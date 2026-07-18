@@ -60,15 +60,34 @@ allow = []
 level = "info"
 format = "text"
 
-[mdns]
-enabled = true
-service-relay = false
+# Dual keys: only set a key to override org remote policy (Managed).
+[network]
+mdns = false
+# lan-discovery = false
+# tunnel-mtu = 1280
+# service-relay = true
 
+# Dual keys for auto-update (omit to inherit org policy / defaults).
 [update]
-enabled = false
-check-interval-hours = 6
+# enabled = true
+# check-interval-hours = 6
 health-window-secs = 30
+
+# Local-only (never remotely writable).
+[control]
+# url = "https://control.example.com"
+# listen-port = 41641
 ```
+
+## Layers (Managed)
+
+```
+local tunnet.toml  >  network agentPolicy  >  org agentPolicy  >  defaults
+```
+
+Org defines defaults under **Organization → Agent policy**. A network can override under **Network → Policy**. The agent for a membership receives the inherited network policy. Dual keys in `tunnet.toml` still win locally.
+
+Posture definitions and enforcement settings follow the same inheritance: `network_id` null = org default; set = network override.
 
 ## Sections
 
@@ -128,22 +147,33 @@ You can also manage rules with `tunnet firewall`. Edits to TOML take effect afte
 | `level` | `trace`, `debug`, `info`, `warn`, `error`, `off` |
 | `format` | `text` or `json` |
 
-### `[mdns]`
+### `[network]` (dual - local overrides remote)
 
-| Key | Description |
-|-----|-------------|
-| `enabled` | LAN address discovery via mDNS (Direct mode) |
-| `service-relay` | Relay LAN DNS-SD services across the mesh (default `false`) |
+Only keys you set override org remote policy. Omitted keys inherit remote / defaults.
 
-### `[update]`
+| Key | Default | Description |
+|-----|---------|-------------|
+| `mdns` | `true` | LAN mDNS address discovery |
+| `lan-discovery` | `true` | LAN peer discovery |
+| `tunnel-mtu` | `1280` | Preferred tunnel MTU |
+| `service-relay` | `false` | Relay LAN DNS-SD services across the mesh |
+
+### `[update]` (dual for `enabled` / `check-interval-hours`)
 
 Automatic binary updates from GitHub Releases. See [tunnet update](/cli/update).
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `enabled` | `false` | Periodically check and apply updates |
-| `check-interval-hours` | `6` | Poll interval |
-| `health-window-secs` | `30` | If the new binary crashes/restarts within this window, revert |
+| `enabled` | inherit / `false` | When set, overrides org auto-update |
+| `check-interval-hours` | inherit / `6` | When set, overrides org poll interval |
+| `health-window-secs` | `30` | Local-only: revert if new binary is unstable |
+
+### `[control]` (local-only)
+
+| Key | Description |
+|-----|-------------|
+| `url` | Control plane URL (self-hosted) |
+| `listen-port` | Optional listen port override |
 
 ## Validate and reload
 

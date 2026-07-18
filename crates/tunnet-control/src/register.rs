@@ -345,8 +345,9 @@ fn empty_pending_snapshot() -> tunnet_common::EndpointSnapshot {
         memberships: vec![],
         ipv6_peers: vec![],
         org_policy: tunnet_common::policy::PolicyBundle::default(),
+        agent_policy: tunnet_common::RemoteAgentPolicy::default(),
         org_ca_pem: None,
-        labels: std::collections::HashMap::new(),
+        labels: Default::default(),
         expires_at: None,
         version: 0,
     }

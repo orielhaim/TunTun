@@ -82,15 +82,18 @@ export const queryKeys = {
     [...queryKeys.org(orgId), "tunnel-settings"] as const,
   orgSettings: (orgId: string) =>
     [...queryKeys.org(orgId), "org-settings"] as const,
+  deviceConfig: (orgId: string, endpointId: string) =>
+    [...queryKeys.org(orgId), "device-config", endpointId] as const,
   devicePosture: (orgId: string, endpointId: string) =>
     [...queryKeys.org(orgId), "device-posture", endpointId] as const,
   devicePostureStatus: (orgId: string, endpointId: string) =>
     [...queryKeys.org(orgId), "device-posture-status", endpointId] as const,
-  postures: (orgId: string) => [...queryKeys.org(orgId), "postures"] as const,
+  postures: (orgId: string, networkId?: string) =>
+    [...queryKeys.org(orgId), "postures", networkId ?? "all"] as const,
   postureCompliance: (orgId: string) =>
     [...queryKeys.org(orgId), "posture-compliance"] as const,
   postureIntegrations: (orgId: string) =>
     [...queryKeys.org(orgId), "posture-integrations"] as const,
-  postureSettings: (orgId: string) =>
-    [...queryKeys.org(orgId), "posture-settings"] as const,
+  postureSettings: (orgId: string, networkId?: string) =>
+    [...queryKeys.org(orgId), "posture-settings", networkId ?? "org"] as const,
 };

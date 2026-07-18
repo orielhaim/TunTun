@@ -1,5 +1,10 @@
 import {
+  DEFAULT_ORGANIZATION_SETTINGS,
   deleteDevicesBody,
+  effectiveAgentConfigSchema,
+  inheritRemoteAgentPolicy,
+  normalizeNetworkSettings,
+  normalizeOrganizationSettings,
   patchDeviceBody,
   patchDeviceLabelsBody,
   patchDeviceMembershipBody,
@@ -94,6 +99,76 @@ export const devicesRoutes = new Elysia()
       );
       if (!device) return notFound("Device not found");
       return device;
+    },
+  )
+  .get(
+    "/organizations/:orgId/devices/:endpointId/config",
+    async ({ authContext, params }) => {
+      const auth = getAuth({ authContext });
+      const device = await db.query.devices.findFirst({
+        where: and(
+          eq(schema.devices.endpointId, params.endpointId),
+          eq(schema.devices.organizationId, auth.organizationId),
+        ),
+        columns: { endpointId: true, metadata: true },
+      });
+      if (!device) return notFound("Device not found");
+
+      const org = await db.query.organization.findFirst({
+        where: eq(schema.organization.id, auth.organizationId),
+        columns: { settings: true },
+      });
+      const settings = normalizeOrganizationSettings(
+        org?.settings ?? DEFAULT_ORGANIZATION_SETTINGS,
+      );
+
+      const memberships = await db.query.networkMemberships.findMany({
+        where: eq(schema.networkMemberships.endpointId, params.endpointId),
+      });
+      const primaryMembership =
+        memberships.find((m) => m.status === "active") ?? memberships[0];
+      const networkId = primaryMembership?.networkId ?? null;
+
+      let networkPolicy = {};
+      if (networkId) {
+        const network = await db.query.networks.findFirst({
+          where: and(
+            eq(schema.networks.id, networkId),
+            eq(schema.networks.organizationId, auth.organizationId),
+          ),
+          columns: { settings: true },
+        });
+        networkPolicy = normalizeNetworkSettings(network?.settings).agentPolicy;
+      }
+
+      const remotePolicy = inheritRemoteAgentPolicy(
+        settings.agentPolicy,
+        networkPolicy,
+      );
+
+      const meta =
+        device.metadata &&
+        typeof device.metadata === "object" &&
+        !Array.isArray(device.metadata)
+          ? (device.metadata as Record<string, unknown>)
+          : {};
+
+      const rawConfig = meta.effectiveConfig ?? null;
+      const parsedConfig = rawConfig
+        ? effectiveAgentConfigSchema.safeParse(rawConfig)
+        : null;
+      const reportedAt =
+        typeof meta.effectiveConfigReportedAt === "string"
+          ? meta.effectiveConfigReportedAt
+          : null;
+
+      return {
+        endpointId: device.endpointId,
+        networkId,
+        config: parsedConfig?.success ? parsedConfig.data : null,
+        reportedAt,
+        remotePolicy,
+      };
     },
   )
   .get(

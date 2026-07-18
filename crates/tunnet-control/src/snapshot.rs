@@ -103,6 +103,9 @@ pub async fn build_endpoint_snapshot(
             .map(|p| p.endpoint_id.clone())
             .collect();
         let gossip_topic_hex = hex::encode(blake3::hash(network_id.as_bytes()).as_bytes());
+        let agent_policy = load_merged_agent_policy(pool, &organization_id, network_id)
+            .await
+            .unwrap_or_default();
         memberships.push(NetworkMembershipSnapshot {
             network_id,
             network_name,
@@ -122,6 +125,7 @@ pub async fn build_endpoint_snapshot(
             policy,
             gossip_bootstrap: bootstrap,
             gossip_topic_hex,
+            agent_policy,
             version: network_version as u64,
         });
     }
@@ -141,6 +145,9 @@ pub async fn build_endpoint_snapshot(
     .await?;
 
     let org_ca_pem = load_org_ca_pem(pool, &organization_id).await.ok().flatten();
+    let org_agent_policy = load_org_agent_policy(pool, &organization_id)
+        .await
+        .unwrap_or_default();
 
     Ok(EndpointSnapshot {
         ipv6_enabled,
@@ -148,11 +155,54 @@ pub async fn build_endpoint_snapshot(
         memberships,
         ipv6_peers,
         org_policy,
+        agent_policy: org_agent_policy,
         org_ca_pem,
         labels,
         expires_at: expires_at.map(|t| t.to_rfc3339()),
         version: org_version as u64,
     })
+}
+
+async fn load_org_agent_policy(
+    pool: &PgPool,
+    organization_id: &str,
+) -> anyhow::Result<tunnet_common::RemoteAgentPolicy> {
+    let row: Option<(serde_json::Value,)> = sqlx::query_as(
+        "SELECT COALESCE(settings->'agentPolicy', '{}'::jsonb) FROM organization WHERE id = $1",
+    )
+    .bind(organization_id)
+    .fetch_optional(pool)
+    .await?;
+    let Some((value,)) = row else {
+        return Ok(tunnet_common::RemoteAgentPolicy::default());
+    };
+    Ok(serde_json::from_value(value).unwrap_or_default())
+}
+
+async fn load_network_agent_policy(
+    pool: &PgPool,
+    network_id: Uuid,
+) -> anyhow::Result<tunnet_common::RemoteAgentPolicy> {
+    let row: Option<(serde_json::Value,)> = sqlx::query_as(
+        "SELECT COALESCE(settings->'agentPolicy', '{}'::jsonb) FROM networks WHERE id = $1",
+    )
+    .bind(network_id)
+    .fetch_optional(pool)
+    .await?;
+    let Some((value,)) = row else {
+        return Ok(tunnet_common::RemoteAgentPolicy::default());
+    };
+    Ok(serde_json::from_value(value).unwrap_or_default())
+}
+
+async fn load_merged_agent_policy(
+    pool: &PgPool,
+    organization_id: &str,
+    network_id: Uuid,
+) -> anyhow::Result<tunnet_common::RemoteAgentPolicy> {
+    let org = load_org_agent_policy(pool, organization_id).await?;
+    let network = load_network_agent_policy(pool, network_id).await?;
+    Ok(tunnet_common::inherit_remote_policy(&org, &network))
 }
 
 async fn load_org_ca_pem(pool: &PgPool, organization_id: &str) -> anyhow::Result<Option<String>> {

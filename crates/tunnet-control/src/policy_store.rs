@@ -77,7 +77,7 @@ pub async fn load_network_bundle(
         .fetch_one(pool)
         .await?;
 
-    let posture_meta = load_posture_metadata(pool, &org_id).await?;
+    let posture_meta = load_posture_metadata(pool, &org_id, Some(network_id)).await?;
     sign_bundle(
         signing_key,
         rows,
@@ -106,7 +106,7 @@ pub async fn load_org_bundle(
     .await?;
 
     // Org-level SSH rules are not modeled yet; network-scoped only.
-    let posture_meta = load_posture_metadata(pool, organization_id).await?;
+    let posture_meta = load_posture_metadata(pool, organization_id, None).await?;
     sign_bundle(
         signing_key,
         rows,
@@ -124,32 +124,71 @@ struct PostureMetadata {
     posture_enforcement: Option<PostureEnforcementConfig>,
 }
 
+/// Load posture defs + settings with inheritance: network ← org ← empty/defaults.
 async fn load_posture_metadata(
     pool: &PgPool,
     organization_id: &str,
+    network_id: Option<Uuid>,
 ) -> anyhow::Result<PostureMetadata> {
-    let definitions: Vec<PostureDefinitionRow> = sqlx::query_as(
-        "SELECT name, assertions FROM posture_definitions WHERE organization_id = $1",
+    // Org-level definitions first.
+    let org_defs: Vec<PostureDefinitionRow> = sqlx::query_as(
+        "SELECT name, assertions FROM posture_definitions \
+         WHERE organization_id = $1 AND network_id IS NULL",
     )
     .bind(organization_id)
     .fetch_all(pool)
     .await
     .unwrap_or_default();
 
-    let postures = definitions
+    let mut postures: HashMap<String, Vec<String>> = org_defs
         .into_iter()
         .map(|d| (d.name, d.assertions.0))
         .collect();
 
-    let settings: Option<OrgPostureSettingsRow> = sqlx::query_as(
+    if let Some(nid) = network_id {
+        let net_defs: Vec<PostureDefinitionRow> = sqlx::query_as(
+            "SELECT name, assertions FROM posture_definitions \
+             WHERE organization_id = $1 AND network_id = $2",
+        )
+        .bind(organization_id)
+        .bind(nid)
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default();
+        for d in net_defs {
+            postures.insert(d.name, d.assertions.0);
+        }
+    }
+
+    let org_settings: Option<OrgPostureSettingsRow> = sqlx::query_as(
         "SELECT mode, grace_period_minutes, recheck_on_fail_seconds, notify_user, \
                 notify_admin, auto_reauthorize, default_src_posture \
-         FROM posture_org_settings WHERE organization_id = $1",
+         FROM posture_org_settings \
+         WHERE organization_id = $1 AND network_id IS NULL",
     )
     .bind(organization_id)
     .fetch_optional(pool)
     .await
     .unwrap_or(None);
+
+    let net_settings: Option<OrgPostureSettingsRow> = if let Some(nid) = network_id {
+        sqlx::query_as(
+            "SELECT mode, grace_period_minutes, recheck_on_fail_seconds, notify_user, \
+                    notify_admin, auto_reauthorize, default_src_posture \
+             FROM posture_org_settings \
+             WHERE organization_id = $1 AND network_id = $2",
+        )
+        .bind(organization_id)
+        .bind(nid)
+        .fetch_optional(pool)
+        .await
+        .unwrap_or(None)
+    } else {
+        None
+    };
+
+    // Network row fully replaces org row when present (simple inheritance).
+    let settings = net_settings.or(org_settings);
 
     let (default_src_posture, posture_enforcement) = match settings {
         Some(s) => (

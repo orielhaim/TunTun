@@ -5,8 +5,8 @@ import { toast } from "sonner";
 
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { EmptyState } from "@/components/app/empty-state";
+import { NetworkAgentPolicyTab } from "@/components/app/network-agent-policy-tab";
 import { DefinitionFormSheet } from "@/components/app/posture/definition-form-sheet";
-import { PosturePageShell } from "@/components/app/posture/posture-page-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,21 +18,27 @@ import {
   type PostureDefinition,
 } from "@/lib/posture-types";
 import {
-  useNetworks,
+  useNetwork,
   useOrgPostures,
   usePostureMutations,
 } from "@/lib/queries/management";
 
-export const Route = createFileRoute("/app/posture/")({
-  component: PostureDefinitionsPage,
+export const Route = createFileRoute("/app/networks/$networkId/policy")({
+  component: NetworkPolicyPage,
 });
 
-function PostureDefinitionsPage() {
+function NetworkPolicyPage() {
+  const { networkId } = Route.useParams();
   const { data: activeOrg } = useActiveOrganization();
   const orgId = activeOrg?.id;
-  const { data: postures, isPending } = useOrgPostures(orgId);
-  const { data: networks } = useNetworks(orgId);
-  const networkNames = new Map(networks?.map((n) => [n.id, n.name]) ?? []);
+  const { data: network, isPending: networkPending } = useNetwork(
+    orgId,
+    networkId,
+  );
+  const { data: postures, isPending: posturesPending } = useOrgPostures(
+    orgId,
+    networkId,
+  );
   const { data: canCreate = false } = useCan(orgId, "posture", "create");
   const { data: canUpdate = false } = useCan(orgId, "posture", "update");
   const { data: canDelete = false } = useCan(orgId, "posture", "delete");
@@ -43,78 +49,90 @@ function PostureDefinitionsPage() {
     null,
   );
 
-  if (!orgId) {
-    return (
-      <PosturePageShell>
-        <DefinitionsSkeleton />
-      </PosturePageShell>
-    );
+  if (!orgId || networkPending) {
+    return <Skeleton className="h-64 w-full" />;
   }
 
+  if (!network) {
+    return <p className="text-muted-foreground text-sm">Network not found.</p>;
+  }
+
+  const networkPostures =
+    postures?.filter((def) => def.networkId === networkId) ?? [];
+  const orgPostures = postures?.filter((def) => def.networkId === null) ?? [];
+
   return (
-    <PosturePageShell
-      actions={
-        canCreate ? (
-          <Button
-            size="sm"
-            onClick={() => {
-              setEditing(null);
-              setDialogOpen(true);
-            }}
-          >
-            <PlusIcon className="mr-1.5 size-3.5" />
-            Create definition
-          </Button>
-        ) : undefined
-      }
-    >
-      {isPending ? (
-        <DefinitionsSkeleton />
-      ) : !postures?.length ? (
-        <EmptyState
-          icon={<ShieldCheckIcon className="size-8" />}
-          title="No posture definitions yet"
-          description="A definition is a named set of security rules evaluated on every device - for example requiring disk encryption and an up-to-date antivirus."
-          steps={[
-            "Create a definition with the rules your fleet must meet",
-            "Reference it from access policies to gate network access",
-            "Track pass/fail rates on the Compliance tab",
-          ]}
-          action={
-            canCreate ? (
-              <Button
-                onClick={() => {
-                  setEditing(null);
-                  setDialogOpen(true);
-                }}
-              >
-                Create definition
-              </Button>
-            ) : undefined
-          }
-        />
-      ) : (
-        <ul className="space-y-3" aria-label="Posture definitions">
-          {postures.map((def) => (
-            <DefinitionCard
-              key={def.id}
-              definition={def}
-              scopeLabel={
-                def.networkId
-                  ? (networkNames.get(def.networkId) ?? "Network")
-                  : "Organization"
-              }
-              canUpdate={canUpdate}
-              canDelete={canDelete}
-              onEdit={() => {
-                setEditing(def);
+    <div className="space-y-8">
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-base font-medium">Agent policy</h2>
+          <p className="text-muted-foreground text-sm">
+            Override organization defaults for devices on this network. Unset
+            fields inherit from organization settings.
+          </p>
+        </div>
+        <NetworkAgentPolicyTab orgId={orgId} network={network} />
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-medium">Posture definitions</h2>
+            <p className="text-muted-foreground text-sm">
+              Organization definitions apply everywhere. Network definitions add
+              or replace rules for this network only.
+            </p>
+          </div>
+          {canCreate ? (
+            <Button
+              size="sm"
+              onClick={() => {
+                setEditing(null);
                 setDialogOpen(true);
               }}
-              onDelete={() => setDeleteTarget(def)}
-            />
-          ))}
-        </ul>
-      )}
+            >
+              <PlusIcon className="mr-1.5 size-3.5" />
+              Add network definition
+            </Button>
+          ) : null}
+        </div>
+
+        {posturesPending ? (
+          <Skeleton className="h-32 w-full" />
+        ) : networkPostures.length === 0 && orgPostures.length === 0 ? (
+          <EmptyState
+            icon={<ShieldCheckIcon className="size-8" />}
+            title="No posture definitions"
+            description="Create a network-scoped definition or use organization-level definitions from the Posture page."
+          />
+        ) : (
+          <ul className="space-y-3">
+            {orgPostures.map((def) => (
+              <DefinitionCard
+                key={def.id}
+                definition={def}
+                scopeLabel="Organization"
+                canUpdate={false}
+                canDelete={false}
+              />
+            ))}
+            {networkPostures.map((def) => (
+              <DefinitionCard
+                key={def.id}
+                definition={def}
+                scopeLabel={network.name}
+                canUpdate={canUpdate}
+                canDelete={canDelete}
+                onEdit={() => {
+                  setEditing(def);
+                  setDialogOpen(true);
+                }}
+                onDelete={() => setDeleteTarget(def)}
+              />
+            ))}
+          </ul>
+        )}
+      </section>
 
       <DefinitionFormSheet
         open={dialogOpen}
@@ -134,7 +152,10 @@ function PostureDefinitionsPage() {
               });
               toast.success("Posture updated");
             } else {
-              await mutations.create.mutateAsync(values);
+              await mutations.create.mutateAsync({
+                ...values,
+                networkId,
+              });
               toast.success("Posture created");
             }
             setDialogOpen(false);
@@ -169,7 +190,7 @@ function PostureDefinitionsPage() {
           }
         }}
       />
-    </PosturePageShell>
+    </div>
   );
 }
 
@@ -185,36 +206,31 @@ function DefinitionCard({
   scopeLabel: string;
   canUpdate: boolean;
   canDelete: boolean;
-  onEdit: () => void;
-  onDelete: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }) {
-  const preview = definition.assertions.slice(0, 3);
+  const preview = definition.assertions.slice(0, 2);
   const remaining = definition.assertions.length - preview.length;
 
   return (
-    <li className="rounded-lg border border-border/70 bg-card/30 p-4 transition-colors hover:border-border">
+    <li className="rounded-lg border border-border/70 bg-card/30 p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="truncate text-sm font-medium">{definition.name}</h2>
+            <h3 className="truncate text-sm font-medium">{definition.name}</h3>
             <Badge variant="secondary">{scopeLabel}</Badge>
             <Badge variant="outline">
               {definition.assertions.length}{" "}
               {definition.assertions.length === 1 ? "rule" : "rules"}
             </Badge>
           </div>
-          {definition.description ? (
-            <p className="text-muted-foreground text-sm">
-              {definition.description}
-            </p>
-          ) : (
-            <p className="text-muted-foreground text-sm">
-              {describeAssertionsSummary(definition.assertions)}
-            </p>
-          )}
+          <p className="text-muted-foreground text-sm">
+            {definition.description ??
+              describeAssertionsSummary(definition.assertions)}
+          </p>
         </div>
         <div className="flex shrink-0 gap-1">
-          {canUpdate ? (
+          {canUpdate && onEdit ? (
             <Button
               size="icon-sm"
               variant="ghost"
@@ -224,7 +240,7 @@ function DefinitionCard({
               <PencilIcon className="size-3.5" />
             </Button>
           ) : null}
-          {canDelete ? (
+          {canDelete && onDelete ? (
             <Button
               size="icon-sm"
               variant="ghost"
@@ -236,36 +252,16 @@ function DefinitionCard({
           ) : null}
         </div>
       </div>
-
-      <ul className="mt-3 space-y-1.5 border-t border-border/50 pt-3">
+      <ul className="mt-3 space-y-1 border-t border-border/50 pt-3">
         {preview.map((assertion) => (
-          <li
-            key={assertion}
-            className="text-muted-foreground flex items-start gap-2 text-xs leading-relaxed"
-          >
-            <span
-              className="bg-foreground/40 mt-1.5 size-1 shrink-0 rounded-full"
-              aria-hidden
-            />
-            <span>{describeAssertion(assertion)}</span>
+          <li key={assertion} className="text-muted-foreground text-xs">
+            {describeAssertion(assertion)}
           </li>
         ))}
         {remaining > 0 ? (
-          <li className="text-muted-foreground pl-3 text-xs">
-            +{remaining} more
-          </li>
+          <li className="text-muted-foreground text-xs">+{remaining} more</li>
         ) : null}
       </ul>
     </li>
-  );
-}
-
-function DefinitionsSkeleton() {
-  return (
-    <div className="space-y-3">
-      <Skeleton className="h-28 w-full rounded-lg" />
-      <Skeleton className="h-28 w-full rounded-lg" />
-      <Skeleton className="h-28 w-full rounded-lg" />
-    </div>
   );
 }

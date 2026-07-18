@@ -358,6 +358,22 @@ export function useDevice(orgId: string | undefined, endpointId: string) {
   });
 }
 
+export function useDeviceEffectiveConfig(
+  orgId: string | undefined,
+  endpointId: string,
+) {
+  return useQuery({
+    queryKey:
+      orgId && endpointId
+        ? queryKeys.deviceConfig(orgId, endpointId)
+        : ["device-config"],
+    enabled: Boolean(orgId && endpointId),
+    queryFn: async () =>
+      createManagementClient(orgId!).getDeviceEffectiveConfig(endpointId),
+    refetchInterval: 30_000,
+  });
+}
+
 export function useDeviceMutations(orgId: string | undefined) {
   const queryClient = useQueryClient();
   const invalidate = () => {
@@ -1157,12 +1173,14 @@ export function useDevicePostureStatus(
   });
 }
 
-export function useOrgPostures(orgId: string | undefined) {
+export function useOrgPostures(orgId: string | undefined, networkId?: string) {
   return useQuery({
-    queryKey: orgId ? queryKeys.postures(orgId) : ["postures"],
+    queryKey: orgId ? queryKeys.postures(orgId, networkId) : ["postures"],
     enabled: Boolean(orgId),
     queryFn: async () => {
-      const { postures } = await createManagementClient(orgId!).listPostures();
+      const { postures } = await createManagementClient(orgId!).listPostures(
+        networkId,
+      );
       return postures;
     },
   });
@@ -1193,15 +1211,20 @@ export function usePostureIntegrations(orgId: string | undefined) {
   });
 }
 
-export function usePostureSettings(orgId: string | undefined) {
+export function usePostureSettings(
+  orgId: string | undefined,
+  networkId?: string,
+) {
   return useQuery({
-    queryKey: orgId ? queryKeys.postureSettings(orgId) : ["posture-settings"],
+    queryKey: orgId
+      ? queryKeys.postureSettings(orgId, networkId)
+      : ["posture-settings"],
     enabled: Boolean(orgId),
     queryFn: async () => {
-      const { settings } = await createManagementClient(
-        orgId!,
-      ).getPostureSettings();
-      return settings;
+      const response = await createManagementClient(orgId!).getPostureSettings(
+        networkId,
+      );
+      return response;
     },
   });
 }
@@ -1240,19 +1263,31 @@ export function usePostureMutations(orgId: string | undefined) {
       mutationFn: async ({
         name,
         body,
+        networkId,
       }: {
         name: string;
         body: UpdatePostureBody;
+        networkId?: string | null;
       }) => {
         if (!orgId) throw new Error("No organization");
-        return createManagementClient(orgId).updatePosture(name, body);
+        return createManagementClient(orgId).updatePosture(
+          name,
+          body,
+          networkId,
+        );
       },
       onSuccess: invalidateOrgPosture,
     }),
     remove: useMutation({
-      mutationFn: async (name: string) => {
+      mutationFn: async ({
+        name,
+        networkId,
+      }: {
+        name: string;
+        networkId?: string | null;
+      }) => {
         if (!orgId) throw new Error("No organization");
-        return createManagementClient(orgId).deletePosture(name);
+        return createManagementClient(orgId).deletePosture(name, networkId);
       },
       onSuccess: invalidateOrgPosture,
     }),

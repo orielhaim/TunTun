@@ -10,9 +10,10 @@ import {
 import { schema } from "@tunnet/db";
 import { eq } from "drizzle-orm";
 import { Elysia } from "elysia";
-
+import { mergeAgentPolicy } from "../../lib/agent-policy";
 import { writeAudit } from "../../lib/audit";
 import { db } from "../../lib/db";
+import { bumpOrgAndNotify } from "../../lib/notify";
 import { getAuth, requireAuth, requirePermission } from "./middleware/authz";
 import { badRequest, sessionPlugin } from "./middleware/session";
 
@@ -32,6 +33,7 @@ function mergeSettings(
     machines: {
       autoCleanup: { ...current.machines.autoCleanup },
     },
+    agentPolicy: { ...current.agentPolicy },
   };
 
   if (patch.machines?.autoCleanup) {
@@ -49,15 +51,20 @@ function mergeSettings(
         ac.hardDeleteAfter,
       );
     }
+
+    const validated = autoCleanupSettingsSchema.safeParse(
+      next.machines.autoCleanup,
+    );
+    if (!validated.success) {
+      throw new Error(validated.error.issues[0]?.message ?? "Invalid settings");
+    }
+    next.machines.autoCleanup = validated.data;
   }
 
-  const validated = autoCleanupSettingsSchema.safeParse(
-    next.machines.autoCleanup,
-  );
-  if (!validated.success) {
-    throw new Error(validated.error.issues[0]?.message ?? "Invalid settings");
+  if (patch.agentPolicy) {
+    next.agentPolicy = mergeAgentPolicy(current.agentPolicy, patch.agentPolicy);
   }
-  next.machines.autoCleanup = validated.data;
+
   return next;
 }
 
@@ -106,10 +113,18 @@ export const orgSettingsRoutes = new Elysia()
             );
           }
 
-          await db
-            .update(schema.organization)
-            .set({ settings })
-            .where(eq(schema.organization.id, auth.organizationId));
+          const agentPolicyChanged = parsed.agentPolicy !== undefined;
+
+          await db.transaction(async (tx) => {
+            await tx
+              .update(schema.organization)
+              .set({ settings })
+              .where(eq(schema.organization.id, auth.organizationId));
+
+            if (agentPolicyChanged) {
+              await bumpOrgAndNotify(tx, auth.organizationId);
+            }
+          });
 
           await writeAudit(db, {
             organizationId: auth.organizationId,

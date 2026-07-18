@@ -59,6 +59,7 @@ export type CreatePostureBody = {
   name: string;
   description?: string;
   assertions: string[];
+  networkId?: string | null;
 };
 
 export type UpdatePostureBody = {

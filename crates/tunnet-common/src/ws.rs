@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    EndpointIdHex, EndpointSnapshot, NetworkMembershipSnapshot, RedirectRule, SnapshotDelta,
+    EffectiveAgentConfig, EndpointIdHex, EndpointSnapshot, NetworkMembershipSnapshot, RedirectRule,
+    RemoteAgentPolicy, SnapshotDelta,
     policy::PolicyBundle,
     posture::{CustomScriptConfig, PostureEvalResult},
 };
@@ -9,7 +10,7 @@ use crate::{
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ServerMsg {
-    Snapshot(EndpointSnapshot),
+    Snapshot(Box<EndpointSnapshot>),
     Delta(SnapshotDelta),
     Policy(PolicyBundle),
     ForceReenroll {
@@ -104,6 +105,10 @@ pub enum ServerMsg {
         enabled_collectors: Vec<String>,
         #[serde(default)]
         custom_scripts: Vec<CustomScriptConfig>,
+    },
+    /// Hot-push org remote agent policy (without a full snapshot).
+    AgentConfigUpdate {
+        policy: RemoteAgentPolicy,
     },
     /// Evaluation results and enforcement state for this device.
     PostureStatus {
@@ -246,6 +251,12 @@ pub enum ClientMsg {
         full: bool,
         attributes: std::collections::HashMap<String, serde_json::Value>,
         collected_at: chrono::DateTime<chrono::Utc>,
+    },
+
+    /// Effective merged config (local ∪ remote ∪ defaults) for dashboard display.
+    EffectiveConfigReport {
+        config: EffectiveAgentConfig,
+        reported_at: chrono::DateTime<chrono::Utc>,
     },
 }
 

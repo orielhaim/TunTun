@@ -97,6 +97,7 @@ pub fn spawn_ws_processor(
     #[cfg(feature = "send")] send: Option<crate::send::SendManager>,
     on_kill_ssh: Option<crate::node::KillSshHook>,
     posture_hooks: Option<crate::node::PostureHooks>,
+    agent_config_hooks: Option<crate::node::AgentConfigHooks>,
 ) {
     tokio::spawn(async move {
         let _ = ws
@@ -133,6 +134,30 @@ pub fn spawn_ws_processor(
                                     hostname_routes = m.hostname_routes.len(),
                                     "snapshot from ws"
                                 );
+                                if let Some(hooks) = &agent_config_hooks
+                                    && let Some(on_policy) = &hooks.on_remote_policy
+                                {
+                                    // Membership inherits network ← org; use that for this agent.
+                                    let config = on_policy(m.agent_policy.clone());
+                                    let _ = ws
+                                        .tx
+                                        .send(ClientMsg::EffectiveConfigReport {
+                                            config,
+                                            reported_at: chrono::Utc::now(),
+                                        })
+                                        .await;
+                                }
+                            } else if let Some(hooks) = &agent_config_hooks
+                                && let Some(on_policy) = &hooks.on_remote_policy
+                            {
+                                let config = on_policy(snap.agent_policy.clone());
+                                let _ = ws
+                                    .tx
+                                    .send(ClientMsg::EffectiveConfigReport {
+                                        config,
+                                        reported_at: chrono::Utc::now(),
+                                    })
+                                    .await;
                             }
                         }
                         ServerMsg::Delta(delta) => {
@@ -464,6 +489,21 @@ pub fn spawn_ws_processor(
                                 } else {
                                     tracing::warn!("PostureConfigUpdate ignored (no hook)");
                                 }
+                            }
+                        }
+                        ServerMsg::AgentConfigUpdate { policy } => {
+                            if let Some(hooks) = &agent_config_hooks
+                                && let Some(on_policy) = &hooks.on_remote_policy
+                            {
+                                let config = on_policy(policy);
+                                let _ = ws
+                                    .tx
+                                    .send(ClientMsg::EffectiveConfigReport {
+                                        config,
+                                        reported_at: chrono::Utc::now(),
+                                    })
+                                    .await;
+                                tracing::info!("AgentConfigUpdate applied");
                             }
                         }
                         ServerMsg::PostureStatus {

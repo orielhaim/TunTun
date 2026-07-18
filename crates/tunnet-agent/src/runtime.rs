@@ -74,6 +74,18 @@ pub async fn run(
     };
 
     let agent_cfg = tunnet_core::TunnetConfig::load(&paths).unwrap_or_default();
+    let config_store = tunnet_core::EffectiveConfigStore::new();
+    let _ = config_store.recompute(&agent_cfg, Default::default());
+
+    let agent_config_hooks = if !is_direct {
+        Some(crate::posture::build_agent_config_hooks(
+            paths.clone(),
+            config_store.clone(),
+            posture_runtime.as_ref().map(|p| p.engine()),
+        ))
+    } else {
+        None
+    };
 
     let node = CoreNode::bootstrap(
         identity,
@@ -88,9 +100,10 @@ pub async fn run(
             kind: "agent",
             on_kill_ssh,
             posture_hooks: posture_runtime.as_ref().map(|p| p.hooks()),
+            agent_config_hooks,
             src_posture_ok,
-            enable_mdns: agent_cfg.mdns.enabled && !args.no_mdns,
-            enable_gossip: !args.disable_gossip || agent_cfg.mdns.service_relay,
+            enable_mdns: agent_cfg.effective_mdns_default() && !args.no_mdns,
+            enable_gossip: !args.disable_gossip || agent_cfg.effective_service_relay(),
             keep_alive: if is_direct { args.keep_alive } else { true },
         },
     )
@@ -105,10 +118,21 @@ pub async fn run(
         }
     }
 
+    // Seed merge from cached snapshot so TUN/DNS use remote policy before WS reconnect.
+    if !is_direct && let Some(snap) = tunnet_core::state::load_snapshot_cache(&node.paths) {
+        let remote = snap
+            .memberships
+            .iter()
+            .find(|m| m.network_id == network_id)
+            .map(|m| m.agent_policy.clone())
+            .unwrap_or(snap.agent_policy);
+        let _ = config_store.apply_remote(&agent_cfg, remote);
+    }
+
     if let Err(e) = crate::auto_update::on_agent_start(&node.paths) {
         tracing::warn!(?e, "auto-update pending check failed");
     }
-    crate::auto_update::spawn(node.paths.clone());
+    crate::auto_update::spawn(node.paths.clone(), Some(config_store.clone()));
 
     #[cfg(windows)]
     let wintun_file = args.wintun_file.clone();
@@ -129,11 +153,27 @@ pub async fn run(
                     .find(|m| m.network_id == network_id)
             })
             .context("cached snapshot missing enrolled network")?;
+        let effective_mtu = config_store.load().effective.tunnel_mtu.value.max(576);
         (
             membership_snap.assigned_ipv4,
             membership_snap.prefix,
-            membership_snap.mtu,
-            membership_snap.dns,
+            effective_mtu,
+            {
+                let mut dns = membership_snap.dns.clone();
+                let eff = config_store.load();
+                dns.suffix = eff.effective.dns_suffix.value.clone();
+                let upstream: Vec<_> = eff
+                    .effective
+                    .dns_upstream
+                    .value
+                    .iter()
+                    .filter_map(|s| s.parse().ok())
+                    .collect();
+                if !upstream.is_empty() {
+                    dns.upstream = upstream;
+                }
+                dns
+            },
         )
     };
 
@@ -402,7 +442,7 @@ pub async fn run(
         }
     }
 
-    if agent_cfg.mdns.service_relay {
+    if agent_cfg.effective_service_relay() {
         if let Some(gossip) = node.shared_gossip() {
             let peers: Vec<iroh::EndpointId> = node
                 .routes

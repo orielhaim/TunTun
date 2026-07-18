@@ -3,6 +3,10 @@ import { schema } from "@tunnet/db";
 import { formatIpv4Cidr } from "@tunnet/ip";
 import { and, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
+import {
+  mergeNetworkSettings,
+  normalizeNetworkSettings,
+} from "../../lib/agent-policy";
 import { writeAudit } from "../../lib/audit";
 import { db } from "../../lib/db";
 import { bumpNetworkAndNotify } from "../../lib/notify";
@@ -18,6 +22,7 @@ function serializeNetwork(row: typeof schema.networks.$inferSelect) {
     cidr: formatIpv4Cidr(row.cidr),
     mtu: row.mtu,
     version: row.version,
+    settings: normalizeNetworkSettings(row.settings),
     createdAt: toIso(row.createdAt)!,
   };
 }
@@ -93,20 +98,36 @@ export const networksRoutes = new Elysia()
           const parsed = patchNetworkBody.parse(body);
 
           const row = await db.transaction(async (tx) => {
+            const existing = await tx.query.networks.findFirst({
+              where: and(
+                eq(schema.networks.id, params.networkId),
+                eq(schema.networks.organizationId, auth.organizationId),
+              ),
+            });
+            if (!existing) {
+              throw new Error("Network not found");
+            }
+
+            const currentSettings = normalizeNetworkSettings(existing.settings);
+            const nextSettings = parsed.settings
+              ? mergeNetworkSettings(currentSettings, parsed.settings)
+              : currentSettings;
+            const agentPolicyChanged =
+              parsed.settings?.agentPolicy !== undefined;
+
             const [updated] = await tx
               .update(schema.networks)
               .set({
-                ...parsed,
+                ...(parsed.name !== undefined ? { name: parsed.name } : {}),
+                ...(parsed.mtu !== undefined ? { mtu: parsed.mtu } : {}),
                 ...(parsed.cidr !== undefined
                   ? { cidr: formatIpv4Cidr(parsed.cidr) }
                   : {}),
+                ...(parsed.settings !== undefined
+                  ? { settings: nextSettings }
+                  : {}),
               })
-              .where(
-                and(
-                  eq(schema.networks.id, params.networkId),
-                  eq(schema.networks.organizationId, auth.organizationId),
-                ),
-              )
+              .where(eq(schema.networks.id, params.networkId))
               .returning();
 
             if (!updated) {
@@ -121,7 +142,14 @@ export const networksRoutes = new Elysia()
               metadata: parsed,
             });
 
-            await bumpNetworkAndNotify(tx, updated.id, auth.organizationId);
+            if (
+              agentPolicyChanged ||
+              parsed.name !== undefined ||
+              parsed.cidr !== undefined ||
+              parsed.mtu !== undefined
+            ) {
+              await bumpNetworkAndNotify(tx, updated.id, auth.organizationId);
+            }
             return updated;
           });
 

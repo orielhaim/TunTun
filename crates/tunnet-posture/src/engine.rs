@@ -1,9 +1,9 @@
 use crate::collector::PostureCollector;
 use crate::collectors::{
     AntivirusCollector, AppCheckConfig, ApplicationCheckCollector, CustomScriptCollector,
-    CustomScriptConfig, DiskEncryptionCollector, DomainJoinedCollector, FileCheckCollector,
-    FileCheckConfig, FirewallCollector, MacSecurityCollector, MdmCollector, OsCollector,
-    OsUpdatesCollector, ScreenLockCollector, SecureBootCollector, TpmCollector,
+    CustomScriptConfig as LocalScriptConfig, DiskEncryptionCollector, DomainJoinedCollector,
+    FileCheckCollector, FileCheckConfig, FirewallCollector, MacSecurityCollector, MdmCollector,
+    OsCollector, OsUpdatesCollector, ScreenLockCollector, SecureBootCollector, TpmCollector,
 };
 use crate::error::PostureError;
 use crate::score::{PostureScoringConfig, inject_posture_score};
@@ -16,6 +16,7 @@ use std::time::Duration;
 use tokio::sync::{RwLock, broadcast};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
+use tunnet_common::posture::CustomScriptConfig;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CollectorStatus {
@@ -82,8 +83,8 @@ fn default_scripts_dir() -> PathBuf {
 }
 
 pub struct PostureEngine {
-    collectors: Vec<Box<dyn PostureCollector>>,
-    config: PostureEngineConfig,
+    collectors: RwLock<Vec<Box<dyn PostureCollector>>>,
+    config: RwLock<PostureEngineConfig>,
     state: Arc<RwLock<PostureState>>,
     change_tx: broadcast::Sender<PostureChangeEvent>,
 }
@@ -92,8 +93,8 @@ impl PostureEngine {
     pub fn new(collectors: Vec<Box<dyn PostureCollector>>, config: PostureEngineConfig) -> Self {
         let (change_tx, _) = broadcast::channel(64);
         Self {
-            collectors,
-            config,
+            collectors: RwLock::new(collectors),
+            config: RwLock::new(config),
             state: Arc::new(RwLock::new(PostureState {
                 attributes: HashMap::new(),
                 last_collected: HashMap::new(),
@@ -105,7 +106,8 @@ impl PostureEngine {
     }
 
     pub fn with_default_collectors(config: PostureEngineConfig) -> Self {
-        Self::new(Self::default_collectors(&config), config)
+        let collectors = Self::default_collectors(&config);
+        Self::new(collectors, config)
     }
 
     pub fn default_collectors(config: &PostureEngineConfig) -> Vec<Box<dyn PostureCollector>> {
@@ -135,7 +137,14 @@ impl PostureEngine {
         }
         collectors.push(Box::new(CustomScriptCollector::new(
             config.custom_scripts_dir.clone(),
-            config.custom_scripts.clone(),
+            config
+                .custom_scripts
+                .iter()
+                .map(|s| LocalScriptConfig {
+                    name: s.name.clone(),
+                    path: PathBuf::from(&s.path),
+                })
+                .collect(),
         )));
 
         collectors.retain(|c| c.is_available());
@@ -150,20 +159,21 @@ impl PostureEngine {
         self.state.read().await.clone()
     }
 
-    pub fn apply_config(
-        &mut self,
+    pub async fn apply_config(
+        &self,
         interval: Duration,
         enabled_collectors: Option<Vec<String>>,
         custom_scripts: Vec<CustomScriptConfig>,
     ) {
-        self.config.interval = interval;
-        self.config.enabled_collectors = enabled_collectors.clone();
-        self.config.custom_scripts = custom_scripts;
-        self.collectors = Self::default_collectors(&self.config);
+        let mut config = self.config.write().await;
+        config.interval = interval;
+        config.enabled_collectors = enabled_collectors.clone();
+        config.custom_scripts = custom_scripts;
+        let mut collectors = Self::default_collectors(&config);
         if let Some(enabled) = &enabled_collectors {
-            self.collectors
-                .retain(|c| enabled.iter().any(|name| name == c.name()));
+            collectors.retain(|c| enabled.iter().any(|name| name == c.name()));
         }
+        *self.collectors.write().await = collectors;
     }
 
     pub async fn collect_once(&self) -> Result<PostureChangeEvent, PostureError> {
@@ -200,9 +210,10 @@ impl PostureEngine {
 
             is_first = false;
 
+            let interval = self.config.read().await.interval;
             tokio::select! {
                 _ = cancel.cancelled() => break,
-                _ = tokio::time::sleep(self.config.interval) => {}
+                _ = tokio::time::sleep(interval) => {}
             }
         }
     }
@@ -215,8 +226,9 @@ impl PostureEngine {
         let mut new_attrs = HashMap::new();
         let mut statuses = HashMap::new();
 
+        let collectors = self.collectors.read().await;
         let mut results = Vec::new();
-        for collector in &self.collectors {
+        for collector in collectors.iter() {
             if !force_all {
                 let last = self
                     .state
@@ -243,6 +255,7 @@ impl PostureEngine {
             };
             results.push((name, result));
         }
+        drop(collectors);
 
         for (name, result) in results {
             match result {
@@ -265,7 +278,8 @@ impl PostureEngine {
             }
         }
 
-        inject_posture_score(&mut new_attrs, &self.config.scoring);
+        let scoring = self.config.read().await.scoring.clone();
+        inject_posture_score(&mut new_attrs, &scoring);
 
         let mut state = self.state.write().await;
         let old_attrs = state.attributes.clone();

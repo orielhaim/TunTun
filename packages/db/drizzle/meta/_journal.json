@@ -43,6 +43,13 @@
       "when": 1784395900621,
       "tag": "0005_clean_serpent_society",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784404211024,
+      "tag": "0006_milky_jean_grey",
+      "breakpoints": true
     }
   ]
 }

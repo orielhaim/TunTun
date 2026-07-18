@@ -34,6 +34,7 @@ import {
   deleteDevicesResponse,
   deviceAddressesResponse,
   deviceDetailSchema,
+  deviceEffectiveConfigResponse,
   deviceListResponse,
   deviceSshAuthSchema,
   endpointSendSettingsSchema,
@@ -277,6 +278,14 @@ export function createManagementClient(orgId: string) {
 
     getDevice: (endpointId: string) =>
       request(orgId, org(`/devices/${endpointId}`), {}, deviceDetailSchema),
+
+    getDeviceEffectiveConfig: (endpointId: string) =>
+      request(
+        orgId,
+        org(`/devices/${endpointId}/config`),
+        {},
+        deviceEffectiveConfigResponse,
+      ),
 
     updateDevice: (endpointId: string, body: PatchDeviceBody) =>
       request(
@@ -1008,8 +1017,15 @@ export function createManagementClient(orgId: string) {
         { method: "DELETE" },
       ),
 
-    listPostures: () =>
-      request(orgId, org("/postures"), {}, postureDefinitionListResponseSchema),
+    listPostures: (networkId?: string) =>
+      request(
+        orgId,
+        org(
+          `/postures${networkId ? `?networkId=${encodeURIComponent(networkId)}` : ""}`,
+        ),
+        {},
+        postureDefinitionListResponseSchema,
+      ),
 
     createPosture: (body: CreatePostureBody) =>
       request(
@@ -1022,10 +1038,18 @@ export function createManagementClient(orgId: string) {
         postureDefinitionSchema,
       ),
 
-    updatePosture: (name: string, body: UpdatePostureBody) =>
+    updatePosture: (
+      name: string,
+      body: UpdatePostureBody,
+      networkId?: string | null,
+    ) =>
       request(
         orgId,
-        org(`/postures/${encodeURIComponent(name)}`),
+        org(
+          `/postures/${encodeURIComponent(name)}${
+            networkId ? `?networkId=${encodeURIComponent(networkId)}` : ""
+          }`,
+        ),
         {
           method: "PUT",
           body: JSON.stringify(updatePostureBodySchema.parse(body)),
@@ -1033,10 +1057,14 @@ export function createManagementClient(orgId: string) {
         postureDefinitionSchema,
       ),
 
-    deletePosture: (name: string) =>
+    deletePosture: (name: string, networkId?: string | null) =>
       request<{ ok: boolean }>(
         orgId,
-        org(`/postures/${encodeURIComponent(name)}`),
+        org(
+          `/postures/${encodeURIComponent(name)}${
+            networkId ? `?networkId=${encodeURIComponent(networkId)}` : ""
+          }`,
+        ),
         { method: "DELETE" },
       ),
 
@@ -1098,21 +1126,33 @@ export function createManagementClient(orgId: string) {
         postureIntegrationSyncResponse,
       ),
 
-    getPostureSettings: () =>
+    getPostureSettings: (networkId?: string) =>
       request(
         orgId,
-        org("/posture/settings"),
+        org(
+          `/posture/settings${
+            networkId ? `?networkId=${encodeURIComponent(networkId)}` : ""
+          }`,
+        ),
         {},
         postureSettingsResponseSchema,
       ),
 
-    updatePostureSettings: (body: PatchPostureSettingsBody) =>
+    updatePostureSettings: (
+      body: PatchPostureSettingsBody,
+      networkId?: string | null,
+    ) =>
       request(
         orgId,
         org("/posture/settings"),
         {
           method: "PATCH",
-          body: JSON.stringify(patchPostureSettingsBodySchema.parse(body)),
+          body: JSON.stringify(
+            patchPostureSettingsBodySchema.parse({
+              ...body,
+              ...(networkId !== undefined ? { networkId } : {}),
+            }),
+          ),
         },
         postureSettingsResponseSchema,
       ),

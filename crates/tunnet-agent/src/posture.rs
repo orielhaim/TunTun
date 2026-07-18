@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 
 use arc_swap::ArcSwap;
 use chrono::Utc;
@@ -7,7 +8,8 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use tunnet_common::posture::CustomScriptConfig;
 use tunnet_common::ws::ClientMsg;
-use tunnet_core::PostureHooks;
+use tunnet_common::{EffectiveAgentConfig, RemoteAgentPolicy, merge_agent_config};
+use tunnet_core::{AgentConfigHooks, EffectiveConfigStore, PostureHooks, TunnetConfig};
 use tunnet_posture::{PostureEngine, PostureEngineConfig, PostureValue};
 
 pub struct PostureRuntime {
@@ -34,6 +36,10 @@ impl PostureRuntime {
 
     pub fn hooks(&self) -> PostureHooks {
         self.hooks.clone()
+    }
+
+    pub fn engine(&self) -> Arc<PostureEngine> {
+        self.engine.clone()
     }
 
     pub fn src_posture_ok(&self) -> Arc<ArcSwap<bool>> {
@@ -102,6 +108,57 @@ impl PostureRuntime {
     }
 }
 
+/// Build hooks that merge remote policy with local TOML and apply posture collector settings.
+pub fn build_agent_config_hooks(
+    paths: tunnet_core::StatePaths,
+    store: EffectiveConfigStore,
+    posture_engine: Option<Arc<PostureEngine>>,
+) -> AgentConfigHooks {
+    let on_remote_policy: Arc<dyn Fn(RemoteAgentPolicy) -> EffectiveAgentConfig + Send + Sync> =
+        Arc::new(move |policy: RemoteAgentPolicy| {
+            let local = TunnetConfig::try_load(&paths)
+                .ok()
+                .flatten()
+                .unwrap_or_default();
+            let effective = store.apply_remote(&local, policy.clone());
+
+            if let Some(engine) = &posture_engine {
+                let interval = effective.posture_interval_secs.value;
+                let collectors = if effective.posture_enabled_collectors.value.is_empty() {
+                    None
+                } else {
+                    Some(effective.posture_enabled_collectors.value.clone())
+                };
+                let scripts = policy
+                    .posture
+                    .as_ref()
+                    .map(|p| p.custom_scripts.clone())
+                    .unwrap_or_default();
+                let engine = engine.clone();
+                tokio::spawn(async move {
+                    engine
+                        .apply_config(Duration::from_secs(interval.max(30)), collectors, scripts)
+                        .await;
+                    if let Err(e) = engine.collect_once().await {
+                        tracing::warn!(?e, "posture recollect after config update failed");
+                    }
+                });
+            }
+
+            tracing::info!(
+                mdns = effective.mdns.value,
+                mdns_source = ?effective.mdns.source,
+                posture_interval = effective.posture_interval_secs.value,
+                "agent config merged"
+            );
+            effective
+        });
+
+    AgentConfigHooks {
+        on_remote_policy: Some(on_remote_policy),
+    }
+}
+
 fn build_hooks(engine: Arc<PostureEngine>, src_posture_ok: Arc<ArcSwap<bool>>) -> PostureHooks {
     let recheck_engine = engine.clone();
     let config_engine = engine.clone();
@@ -125,8 +182,19 @@ fn build_hooks(engine: Arc<PostureEngine>, src_posture_ok: Arc<ArcSwap<bool>>) -
                     "posture config update received"
                 );
                 let engine = config_engine.clone();
+                let collectors = if enabled_collectors.is_empty() {
+                    None
+                } else {
+                    Some(enabled_collectors)
+                };
                 tokio::spawn(async move {
-                    let _ = (interval_secs, enabled_collectors, custom_scripts);
+                    engine
+                        .apply_config(
+                            Duration::from_secs(interval_secs.max(30)),
+                            collectors,
+                            custom_scripts,
+                        )
+                        .await;
                     if let Err(e) = engine.collect_once().await {
                         tracing::warn!(?e, "posture config recheck failed");
                     }
@@ -148,6 +216,8 @@ fn build_hooks(engine: Arc<PostureEngine>, src_posture_ok: Arc<ArcSwap<bool>>) -
                         src_posture_ok = ok,
                         "device posture non-compliant"
                     );
+                } else {
+                    tracing::debug!(%enforcement_action, "device posture compliant");
                 }
             },
         )),
@@ -157,6 +227,16 @@ fn build_hooks(engine: Arc<PostureEngine>, src_posture_ok: Arc<ArcSwap<bool>>) -
 fn json_map(attrs: &HashMap<String, PostureValue>) -> HashMap<String, serde_json::Value> {
     attrs
         .iter()
-        .filter_map(|(k, v)| serde_json::to_value(v).ok().map(|j| (k.clone(), j)))
+        .map(|(k, v)| {
+            (
+                k.clone(),
+                serde_json::to_value(v).unwrap_or(serde_json::Value::Null),
+            )
+        })
         .collect()
+}
+
+#[allow(dead_code)]
+fn _touch_merge() {
+    let _ = merge_agent_config;
 }

@@ -26,10 +26,15 @@ pub struct TunnetConfig {
     pub connect: ConnectSection,
     #[serde(default)]
     pub logging: LoggingSection,
+    /// Dual settings: only keys set here override remote org policy.
     #[serde(default)]
-    pub mdns: MdnsSection,
+    pub network: NetworkSection,
+    /// Dual auto-update overrides (`enabled` / `check-interval-hours`).
     #[serde(default)]
     pub update: UpdateSection,
+    /// Local-only control-plane connection settings.
+    #[serde(default)]
+    pub control: ControlSection,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -138,50 +143,64 @@ impl Default for LoggingSection {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MdnsSection {
-    /// iroh LAN address lookup (Direct mode).
-    #[serde(default = "default_true")]
-    pub enabled: bool,
-    /// Cross-LAN mDNS/DNS-SD service relay over the mesh.
-    #[serde(default, rename = "service-relay")]
-    pub service_relay: bool,
-}
-
-impl Default for MdnsSection {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            service_relay: false,
-        }
-    }
-}
-
-/// Automatic binary updates from GitHub Releases.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UpdateSection {
-    /// When true, the agent periodically checks for and applies updates.
-    #[serde(default)]
-    pub enabled: bool,
-    /// How often to poll GitHub Releases (hours). Default 6.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct NetworkSection {
+    /// Override org mDNS policy when set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mdns: Option<bool>,
+    /// Override org LAN discovery policy when set.
     #[serde(
-        default = "default_check_interval_hours",
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "lan-discovery"
+    )]
+    pub lan_discovery: Option<bool>,
+    /// Override org tunnel MTU when set.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "tunnel-mtu"
+    )]
+    pub tunnel_mtu: Option<u16>,
+    /// Cross-LAN mDNS/DNS-SD service relay over the mesh (local preference).
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "service-relay"
+    )]
+    pub service_relay: Option<bool>,
+}
+
+/// Automatic binary updates - dual with org remote policy.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct UpdateSection {
+    /// When set, overrides org auto-update enabled flag.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    /// When set, overrides org check interval (hours).
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
         rename = "check-interval-hours"
     )]
-    pub check_interval_hours: u64,
-    /// If the new binary exits/restarts within this window, revert to the previous binary.
+    pub check_interval_hours: Option<u64>,
+    /// Local-only: revert window after update (seconds).
     #[serde(default = "default_health_window_secs", rename = "health-window-secs")]
     pub health_window_secs: u64,
 }
 
-impl Default for UpdateSection {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            check_interval_hours: default_check_interval_hours(),
-            health_window_secs: default_health_window_secs(),
-        }
-    }
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ControlSection {
+    /// Which control plane to connect to (self-hosted). Local-only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    /// Optional listen port override. Local-only.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        rename = "listen-port"
+    )]
+    pub listen_port: Option<u16>,
 }
 
 pub fn parse_toml<T: for<'de> Deserialize<'de>>(s: &str) -> Result<T, toml::de::Error> {
@@ -200,9 +219,6 @@ pub fn parse_toml<T: for<'de> Deserialize<'de>>(s: &str) -> Result<T, toml::de::
 
 fn default_true() -> bool {
     true
-}
-fn default_check_interval_hours() -> u64 {
-    6
 }
 fn default_health_window_secs() -> u64 {
     30
@@ -400,14 +416,50 @@ impl TunnetConfig {
             errs.push(format!("logging.format: want text or json, got {fmt}"));
         }
 
-        if self.update.check_interval_hours == 0 {
-            errs.push("update.check-interval-hours: must be >= 1".into());
-        }
         if self.update.health_window_secs == 0 {
             errs.push("update.health-window-secs: must be >= 1".into());
         }
+        if let Some(hours) = self.update.check_interval_hours
+            && hours == 0
+        {
+            errs.push("update.check-interval-hours: must be >= 1".into());
+        }
+        if let Some(mtu) = self.network.tunnel_mtu
+            && !(576..=9000).contains(&mtu)
+        {
+            errs.push("network.tunnel-mtu: must be 576-9000".into());
+        }
 
         if errs.is_empty() { Ok(()) } else { Err(errs) }
+    }
+
+    /// Dual overrides for merge with remote org policy.
+    pub fn local_dual_overrides(&self) -> tunnet_common::LocalDualOverrides {
+        tunnet_common::LocalDualOverrides {
+            mdns: self.network.mdns,
+            lan_discovery: self.network.lan_discovery,
+            tunnel_mtu: self.network.tunnel_mtu,
+            auto_update_enabled: self.update.enabled,
+            auto_update_check_interval_hours: self.update.check_interval_hours,
+        }
+    }
+
+    pub fn local_only_settings(&self) -> tunnet_common::LocalOnlySettings {
+        tunnet_common::LocalOnlySettings {
+            logging_level: self.logging.level.clone(),
+            logging_format: self.logging.format.clone(),
+            control_url: self.control.url.clone(),
+            listen_port: self.control.listen_port,
+        }
+    }
+
+    /// Effective mDNS flag when no remote policy is available (Direct / offline).
+    pub fn effective_mdns_default(&self) -> bool {
+        self.network.mdns.unwrap_or(true)
+    }
+
+    pub fn effective_service_relay(&self) -> bool {
+        self.network.service_relay.unwrap_or(false)
     }
 }
 

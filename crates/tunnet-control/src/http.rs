@@ -686,7 +686,7 @@ async fn run_ws(
     if let Ok(snap) =
         crate::snapshot::build_endpoint_snapshot(&state.pool, &state.policy_key, &endpoint_id).await
     {
-        let msg = ServerMsg::Snapshot(snap);
+        let msg = ServerMsg::Snapshot(Box::new(snap));
         if let Ok(txt) = serde_json::to_string(&msg) {
             let _ = ws_tx.send(Message::text(txt)).await;
         }
@@ -1118,6 +1118,21 @@ async fn run_ws(
                                 .await
                                 {
                                     tracing::warn!(?e, %ep, "PostureReport failed");
+                                }
+                            }
+                            ClientMsg::EffectiveConfigReport {
+                                config,
+                                reported_at,
+                            } => {
+                                if let Err(e) = crate::agent_config::store_effective_config(
+                                    &pool,
+                                    &ep,
+                                    &config,
+                                    reported_at,
+                                )
+                                .await
+                                {
+                                    tracing::warn!(?e, %ep, "EffectiveConfigReport failed");
                                 }
                             }
                             ClientMsg::Hello { .. } | ClientMsg::Pong { .. } => {}

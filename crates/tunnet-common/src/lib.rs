@@ -1,3 +1,4 @@
+pub mod agent_policy;
 pub mod duration;
 pub mod ipv6;
 pub mod policy;
@@ -7,6 +8,12 @@ pub mod relay;
 pub mod send;
 pub mod signing;
 pub mod ws;
+
+pub use agent_policy::{
+    ConfigSource, EffectiveAgentConfig, LocalDualOverrides, LocalOnlySettings, RemoteAgentPolicy,
+    RemoteAutoUpdatePolicy, RemoteDnsPolicy, RemoteExitNodesPolicy, RemotePostureCollectorPolicy,
+    RemoteRelayPolicy, ResolvedSetting, inherit_remote_policy, merge_agent_config,
+};
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -308,6 +315,9 @@ pub struct NetworkMembershipSnapshot {
     pub policy: policy::PolicyBundle,
     pub gossip_bootstrap: Vec<EndpointIdHex>,
     pub gossip_topic_hex: String,
+    /// Merged agent policy for this membership: network ← org ← defaults.
+    #[serde(default)]
+    pub agent_policy: agent_policy::RemoteAgentPolicy,
     pub version: u64,
 }
 
@@ -318,6 +328,9 @@ pub struct EndpointSnapshot {
     pub memberships: Vec<NetworkMembershipSnapshot>,
     pub ipv6_peers: Vec<Ipv6PeerEntry>,
     pub org_policy: policy::PolicyBundle,
+    /// Org-level remote agent policy defaults (before network inheritance).
+    #[serde(default)]
+    pub agent_policy: agent_policy::RemoteAgentPolicy,
     /// Org internal CA root cert (PEM) so agents can verify peer Serve TLS.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub org_ca_pem: Option<String>,

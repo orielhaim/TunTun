@@ -8,6 +8,7 @@ import {
 import { formatDistanceToNow } from "date-fns";
 import { type ReactNode, useEffect, useState } from "react";
 import {
+  HiOutlineCpuChip,
   HiOutlineExclamationTriangle,
   HiOutlineFingerPrint,
   HiOutlineKey,
@@ -57,6 +58,7 @@ export const Route = createFileRoute("/app/organization")({
 type SettingsSection =
   | "general"
   | "machines"
+  | "agent"
   | "tunnels"
   | "certificate"
   | "api-keys"
@@ -76,6 +78,11 @@ const sectionMeta: Record<
     label: "Machines",
     description: "Auto cleanup policy",
     icon: HiOutlineServer,
+  },
+  agent: {
+    label: "Agent policy",
+    description: "Organization defaults inherited by networks",
+    icon: HiOutlineCpuChip,
   },
   tunnels: {
     label: "Tunnels",
@@ -254,6 +261,18 @@ function OrganizationSettingsPage() {
   const [cleanupMode, setCleanupMode] = useState<AutoCleanupMode>("soft");
   const [hardDeleteAfter, setHardDeleteAfter] = useState("7d");
 
+  const [agentMdns, setAgentMdns] = useState(false);
+  const [agentLanDiscovery, setAgentLanDiscovery] = useState(false);
+  const [agentTunnelMtu, setAgentTunnelMtu] = useState("");
+  const [agentAutoUpdateEnabled, setAgentAutoUpdateEnabled] = useState(false);
+  const [agentAutoUpdateIntervalHours, setAgentAutoUpdateIntervalHours] =
+    useState("6");
+  const [agentPreferOrgRelays, setAgentPreferOrgRelays] = useState(false);
+  const [agentExitAllowAdvertise, setAgentExitAllowAdvertise] = useState(false);
+  const [agentExitAllowUse, setAgentExitAllowUse] = useState(true);
+  const [agentPostureIntervalSecs, setAgentPostureIntervalSecs] =
+    useState("300");
+
   const [ssoDomain, setSsoDomain] = useState("");
   const [issuerUrl, setIssuerUrl] = useState("");
   const [clientId, setClientId] = useState("");
@@ -266,6 +285,7 @@ function OrganizationSettingsPage() {
     [
       "general",
       "machines",
+      "agent",
       "tunnels",
       "certificate",
       "api-keys",
@@ -310,6 +330,24 @@ function OrganizationSettingsPage() {
           ) || "7d"
         : "7d",
     );
+  }, [orgSettings]);
+
+  useEffect(() => {
+    if (!orgSettings) return;
+    const policy = orgSettings.agentPolicy;
+    setAgentMdns(policy.mdns ?? false);
+    setAgentLanDiscovery(policy.lanDiscovery ?? false);
+    setAgentTunnelMtu(
+      policy.tunnelMtu !== undefined ? String(policy.tunnelMtu) : "",
+    );
+    setAgentAutoUpdateEnabled(policy.autoUpdate?.enabled ?? false);
+    setAgentAutoUpdateIntervalHours(
+      String(policy.autoUpdate?.checkIntervalHours ?? 6),
+    );
+    setAgentPreferOrgRelays(policy.relay?.preferOrgRelays ?? false);
+    setAgentExitAllowAdvertise(policy.exitNodes?.allowAdvertise ?? false);
+    setAgentExitAllowUse(policy.exitNodes?.allowUse ?? true);
+    setAgentPostureIntervalSecs(String(policy.posture?.intervalSecs ?? 300));
   }, [orgSettings]);
 
   useEffect(() => {
@@ -409,6 +447,59 @@ function OrganizationSettingsPage() {
         },
       });
       toast.success("Machine settings saved");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save");
+    }
+  }
+
+  async function saveAgentPolicy(e: React.FormEvent) {
+    e.preventDefault();
+    const mtu = agentTunnelMtu.trim();
+    const mtuParsed = mtu ? Number(mtu) : undefined;
+    if (
+      mtu &&
+      (mtuParsed === undefined ||
+        Number.isNaN(mtuParsed) ||
+        mtuParsed < 576 ||
+        mtuParsed > 9000)
+    ) {
+      toast.error("Tunnel MTU must be between 576 and 9000");
+      return;
+    }
+    const postureSecs = Number(agentPostureIntervalSecs);
+    if (Number.isNaN(postureSecs) || postureSecs < 30 || postureSecs > 86400) {
+      toast.error("Posture interval must be between 30 and 86400 seconds");
+      return;
+    }
+    const updateHours = Number(agentAutoUpdateIntervalHours);
+    if (Number.isNaN(updateHours) || updateHours < 1 || updateHours > 168) {
+      toast.error("Auto-update interval must be between 1 and 168 hours");
+      return;
+    }
+    try {
+      const existingPosture = orgSettings?.agentPolicy.posture;
+      await orgSettingsMutations.update.mutateAsync({
+        agentPolicy: {
+          mdns: agentMdns,
+          lanDiscovery: agentLanDiscovery,
+          ...(mtuParsed !== undefined ? { tunnelMtu: mtuParsed } : {}),
+          autoUpdate: {
+            enabled: agentAutoUpdateEnabled,
+            checkIntervalHours: updateHours,
+          },
+          relay: { preferOrgRelays: agentPreferOrgRelays },
+          exitNodes: {
+            allowAdvertise: agentExitAllowAdvertise,
+            allowUse: agentExitAllowUse,
+          },
+          posture: {
+            intervalSecs: postureSecs,
+            enabledCollectors: existingPosture?.enabledCollectors ?? [],
+            customScripts: existingPosture?.customScripts ?? [],
+          },
+        },
+      });
+      toast.success("Agent policy saved");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save");
     }
@@ -664,6 +755,147 @@ function OrganizationSettingsPage() {
                       </div>
                     </div>
                   </div>
+                </form>
+              )}
+            </SettingsPanel>
+          ) : null}
+
+          {section === "agent" ? (
+            <SettingsPanel
+              title="Agent policy"
+              description="Organization defaults inherited by networks unless overridden. Devices can override dual keys in tunnet.toml."
+              footer={
+                canUpdate ? (
+                  <Button
+                    type="submit"
+                    form="org-agent-form"
+                    disabled={orgSettingsMutations.update.isPending}
+                    size="sm"
+                  >
+                    {orgSettingsMutations.update.isPending
+                      ? "Saving..."
+                      : "Save agent policy"}
+                  </Button>
+                ) : null
+              }
+            >
+              {orgSettingsPending ? (
+                <Skeleton className="h-40 w-full" />
+              ) : (
+                <form
+                  id="org-agent-form"
+                  className="space-y-5"
+                  onSubmit={(e) => void saveAgentPolicy(e)}
+                >
+                  <ToggleRow
+                    id="agent-mdns"
+                    label="mDNS"
+                    description="Enable mDNS discovery on enrolled agents. Devices can override this in tunnet.toml."
+                    checked={agentMdns}
+                    onCheckedChange={setAgentMdns}
+                    disabled={!canUpdate}
+                  />
+                  <ToggleRow
+                    id="agent-lan-discovery"
+                    label="LAN discovery"
+                    description="Allow agents to discover peers on the local network."
+                    checked={agentLanDiscovery}
+                    onCheckedChange={setAgentLanDiscovery}
+                    disabled={!canUpdate}
+                  />
+
+                  <FieldBlock
+                    label="Tunnel MTU"
+                    htmlFor="agent-tunnel-mtu"
+                    hint="Leave empty to use the agent default. Range: 576–9000."
+                  >
+                    <Input
+                      id="agent-tunnel-mtu"
+                      type="number"
+                      min={576}
+                      max={9000}
+                      placeholder="Default"
+                      value={agentTunnelMtu}
+                      onChange={(e) => setAgentTunnelMtu(e.target.value)}
+                      disabled={!canUpdate}
+                      className="max-w-xs"
+                    />
+                  </FieldBlock>
+
+                  <ToggleRow
+                    id="agent-auto-update"
+                    label="Auto-update"
+                    description="Let agents check for and install updates automatically."
+                    checked={agentAutoUpdateEnabled}
+                    onCheckedChange={setAgentAutoUpdateEnabled}
+                    disabled={!canUpdate}
+                  />
+
+                  <FieldBlock
+                    label="Auto-update check interval (hours)"
+                    htmlFor="agent-auto-update-hours"
+                  >
+                    <Input
+                      id="agent-auto-update-hours"
+                      type="number"
+                      min={1}
+                      max={168}
+                      value={agentAutoUpdateIntervalHours}
+                      onChange={(e) =>
+                        setAgentAutoUpdateIntervalHours(e.target.value)
+                      }
+                      disabled={!canUpdate || !agentAutoUpdateEnabled}
+                      className="max-w-xs"
+                    />
+                  </FieldBlock>
+
+                  <ToggleRow
+                    id="agent-prefer-org-relays"
+                    label="Prefer org relays"
+                    description="Route tunnel traffic through organization relays when available."
+                    checked={agentPreferOrgRelays}
+                    onCheckedChange={setAgentPreferOrgRelays}
+                    disabled={!canUpdate}
+                  />
+
+                  <div className="space-y-2.5">
+                    <Label>Exit nodes</Label>
+                    <ToggleRow
+                      id="agent-exit-advertise"
+                      label="Allow advertise"
+                      description="Let agents advertise themselves as exit nodes."
+                      checked={agentExitAllowAdvertise}
+                      onCheckedChange={setAgentExitAllowAdvertise}
+                      disabled={!canUpdate}
+                    />
+                    <ToggleRow
+                      id="agent-exit-use"
+                      label="Allow use"
+                      description="Let agents use exit nodes offered by peers."
+                      checked={agentExitAllowUse}
+                      onCheckedChange={setAgentExitAllowUse}
+                      disabled={!canUpdate}
+                    />
+                  </div>
+
+                  <FieldBlock
+                    label="Posture collector interval (seconds)"
+                    htmlFor="agent-posture-interval"
+                    hint="How often agents collect and report posture attributes. Range: 30–86400."
+                  >
+                    <Input
+                      id="agent-posture-interval"
+                      type="number"
+                      min={30}
+                      max={86400}
+                      value={agentPostureIntervalSecs}
+                      onChange={(e) =>
+                        setAgentPostureIntervalSecs(e.target.value)
+                      }
+                      disabled={!canUpdate}
+                      className="max-w-xs"
+                    />
+                  </FieldBlock>
                 </form>
               )}
             </SettingsPanel>

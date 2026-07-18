@@ -71,25 +71,41 @@ pub fn on_agent_start(paths: &StatePaths) -> Result<()> {
     Ok(())
 }
 
-pub fn spawn(paths: StatePaths) {
+pub fn spawn(paths: StatePaths, store: Option<tunnet_core::EffectiveConfigStore>) {
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_secs(60)).await;
         loop {
-            let cfg = TunnetConfig::try_load(&paths)
-                .ok()
-                .flatten()
-                .unwrap_or_default();
-            let update = cfg.update;
+            let (enabled, interval_hours, health) = if let Some(store) = &store {
+                let eff = store.load();
+                (
+                    eff.effective.auto_update_enabled.value,
+                    eff.effective.auto_update_check_interval_hours.value,
+                    TunnetConfig::try_load(&paths)
+                        .ok()
+                        .flatten()
+                        .unwrap_or_default()
+                        .update
+                        .health_window_secs
+                        .max(1),
+                )
+            } else {
+                let cfg = TunnetConfig::try_load(&paths)
+                    .ok()
+                    .flatten()
+                    .unwrap_or_default();
+                (
+                    cfg.update.enabled.unwrap_or(false),
+                    cfg.update.check_interval_hours.unwrap_or(6),
+                    cfg.update.health_window_secs.max(1),
+                )
+            };
 
-            if update.enabled {
-                let health = update.health_window_secs.max(1);
-                if let Err(e) = check_once(&paths, health).await {
-                    tracing::warn!(?e, "auto-update check failed");
-                }
+            if enabled && let Err(e) = check_once(&paths, health).await {
+                tracing::warn!(?e, "auto-update check failed");
             }
 
-            let sleep_secs = if update.enabled {
-                update.check_interval_hours.max(1) * 3600
+            let sleep_secs = if enabled {
+                interval_hours.max(1) * 3600
             } else {
                 3600 // re-check whether it was enabled
             };

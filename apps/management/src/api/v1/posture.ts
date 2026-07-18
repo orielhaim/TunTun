@@ -2,6 +2,8 @@ import {
   createPostureDefinitionBody,
   createPostureIntegrationBody,
   createPostureWebhookBody,
+  listPostureDefinitionsQuery,
+  type PostureOrgSettingsFields,
   type PostureValue,
   patchCustomPostureBody,
   patchPostureOrgSettingsBody,
@@ -15,6 +17,7 @@ import { Elysia } from "elysia";
 import { writeAudit } from "../../lib/audit";
 import { pushPostureRecheck } from "../../lib/control-plane-client";
 import { db } from "../../lib/db";
+import { bumpNetworkAndNotify, bumpOrgAndNotify } from "../../lib/notify";
 import {
   buildAttributeMap,
   computeOverallScore,
@@ -45,12 +48,114 @@ function serializeDefinition(
   return {
     id: row.id,
     organizationId: row.organizationId,
+    networkId: row.networkId,
     name: row.name,
     description: row.description,
     assertions: row.assertions,
     createdAt: toIso(row.createdAt)!,
     updatedAt: toIso(row.updatedAt)!,
   };
+}
+
+function serializeSettingsFields(
+  row: typeof schema.postureOrgSettings.$inferSelect | undefined,
+): PostureOrgSettingsFields {
+  if (!row) return DEFAULT_POSTURE_ORG_SETTINGS;
+  return {
+    mode: row.mode as "monitor" | "warn" | "enforce",
+    gracePeriodMinutes: row.gracePeriodMinutes,
+    recheckOnFailSeconds: row.recheckOnFailSeconds,
+    notifyUser: row.notifyUser,
+    notifyAdmin: row.notifyAdmin,
+    autoReauthorize: row.autoReauthorize,
+    defaultSrcPosture: row.defaultSrcPosture,
+    scoringWeights: row.scoringWeights,
+  };
+}
+
+function inheritPostureSettings(
+  org: PostureOrgSettingsFields,
+  network: PostureOrgSettingsFields | null,
+): PostureOrgSettingsFields {
+  if (!network) return org;
+  return { ...org, ...network };
+}
+
+function serializeOrgSettings(
+  organizationId: string,
+  row: typeof schema.postureOrgSettings.$inferSelect | undefined,
+  options?: {
+    networkId?: string | null;
+    orgRow?: typeof schema.postureOrgSettings.$inferSelect | undefined;
+    networkRow?: typeof schema.postureOrgSettings.$inferSelect | null;
+  },
+) {
+  const orgSettings = serializeSettingsFields(options?.orgRow ?? row);
+  const networkSettings = options?.networkRow
+    ? serializeSettingsFields(options.networkRow)
+    : options?.networkRow === null
+      ? null
+      : undefined;
+  const effective =
+    options?.networkId !== undefined
+      ? inheritPostureSettings(orgSettings, networkSettings ?? null)
+      : orgSettings;
+
+  return {
+    organizationId,
+    ...(options?.networkId !== undefined
+      ? {
+          networkId: options.networkId,
+          orgSettings,
+          networkSettings: networkSettings ?? null,
+        }
+      : {}),
+    settings: effective,
+    updatedAt: toIso(
+      options?.networkRow?.updatedAt ?? row?.updatedAt ?? new Date(),
+    )!,
+  };
+}
+
+async function getNetworkInOrg(networkId: string, organizationId: string) {
+  return db.query.networks.findFirst({
+    where: and(
+      eq(schema.networks.id, networkId),
+      eq(schema.networks.organizationId, organizationId),
+    ),
+  });
+}
+
+async function getPostureSettingsRow(
+  organizationId: string,
+  networkId: string | null,
+) {
+  if (networkId) {
+    return db.query.postureOrgSettings.findFirst({
+      where: and(
+        eq(schema.postureOrgSettings.organizationId, organizationId),
+        eq(schema.postureOrgSettings.networkId, networkId),
+      ),
+    });
+  }
+  return db.query.postureOrgSettings.findFirst({
+    where: and(
+      eq(schema.postureOrgSettings.organizationId, organizationId),
+      isNull(schema.postureOrgSettings.networkId),
+    ),
+  });
+}
+
+async function bumpPostureScope(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  organizationId: string,
+  networkId: string | null,
+) {
+  if (networkId) {
+    await bumpNetworkAndNotify(tx, networkId, organizationId);
+  } else {
+    await bumpOrgAndNotify(tx, organizationId);
+  }
 }
 
 function serializeIntegration(
@@ -82,30 +187,6 @@ function serializeWebhook(row: typeof schema.postureWebhooks.$inferSelect) {
     enabled: row.enabled,
     secretSet: Boolean(row.secret),
     createdAt: toIso(row.createdAt)!,
-  };
-}
-
-function serializeOrgSettings(
-  organizationId: string,
-  row: typeof schema.postureOrgSettings.$inferSelect | undefined,
-) {
-  const settings = row
-    ? {
-        mode: row.mode as "monitor" | "warn" | "enforce",
-        gracePeriodMinutes: row.gracePeriodMinutes,
-        recheckOnFailSeconds: row.recheckOnFailSeconds,
-        notifyUser: row.notifyUser,
-        notifyAdmin: row.notifyAdmin,
-        autoReauthorize: row.autoReauthorize,
-        defaultSrcPosture: row.defaultSrcPosture,
-        scoringWeights: row.scoringWeights,
-      }
-    : DEFAULT_POSTURE_ORG_SETTINGS;
-
-  return {
-    organizationId,
-    settings,
-    updatedAt: toIso(row?.updatedAt ?? new Date())!,
   };
 }
 
@@ -176,6 +257,29 @@ async function evaluateDevicePostures(
   };
 }
 
+async function findPostureDefinition(
+  organizationId: string,
+  name: string,
+  networkId: string | null | undefined,
+) {
+  if (networkId) {
+    return db.query.postureDefinitions.findFirst({
+      where: and(
+        eq(schema.postureDefinitions.organizationId, organizationId),
+        eq(schema.postureDefinitions.name, name),
+        eq(schema.postureDefinitions.networkId, networkId),
+      ),
+    });
+  }
+  return db.query.postureDefinitions.findFirst({
+    where: and(
+      eq(schema.postureDefinitions.organizationId, organizationId),
+      eq(schema.postureDefinitions.name, name),
+      isNull(schema.postureDefinitions.networkId),
+    ),
+  });
+}
+
 export const postureRoutes = new Elysia()
   .use(sessionPlugin)
   .use(requireAuth)
@@ -209,10 +313,19 @@ export const postureRoutes = new Elysia()
       return evaluateDevicePostures(params.endpointId, auth.organizationId);
     },
   )
-  .get("/organizations/:orgId/postures", async ({ authContext }) => {
+  .get("/organizations/:orgId/postures", async ({ authContext, query }) => {
     const auth = getAuth({ authContext });
+    const { networkId } = listPostureDefinitionsQuery.parse(query);
     const rows = await db.query.postureDefinitions.findMany({
-      where: eq(schema.postureDefinitions.organizationId, auth.organizationId),
+      where: networkId
+        ? and(
+            eq(schema.postureDefinitions.organizationId, auth.organizationId),
+            or(
+              isNull(schema.postureDefinitions.networkId),
+              eq(schema.postureDefinitions.networkId, networkId),
+            ),
+          )
+        : eq(schema.postureDefinitions.organizationId, auth.organizationId),
     });
     return { postures: rows.map(serializeDefinition) };
   })
@@ -279,13 +392,35 @@ export const postureRoutes = new Elysia()
       return { integrations: rows.map(serializeIntegration) };
     },
   )
-  .get("/organizations/:orgId/posture/settings", async ({ authContext }) => {
-    const auth = getAuth({ authContext });
-    const row = await db.query.postureOrgSettings.findFirst({
-      where: eq(schema.postureOrgSettings.organizationId, auth.organizationId),
-    });
-    return serializeOrgSettings(auth.organizationId, row);
-  })
+  .get(
+    "/organizations/:orgId/posture/settings",
+    async ({ authContext, query }) => {
+      const auth = getAuth({ authContext });
+      const networkId =
+        typeof query.networkId === "string" && query.networkId.length > 0
+          ? query.networkId
+          : undefined;
+
+      if (networkId) {
+        const network = await getNetworkInOrg(networkId, auth.organizationId);
+        if (!network) return notFound("Network not found");
+
+        const [orgRow, networkRow] = await Promise.all([
+          getPostureSettingsRow(auth.organizationId, null),
+          getPostureSettingsRow(auth.organizationId, networkId),
+        ]);
+
+        return serializeOrgSettings(auth.organizationId, orgRow, {
+          networkId,
+          orgRow,
+          networkRow: networkRow ?? null,
+        });
+      }
+
+      const row = await getPostureSettingsRow(auth.organizationId, null);
+      return serializeOrgSettings(auth.organizationId, row);
+    },
+  )
   .get("/organizations/:orgId/posture/webhooks", async ({ authContext }) => {
     const auth = getAuth({ authContext });
     const rows = await db.query.postureWebhooks.findMany({
@@ -358,49 +493,35 @@ export const postureRoutes = new Elysia()
           return serializeAttribute(row);
         },
       )
-      .put(
+      .patch(
         "/organizations/:orgId/posture/settings",
         async ({ authContext, body }) => {
           const auth = getAuth({ authContext });
           const parsed = patchPostureOrgSettingsBody.parse(body);
-          const current = await db.query.postureOrgSettings.findFirst({
-            where: eq(
-              schema.postureOrgSettings.organizationId,
-              auth.organizationId,
-            ),
-          });
-          const base = current
-            ? {
-                mode: current.mode as "monitor" | "warn" | "enforce",
-                gracePeriodMinutes: current.gracePeriodMinutes,
-                recheckOnFailSeconds: current.recheckOnFailSeconds,
-                notifyUser: current.notifyUser,
-                notifyAdmin: current.notifyAdmin,
-                autoReauthorize: current.autoReauthorize,
-                defaultSrcPosture: current.defaultSrcPosture,
-                scoringWeights: current.scoringWeights,
-              }
-            : DEFAULT_POSTURE_ORG_SETTINGS;
+          const { networkId: scopeNetworkId, ...patch } = parsed;
+          const networkId = scopeNetworkId ?? null;
 
-          const next = { ...base, ...parsed };
+          if (networkId) {
+            const network = await getNetworkInOrg(
+              networkId,
+              auth.organizationId,
+            );
+            if (!network) return notFound("Network not found");
+          }
+
+          const current = await getPostureSettingsRow(
+            auth.organizationId,
+            networkId,
+          );
+          const base = serializeSettingsFields(current);
+          const next = { ...base, ...patch };
+
           const row = await db.transaction(async (tx) => {
-            const [saved] = await tx
-              .insert(schema.postureOrgSettings)
-              .values({
-                organizationId: auth.organizationId,
-                mode: next.mode,
-                gracePeriodMinutes: next.gracePeriodMinutes,
-                recheckOnFailSeconds: next.recheckOnFailSeconds,
-                notifyUser: next.notifyUser,
-                notifyAdmin: next.notifyAdmin,
-                autoReauthorize: next.autoReauthorize,
-                defaultSrcPosture: next.defaultSrcPosture,
-                scoringWeights: next.scoringWeights,
-                updatedAt: new Date(),
-              })
-              .onConflictDoUpdate({
-                target: schema.postureOrgSettings.organizationId,
-                set: {
+            let saved: typeof schema.postureOrgSettings.$inferSelect;
+            if (current) {
+              const [updated] = await tx
+                .update(schema.postureOrgSettings)
+                .set({
                   mode: next.mode,
                   gracePeriodMinutes: next.gracePeriodMinutes,
                   recheckOnFailSeconds: next.recheckOnFailSeconds,
@@ -410,23 +531,59 @@ export const postureRoutes = new Elysia()
                   defaultSrcPosture: next.defaultSrcPosture,
                   scoringWeights: next.scoringWeights,
                   updatedAt: new Date(),
-                },
-              })
-              .returning();
-
-            if (!saved) {
-              throw new Error("Failed to save posture settings");
+                })
+                .where(eq(schema.postureOrgSettings.id, current.id))
+                .returning();
+              if (!updated) {
+                throw new Error("Failed to save posture settings");
+              }
+              saved = updated;
+            } else {
+              const [inserted] = await tx
+                .insert(schema.postureOrgSettings)
+                .values({
+                  organizationId: auth.organizationId,
+                  networkId,
+                  mode: next.mode,
+                  gracePeriodMinutes: next.gracePeriodMinutes,
+                  recheckOnFailSeconds: next.recheckOnFailSeconds,
+                  notifyUser: next.notifyUser,
+                  notifyAdmin: next.notifyAdmin,
+                  autoReauthorize: next.autoReauthorize,
+                  defaultSrcPosture: next.defaultSrcPosture,
+                  scoringWeights: next.scoringWeights,
+                  updatedAt: new Date(),
+                })
+                .returning();
+              if (!inserted) {
+                throw new Error("Failed to save posture settings");
+              }
+              saved = inserted;
             }
 
             await writeAudit(tx, {
               organizationId: auth.organizationId,
               actor: auth.user.id,
               action: "posture.settings.updated",
-              target: auth.organizationId,
+              target: networkId ?? auth.organizationId,
+              metadata: { networkId },
             });
 
+            await bumpPostureScope(tx, auth.organizationId, networkId);
             return saved;
           });
+
+          if (networkId) {
+            const orgRow = await getPostureSettingsRow(
+              auth.organizationId,
+              null,
+            );
+            return serializeOrgSettings(auth.organizationId, orgRow, {
+              networkId,
+              orgRow,
+              networkRow: row,
+            });
+          }
 
           return serializeOrgSettings(auth.organizationId, row);
         },
@@ -473,12 +630,19 @@ export const postureRoutes = new Elysia()
       .post("/organizations/:orgId/postures", async ({ authContext, body }) => {
         const auth = getAuth({ authContext });
         const parsed = createPostureDefinitionBody.parse(body);
+        const networkId = parsed.networkId ?? null;
+
+        if (networkId) {
+          const network = await getNetworkInOrg(networkId, auth.organizationId);
+          if (!network) return notFound("Network not found");
+        }
 
         const row = await db.transaction(async (tx) => {
           const [created] = await tx
             .insert(schema.postureDefinitions)
             .values({
               organizationId: auth.organizationId,
+              networkId,
               name: parsed.name,
               description: parsed.description ?? null,
               assertions: parsed.assertions,
@@ -494,9 +658,10 @@ export const postureRoutes = new Elysia()
             actor: auth.user.id,
             action: "posture.definition.created",
             target: created.id,
-            metadata: { name: created.name },
+            metadata: { name: created.name, networkId },
           });
 
+          await bumpPostureScope(tx, auth.organizationId, networkId);
           return created;
         });
 
@@ -579,16 +744,19 @@ export const postureRoutes = new Elysia()
       .use(requirePermission({ posture: ["update"] }))
       .put(
         "/organizations/:orgId/postures/:name",
-        async ({ authContext, params, body }) => {
+        async ({ authContext, params, body, query }) => {
           const auth = getAuth({ authContext });
           const parsed = updatePostureDefinitionBody.parse(body);
+          const networkId =
+            typeof query.networkId === "string" && query.networkId.length > 0
+              ? query.networkId
+              : null;
 
-          const existing = await db.query.postureDefinitions.findFirst({
-            where: and(
-              eq(schema.postureDefinitions.organizationId, auth.organizationId),
-              eq(schema.postureDefinitions.name, params.name),
-            ),
-          });
+          const existing = await findPostureDefinition(
+            auth.organizationId,
+            params.name,
+            networkId,
+          );
           if (!existing) return notFound("Posture definition not found");
 
           const row = await db.transaction(async (tx) => {
@@ -615,9 +783,10 @@ export const postureRoutes = new Elysia()
               actor: auth.user.id,
               action: "posture.definition.updated",
               target: updated.id,
-              metadata: { name: updated.name },
+              metadata: { name: updated.name, networkId: existing.networkId },
             });
 
+            await bumpPostureScope(tx, auth.organizationId, existing.networkId);
             return updated;
           });
 
@@ -805,14 +974,18 @@ export const postureRoutes = new Elysia()
       )
       .delete(
         "/organizations/:orgId/postures/:name",
-        async ({ authContext, params }) => {
+        async ({ authContext, params, query }) => {
           const auth = getAuth({ authContext });
-          const existing = await db.query.postureDefinitions.findFirst({
-            where: and(
-              eq(schema.postureDefinitions.organizationId, auth.organizationId),
-              eq(schema.postureDefinitions.name, params.name),
-            ),
-          });
+          const networkId =
+            typeof query.networkId === "string" && query.networkId.length > 0
+              ? query.networkId
+              : null;
+
+          const existing = await findPostureDefinition(
+            auth.organizationId,
+            params.name,
+            networkId,
+          );
           if (!existing) return notFound("Posture definition not found");
 
           await db.transaction(async (tx) => {
@@ -825,8 +998,10 @@ export const postureRoutes = new Elysia()
               actor: auth.user.id,
               action: "posture.definition.deleted",
               target: existing.id,
-              metadata: { name: existing.name },
+              metadata: { name: existing.name, networkId: existing.networkId },
             });
+
+            await bumpPostureScope(tx, auth.organizationId, existing.networkId);
           });
 
           return { ok: true };

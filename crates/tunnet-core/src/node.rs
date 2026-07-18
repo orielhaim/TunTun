@@ -68,6 +68,17 @@ pub struct PostureHooks {
     pub on_status: Option<PostureStatusHook>,
 }
 
+/// Called when remote org agent policy arrives (snapshot or hot push).
+/// Returns the merged effective config for reporting to the control plane.
+pub type AgentPolicyHook = Arc<
+    dyn Fn(tunnet_common::RemoteAgentPolicy) -> tunnet_common::EffectiveAgentConfig + Send + Sync,
+>;
+
+#[derive(Clone, Default)]
+pub struct AgentConfigHooks {
+    pub on_remote_policy: Option<AgentPolicyHook>,
+}
+
 /// Per-Direct-network runtime (docs + firewall + state).
 #[cfg(feature = "direct")]
 #[derive(Clone)]
@@ -91,6 +102,8 @@ pub struct CoreNodeConfig {
     pub on_kill_ssh: Option<KillSshHook>,
     /// Optional hooks for posture control-plane messages.
     pub posture_hooks: Option<PostureHooks>,
+    /// Optional hooks for remote agent policy merge / report.
+    pub agent_config_hooks: Option<AgentConfigHooks>,
     /// Shared flag updated by posture status; gates ACL rules with `srcPosture`.
     pub src_posture_ok: Option<Arc<arc_swap::ArcSwap<bool>>>,
     /// Enable mDNS LAN address lookup (Direct default: true).
@@ -112,6 +125,7 @@ impl Default for CoreNodeConfig {
             kind: "sdk",
             on_kill_ssh: None,
             posture_hooks: None,
+            agent_config_hooks: None,
             src_posture_ok: None,
             enable_mdns: true,
             enable_gossip: true,
@@ -351,6 +365,7 @@ impl CoreNode {
             Some(send.clone()),
             cfg.on_kill_ssh.clone(),
             cfg.posture_hooks.clone(),
+            cfg.agent_config_hooks.clone(),
         );
         spawn_poll_fallback(
             signed.clone(),

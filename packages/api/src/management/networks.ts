@@ -1,6 +1,8 @@
 import { ipv4CidrSchema } from "@tunnet/ip";
 import { z } from "zod";
 
+import { networkSettingsSchema, remoteAgentPolicySchema } from "./org-settings";
+
 const networkNameSchema = z
   .string()
   .min(3)
@@ -14,6 +16,7 @@ export const networkSchema = z.object({
   cidr: z.string(),
   mtu: z.number().int().min(576).max(9000),
   version: z.number().int().nonnegative(),
+  settings: networkSettingsSchema,
   createdAt: z.string().datetime(),
 });
 
@@ -27,6 +30,11 @@ export const patchNetworkBody = z.object({
   name: networkNameSchema.optional(),
   cidr: ipv4CidrSchema.optional(),
   mtu: z.number().int().min(576).max(9000).optional(),
+  settings: z
+    .object({
+      agentPolicy: remoteAgentPolicySchema.partial().optional(),
+    })
+    .optional(),
 });
 
 export const networkListResponse = z.object({

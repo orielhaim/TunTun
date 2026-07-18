@@ -13,6 +13,7 @@ use tunnet_posture::{
     evaluate_named_postures, format_remediation_messages, parse_assertion,
     remediation_for_failures,
 };
+use uuid::Uuid;
 
 use crate::state::AppState;
 use crate::ws_hub::WsHub;
@@ -116,8 +117,11 @@ pub async fn handle_posture_report(
     }
 
     let merged = load_device_attributes(&state.pool, endpoint_id).await?;
-    let definitions = load_posture_definitions(&state.pool, &organization_id).await?;
-    let settings = load_org_posture_settings(&state.pool, &organization_id).await?;
+    let network_ids = load_active_network_ids(&state.pool, endpoint_id).await?;
+    let definitions =
+        load_inherited_posture_definitions(&state.pool, &organization_id, &network_ids).await?;
+    let settings =
+        load_inherited_posture_settings(&state.pool, &organization_id, &network_ids).await?;
 
     let definition_map = parse_posture_definitions(&definitions);
     let posture_names: Vec<String> = definitions.iter().map(|d| d.name.clone()).collect();
@@ -286,41 +290,145 @@ async fn load_public_ip(pool: &PgPool, endpoint_id: &str) -> anyhow::Result<Opti
     Ok(ip.filter(|s| !s.is_empty()))
 }
 
-async fn load_posture_definitions(
+async fn load_active_network_ids(pool: &PgPool, endpoint_id: &str) -> anyhow::Result<Vec<Uuid>> {
+    let rows: Vec<(Uuid,)> = sqlx::query_as(
+        "SELECT network_id FROM network_memberships \
+         WHERE endpoint_id = $1 AND status = 'active'",
+    )
+    .bind(endpoint_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|(id,)| id).collect())
+}
+
+/// Org defs plus network overrides (same name → network wins).
+async fn load_inherited_posture_definitions(
     pool: &PgPool,
     organization_id: &str,
+    network_ids: &[Uuid],
 ) -> anyhow::Result<Vec<PostureDefinitionRow>> {
-    let rows = sqlx::query_as(
-        "SELECT id, name, assertions FROM posture_definitions WHERE organization_id = $1",
+    let org_rows: Vec<PostureDefinitionRow> = sqlx::query_as(
+        "SELECT id, name, assertions FROM posture_definitions \
+         WHERE organization_id = $1 AND network_id IS NULL",
     )
     .bind(organization_id)
     .fetch_all(pool)
     .await?;
-    Ok(rows)
+
+    let mut by_name: HashMap<String, PostureDefinitionRow> =
+        org_rows.into_iter().map(|r| (r.name.clone(), r)).collect();
+
+    for network_id in network_ids {
+        let net_rows: Vec<PostureDefinitionRow> = sqlx::query_as(
+            "SELECT id, name, assertions FROM posture_definitions \
+             WHERE organization_id = $1 AND network_id = $2",
+        )
+        .bind(organization_id)
+        .bind(network_id)
+        .fetch_all(pool)
+        .await?;
+        for row in net_rows {
+            by_name.insert(row.name.clone(), row);
+        }
+    }
+
+    Ok(by_name.into_values().collect())
 }
 
+async fn load_settings_row(
+    pool: &PgPool,
+    organization_id: &str,
+    network_id: Option<Uuid>,
+) -> anyhow::Result<Option<OrgPostureSettingsRow>> {
+    if let Some(nid) = network_id {
+        Ok(sqlx::query_as(
+            "SELECT mode, grace_period_minutes, recheck_on_fail_seconds, notify_user, \
+                    notify_admin, auto_reauthorize, default_src_posture \
+             FROM posture_org_settings \
+             WHERE organization_id = $1 AND network_id = $2",
+        )
+        .bind(organization_id)
+        .bind(nid)
+        .fetch_optional(pool)
+        .await?)
+    } else {
+        Ok(sqlx::query_as(
+            "SELECT mode, grace_period_minutes, recheck_on_fail_seconds, notify_user, \
+                    notify_admin, auto_reauthorize, default_src_posture \
+             FROM posture_org_settings \
+             WHERE organization_id = $1 AND network_id IS NULL",
+        )
+        .bind(organization_id)
+        .fetch_optional(pool)
+        .await?)
+    }
+}
+
+fn mode_rank(mode: &str) -> u8 {
+    match mode {
+        "enforce" => 3,
+        "warn" => 2,
+        _ => 1,
+    }
+}
+
+fn to_enforcement(row: OrgPostureSettingsRow) -> PostureEnforcementConfig {
+    PostureEnforcementConfig {
+        mode: row.mode,
+        grace_period_minutes: row.grace_period_minutes.max(0) as u32,
+        recheck_on_fail_secs: row.recheck_on_fail_seconds.max(0) as u64,
+        notify_user: row.notify_user,
+        notify_admin: row.notify_admin,
+        auto_reauthorize: row.auto_reauthorize,
+    }
+}
+
+/// Inherit settings per network (network ← org), then pick the strictest mode.
+async fn load_inherited_posture_settings(
+    pool: &PgPool,
+    organization_id: &str,
+    network_ids: &[Uuid],
+) -> anyhow::Result<PostureEnforcementConfig> {
+    let org = load_settings_row(pool, organization_id, None)
+        .await?
+        .map(to_enforcement)
+        .unwrap_or_default();
+
+    if network_ids.is_empty() {
+        return Ok(org);
+    }
+
+    let mut best = org.clone();
+    for nid in network_ids {
+        let inherited = match load_settings_row(pool, organization_id, Some(*nid)).await? {
+            Some(row) => to_enforcement(row),
+            None => org.clone(),
+        };
+        if mode_rank(&inherited.mode) > mode_rank(&best.mode) {
+            best = inherited;
+        } else if mode_rank(&inherited.mode) == mode_rank(&best.mode) {
+            // Same mode: prefer shorter grace / faster recheck from network row if present.
+            best.grace_period_minutes = best
+                .grace_period_minutes
+                .min(inherited.grace_period_minutes);
+            best.recheck_on_fail_secs = best
+                .recheck_on_fail_secs
+                .min(inherited.recheck_on_fail_secs);
+            best.notify_admin = best.notify_admin || inherited.notify_admin;
+            best.notify_user = best.notify_user || inherited.notify_user;
+        }
+    }
+    Ok(best)
+}
+
+#[allow(dead_code)]
 pub async fn load_org_posture_settings(
     pool: &PgPool,
     organization_id: &str,
 ) -> anyhow::Result<PostureEnforcementConfig> {
-    let row: Option<OrgPostureSettingsRow> = sqlx::query_as(
-        "SELECT mode, grace_period_minutes, recheck_on_fail_seconds, notify_user, \
-                notify_admin, auto_reauthorize, default_src_posture \
-         FROM posture_org_settings WHERE organization_id = $1",
-    )
-    .bind(organization_id)
-    .fetch_optional(pool)
-    .await?;
-
-    Ok(row
-        .map(|r| PostureEnforcementConfig {
-            mode: r.mode,
-            grace_period_minutes: r.grace_period_minutes.max(0) as u32,
-            recheck_on_fail_secs: r.recheck_on_fail_seconds.max(0) as u64,
-            notify_user: r.notify_user,
-            notify_admin: r.notify_admin,
-            auto_reauthorize: r.auto_reauthorize,
-        })
+    Ok(load_settings_row(pool, organization_id, None)
+        .await?
+        .map(to_enforcement)
         .unwrap_or_default())
 }
 

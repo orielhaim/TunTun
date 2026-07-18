@@ -48,6 +48,7 @@ import { Route as AppNetworksNetworkIdAccessRouteImport } from './routes/app/net
 import { Route as AppNetworksNetworkIdEnrollmentRouteImport } from './routes/app/networks/$networkId/enrollment'
 import { Route as AppNetworksNetworkIdMachinesRouteImport } from './routes/app/networks/$networkId/machines'
 import { Route as AppNetworksNetworkIdMapRouteImport } from './routes/app/networks/$networkId/map'
+import { Route as AppNetworksNetworkIdPolicyRouteImport } from './routes/app/networks/$networkId/policy'
 import { Route as AppNetworksNetworkIdRoutesRouteImport } from './routes/app/networks/$networkId/routes'
 
 const IndexRoute = IndexRouteImport.update({
@@ -252,6 +253,12 @@ const AppNetworksNetworkIdMapRoute = AppNetworksNetworkIdMapRouteImport.update({
   path: '/map',
   getParentRoute: () => AppNetworksNetworkIdRouteRoute,
 } as any)
+const AppNetworksNetworkIdPolicyRoute =
+  AppNetworksNetworkIdPolicyRouteImport.update({
+    id: '/policy',
+    path: '/policy',
+    getParentRoute: () => AppNetworksNetworkIdRouteRoute,
+  } as any)
 const AppNetworksNetworkIdRoutesRoute =
   AppNetworksNetworkIdRoutesRouteImport.update({
     id: '/routes',
@@ -298,6 +305,7 @@ export interface FileRoutesByFullPath {
   '/app/networks/$networkId/enrollment': typeof AppNetworksNetworkIdEnrollmentRoute
   '/app/networks/$networkId/machines': typeof AppNetworksNetworkIdMachinesRoute
   '/app/networks/$networkId/map': typeof AppNetworksNetworkIdMapRoute
+  '/app/networks/$networkId/policy': typeof AppNetworksNetworkIdPolicyRoute
   '/app/networks/$networkId/routes': typeof AppNetworksNetworkIdRoutesRoute
   '/app/networks/$networkId/': typeof AppNetworksNetworkIdIndexRoute
 }
@@ -337,6 +345,7 @@ export interface FileRoutesByTo {
   '/app/networks/$networkId/enrollment': typeof AppNetworksNetworkIdEnrollmentRoute
   '/app/networks/$networkId/machines': typeof AppNetworksNetworkIdMachinesRoute
   '/app/networks/$networkId/map': typeof AppNetworksNetworkIdMapRoute
+  '/app/networks/$networkId/policy': typeof AppNetworksNetworkIdPolicyRoute
   '/app/networks/$networkId/routes': typeof AppNetworksNetworkIdRoutesRoute
   '/app/networks/$networkId': typeof AppNetworksNetworkIdIndexRoute
 }
@@ -380,6 +389,7 @@ export interface FileRoutesById {
   '/app/networks/$networkId/enrollment': typeof AppNetworksNetworkIdEnrollmentRoute
   '/app/networks/$networkId/machines': typeof AppNetworksNetworkIdMachinesRoute
   '/app/networks/$networkId/map': typeof AppNetworksNetworkIdMapRoute
+  '/app/networks/$networkId/policy': typeof AppNetworksNetworkIdPolicyRoute
   '/app/networks/$networkId/routes': typeof AppNetworksNetworkIdRoutesRoute
   '/app/networks/$networkId/': typeof AppNetworksNetworkIdIndexRoute
 }
@@ -424,6 +434,7 @@ export interface FileRouteTypes {
     | '/app/networks/$networkId/enrollment'
     | '/app/networks/$networkId/machines'
     | '/app/networks/$networkId/map'
+    | '/app/networks/$networkId/policy'
     | '/app/networks/$networkId/routes'
     | '/app/networks/$networkId/'
   fileRoutesByTo: FileRoutesByTo
@@ -463,6 +474,7 @@ export interface FileRouteTypes {
     | '/app/networks/$networkId/enrollment'
     | '/app/networks/$networkId/machines'
     | '/app/networks/$networkId/map'
+    | '/app/networks/$networkId/policy'
     | '/app/networks/$networkId/routes'
     | '/app/networks/$networkId'
   id:
@@ -505,6 +517,7 @@ export interface FileRouteTypes {
     | '/app/networks/$networkId/enrollment'
     | '/app/networks/$networkId/machines'
     | '/app/networks/$networkId/map'
+    | '/app/networks/$networkId/policy'
     | '/app/networks/$networkId/routes'
     | '/app/networks/$networkId/'
   fileRoutesById: FileRoutesById
@@ -795,6 +808,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppNetworksNetworkIdMapRouteImport
       parentRoute: typeof AppNetworksNetworkIdRouteRoute
     }
+    '/app/networks/$networkId/policy': {
+      id: '/app/networks/$networkId/policy'
+      path: '/policy'
+      fullPath: '/app/networks/$networkId/policy'
+      preLoaderRoute: typeof AppNetworksNetworkIdPolicyRouteImport
+      parentRoute: typeof AppNetworksNetworkIdRouteRoute
+    }
     '/app/networks/$networkId/routes': {
       id: '/app/networks/$networkId/routes'
       path: '/routes'
@@ -821,6 +841,7 @@ interface AppNetworksNetworkIdRouteRouteChildren {
   AppNetworksNetworkIdEnrollmentRoute: typeof AppNetworksNetworkIdEnrollmentRoute
   AppNetworksNetworkIdMachinesRoute: typeof AppNetworksNetworkIdMachinesRoute
   AppNetworksNetworkIdMapRoute: typeof AppNetworksNetworkIdMapRoute
+  AppNetworksNetworkIdPolicyRoute: typeof AppNetworksNetworkIdPolicyRoute
   AppNetworksNetworkIdRoutesRoute: typeof AppNetworksNetworkIdRoutesRoute
   AppNetworksNetworkIdIndexRoute: typeof AppNetworksNetworkIdIndexRoute
 }
@@ -831,6 +852,7 @@ const AppNetworksNetworkIdRouteRouteChildren: AppNetworksNetworkIdRouteRouteChil
     AppNetworksNetworkIdEnrollmentRoute: AppNetworksNetworkIdEnrollmentRoute,
     AppNetworksNetworkIdMachinesRoute: AppNetworksNetworkIdMachinesRoute,
     AppNetworksNetworkIdMapRoute: AppNetworksNetworkIdMapRoute,
+    AppNetworksNetworkIdPolicyRoute: AppNetworksNetworkIdPolicyRoute,
     AppNetworksNetworkIdRoutesRoute: AppNetworksNetworkIdRoutesRoute,
     AppNetworksNetworkIdIndexRoute: AppNetworksNetworkIdIndexRoute,
   }

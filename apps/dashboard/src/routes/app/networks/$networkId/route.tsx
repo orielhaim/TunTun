@@ -34,7 +34,9 @@ function NetworkLayout() {
       ? "enrollment"
       : pathname.endsWith("/routes")
         ? "routes"
-        : "overview";
+        : pathname.endsWith("/policy")
+          ? "policy"
+          : "overview";
 
   if (isPending) {
     return <Skeleton className="h-64 w-full" />;
@@ -99,6 +101,18 @@ function NetworkLayout() {
             }
           >
             Routes
+          </TabsTrigger>
+          <TabsTrigger
+            value="policy"
+            className="px-3"
+            render={
+              <Link
+                to="/app/networks/$networkId/policy"
+                params={{ networkId }}
+              />
+            }
+          >
+            Policy
           </TabsTrigger>
           <TabsTrigger
             value="enrollment"

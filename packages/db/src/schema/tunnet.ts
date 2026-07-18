@@ -104,6 +104,8 @@ export const networks = pgTable(
     cidr: cidr("cidr").notNull(),
     /** 1280 = IPv6 minimum; safe for QUIC-over-UDP tunnel overhead. */
     mtu: integer("mtu").notNull().default(1280),
+    /** Network overrides for org defaults (e.g. `{ agentPolicy: {...} }`). */
+    settings: jsonb("settings").notNull().default({}),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -1250,6 +1252,10 @@ export const postureDefinitions = pgTable(
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
+    /** Null = org-level default; set = network-level override / addition. */
+    networkId: uuid("network_id").references(() => networks.id, {
+      onDelete: "cascade",
+    }),
     name: text("name").notNull(),
     description: text("description"),
     assertions: jsonb("assertions").$type<string[]>().notNull(),
@@ -1260,7 +1266,15 @@ export const postureDefinitions = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (t) => [unique().on(t.organizationId, t.name)],
+  (t) => [
+    uniqueIndex("posture_definitions_org_name_uidx")
+      .on(t.organizationId, t.name)
+      .where(sql`${t.networkId} IS NULL`),
+    uniqueIndex("posture_definitions_network_name_uidx")
+      .on(t.organizationId, t.networkId, t.name)
+      .where(sql`${t.networkId} IS NOT NULL`),
+    index("posture_definitions_by_network_idx").on(t.networkId),
+  ],
 );
 
 export const postureEvaluations = pgTable(
@@ -1340,12 +1354,18 @@ export const postureWebhooks = pgTable(
   (t) => [index("posture_webhooks_by_org_idx").on(t.organizationId)],
 );
 
+/** Org defaults (`network_id` null) or per-network overrides. */
 export const postureOrgSettings = pgTable(
   "posture_org_settings",
   {
+    id: id(),
     organizationId: text("organization_id")
-      .primaryKey()
+      .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
+    /** Null = org-level default; set = network override. */
+    networkId: uuid("network_id").references(() => networks.id, {
+      onDelete: "cascade",
+    }),
     mode: text("mode").notNull().default("monitor"),
     gracePeriodMinutes: integer("grace_period_minutes").notNull().default(30),
     recheckOnFailSeconds: integer("recheck_on_fail_seconds")
@@ -1371,6 +1391,13 @@ export const postureOrgSettings = pgTable(
       "posture_org_settings_mode_check",
       sql`${t.mode} IN ('monitor', 'warn', 'enforce')`,
     ),
+    uniqueIndex("posture_org_settings_org_default_uidx")
+      .on(t.organizationId)
+      .where(sql`${t.networkId} IS NULL`),
+    uniqueIndex("posture_org_settings_network_uidx")
+      .on(t.organizationId, t.networkId)
+      .where(sql`${t.networkId} IS NOT NULL`),
+    index("posture_org_settings_by_network_idx").on(t.networkId),
   ],
 );
 
@@ -1857,6 +1884,10 @@ export const postureDefinitionsRelations = relations(
       fields: [postureDefinitions.organizationId],
       references: [organization.id],
     }),
+    network: one(networks, {
+      fields: [postureDefinitions.networkId],
+      references: [networks.id],
+    }),
     evaluations: many(postureEvaluations),
   }),
 );
@@ -1905,6 +1936,10 @@ export const postureOrgSettingsRelations = relations(
     organization: one(organization, {
       fields: [postureOrgSettings.organizationId],
       references: [organization.id],
+    }),
+    network: one(networks, {
+      fields: [postureOrgSettings.networkId],
+      references: [networks.id],
     }),
   }),
 );

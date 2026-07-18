@@ -124,7 +124,8 @@ impl WsHub {
         for endpoint_id in ids {
             match crate::snapshot::build_endpoint_snapshot(pool, policy_key, &endpoint_id).await {
                 Ok(snap) => {
-                    self.push_to(&endpoint_id, ServerMsg::Snapshot(snap)).await;
+                    self.push_to(&endpoint_id, ServerMsg::Snapshot(Box::new(snap)))
+                        .await;
                 }
                 Err(e) => {
                     tracing::warn!(
@@ -159,7 +160,8 @@ impl WsHub {
         for endpoint_id in ids {
             match crate::snapshot::build_endpoint_snapshot(pool, policy_key, &endpoint_id).await {
                 Ok(snap) => {
-                    self.push_to(&endpoint_id, ServerMsg::Snapshot(snap)).await;
+                    self.push_to(&endpoint_id, ServerMsg::Snapshot(Box::new(snap)))
+                        .await;
                 }
                 Err(e) => {
                     tracing::warn!(
