@@ -43,6 +43,7 @@ import {
   hostnameRouteListResponse,
   hostnameRouteSchema,
   internalCaSchema,
+  kubernetesHubResponse,
   networkListResponse,
   networkMetricsResponse,
   networkSchema,
@@ -587,6 +588,9 @@ export function createManagementClient(orgId: string) {
         {},
         topologyResponse,
       ),
+
+    getKubernetes: () =>
+      request(orgId, org("/kubernetes"), {}, kubernetesHubResponse),
 
     getNetworkMetrics: (networkId: string) =>
       request(

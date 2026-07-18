@@ -16,7 +16,10 @@ import {
   getDeviceLabelsInOrg,
 } from "../../lib/device";
 import { bumpNetworkAndNotify, bumpOrgAndNotify } from "../../lib/notify";
-import { removeDeviceMembership } from "../../lib/remove-device-membership";
+import {
+  removeDeviceMembership,
+  removeDeviceMembershipsBulk,
+} from "../../lib/remove-device-membership";
 import { serializeDevice } from "../../lib/serialize-device";
 import { getAuth, requireAuth, requirePermission } from "./middleware/authz";
 import { badRequest, notFound, sessionPlugin } from "./middleware/session";
@@ -424,18 +427,15 @@ export const devicesRoutes = new Elysia()
             return true;
           });
 
-          await db.transaction(async (tx) => {
-            for (const item of items) {
-              await removeDeviceMembership(tx, {
-                organizationId: auth.organizationId,
-                actor: auth.user.id,
-                networkId: item.networkId,
-                endpointId: item.endpointId,
-              });
-            }
+          const deleted = await db.transaction(async (tx) => {
+            return removeDeviceMembershipsBulk(tx, {
+              organizationId: auth.organizationId,
+              actor: auth.user.id,
+              items,
+            });
           });
 
-          return { ok: true as const, deleted: items.length };
+          return { ok: true as const, deleted };
         },
       )
       .delete(

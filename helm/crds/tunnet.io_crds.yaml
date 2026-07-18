@@ -1,0 +1,878 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: tunnetconnectors.tunnet.io
+spec:
+  group: tunnet.io
+  names:
+    categories: []
+    kind: TunnetConnector
+    plural: tunnetconnectors
+    shortNames:
+    - tnc
+    singular: tunnetconnector
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.conditions[?(@.type=="ConnectorReady")].status
+      name: Ready
+      type: string
+    - jsonPath: .status.advertisedRoutes.length
+      name: Routes
+      type: integer
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Auto-generated derived type for TunnetConnectorSpec via `CustomResource`
+        properties:
+          spec:
+            properties:
+              authSecretRef:
+                description: Shared auth secret reference (optional cross-namespace).
+                nullable: true
+                properties:
+                  name:
+                    type: string
+                  namespace:
+                    nullable: true
+                    type: string
+                required:
+                - name
+                type: object
+              controlUrl:
+                nullable: true
+                type: string
+              exitNode:
+                default: false
+                type: boolean
+              hostname:
+                nullable: true
+                type: string
+              labels:
+                additionalProperties:
+                  type: string
+                type: object
+              managementUrl:
+                nullable: true
+                type: string
+              networkRef:
+                description: Network selection by UUID or human name.
+                properties:
+                  id:
+                    nullable: true
+                    type: string
+                  name:
+                    nullable: true
+                    type: string
+                type: object
+              proxyClassRef:
+                nullable: true
+                type: string
+              replicas:
+                default: 1
+                format: uint32
+                minimum: 0.0
+                type: integer
+              subnetRouter:
+                properties:
+                  autoDiscoverClusterCidrs:
+                    default: false
+                    type: boolean
+                  routes:
+                    items:
+                      type: string
+                    type: array
+                type: object
+              tags:
+                items:
+                  type: string
+                type: array
+            required:
+            - networkRef
+            - subnetRouter
+            type: object
+          status:
+            nullable: true
+            properties:
+              advertisedRoutes:
+                items:
+                  type: string
+                type: array
+              conditions:
+                items:
+                  description: Standard status condition.
+                  properties:
+                    lastTransitionTime:
+                      nullable: true
+                      type: string
+                    message:
+                      nullable: true
+                      type: string
+                    reason:
+                      nullable: true
+                      type: string
+                    status:
+                      type: string
+                    type:
+                      type: string
+                  required:
+                  - status
+                  - type
+                  type: object
+                type: array
+              nodes:
+                items:
+                  description: Observed node enrolled by the operator.
+                  properties:
+                    endpointId:
+                      type: string
+                    hostname:
+                      type: string
+                    meshIp:
+                      type: string
+                    ordinal:
+                      format: int32
+                      nullable: true
+                      type: integer
+                  required:
+                  - endpointId
+                  - hostname
+                  - meshIp
+                  type: object
+                type: array
+              observedGeneration:
+                format: int64
+                nullable: true
+                type: integer
+            type: object
+        required:
+        - spec
+        title: TunnetConnector
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: tunnetingresses.tunnet.io
+spec:
+  group: tunnet.io
+  names:
+    categories: []
+    kind: TunnetIngress
+    plural: tunnetingresses
+    shortNames:
+    - tni
+    singular: tunnetingress
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.conditions[?(@.type=="IngressReady")].status
+      name: Ready
+      type: string
+    - jsonPath: .status.meshHostname
+      name: Hostname
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Auto-generated derived type for TunnetIngressSpec via `CustomResource`
+        properties:
+          spec:
+            properties:
+              authSecretRef:
+                description: Shared auth secret reference (optional cross-namespace).
+                nullable: true
+                properties:
+                  name:
+                    type: string
+                  namespace:
+                    nullable: true
+                    type: string
+                required:
+                - name
+                type: object
+              networkRef:
+                description: Network selection by UUID or human name.
+                properties:
+                  id:
+                    nullable: true
+                    type: string
+                  name:
+                    nullable: true
+                    type: string
+                type: object
+              proxyGroupRef:
+                nullable: true
+                type: string
+              serve:
+                properties:
+                  acl:
+                    nullable: true
+                    properties:
+                      allowTags:
+                        items:
+                          type: string
+                        type: array
+                      mode:
+                        default: all_peers
+                        type: string
+                    type: object
+                  hostname:
+                    type: string
+                  protocol:
+                    default: https
+                    type: string
+                  tls:
+                    nullable: true
+                    properties:
+                      fromOrgCa:
+                        default: false
+                        type: boolean
+                    type: object
+                required:
+                - hostname
+                type: object
+              service:
+                description: Backend Kubernetes Service reference.
+                properties:
+                  name:
+                    type: string
+                  port:
+                    format: uint16
+                    maximum: 65535.0
+                    minimum: 0.0
+                    type: integer
+                required:
+                - name
+                - port
+                type: object
+            required:
+            - networkRef
+            - serve
+            - service
+            type: object
+          status:
+            nullable: true
+            properties:
+              conditions:
+                items:
+                  description: Standard status condition.
+                  properties:
+                    lastTransitionTime:
+                      nullable: true
+                      type: string
+                    message:
+                      nullable: true
+                      type: string
+                    reason:
+                      nullable: true
+                      type: string
+                    status:
+                      type: string
+                    type:
+                      type: string
+                  required:
+                  - status
+                  - type
+                  type: object
+                type: array
+              meshHostname:
+                nullable: true
+                type: string
+              meshIp:
+                nullable: true
+                type: string
+              observedGeneration:
+                format: int64
+                nullable: true
+                type: integer
+            type: object
+        required:
+        - spec
+        title: TunnetIngress
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: tunnettunnels.tunnet.io
+spec:
+  group: tunnet.io
+  names:
+    categories: []
+    kind: TunnetTunnel
+    plural: tunnettunnels
+    shortNames:
+    - tnt
+    singular: tunnettunnel
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.conditions[?(@.type=="TunnelReady")].status
+      name: Ready
+      type: string
+    - jsonPath: .status.publicUrl
+      name: Public URL
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Auto-generated derived type for TunnetTunnelSpec via `CustomResource`
+        properties:
+          spec:
+            properties:
+              authSecretRef:
+                description: Shared auth secret reference (optional cross-namespace).
+                nullable: true
+                properties:
+                  name:
+                    type: string
+                  namespace:
+                    nullable: true
+                    type: string
+                required:
+                - name
+                type: object
+              networkRef:
+                description: Network selection by UUID or human name.
+                properties:
+                  id:
+                    nullable: true
+                    type: string
+                  name:
+                    nullable: true
+                    type: string
+                type: object
+              proxyGroupRef:
+                nullable: true
+                type: string
+              service:
+                description: Backend Kubernetes Service reference.
+                properties:
+                  name:
+                    type: string
+                  port:
+                    format: uint16
+                    maximum: 65535.0
+                    minimum: 0.0
+                    type: integer
+                required:
+                - name
+                - port
+                type: object
+              tunnel:
+                properties:
+                  customDomain:
+                    nullable: true
+                    type: string
+                  protocol:
+                    default: https
+                    type: string
+                  redirectRules:
+                    items:
+                      description: Path-based redirect for public tunnels (CRD schema).
+                      properties:
+                        pathPattern:
+                          type: string
+                        targetIpv4:
+                          nullable: true
+                          type: string
+                        targetPort:
+                          format: uint16
+                          maximum: 65535.0
+                          minimum: 0.0
+                          type: integer
+                      required:
+                      - pathPattern
+                      - targetPort
+                      type: object
+                    type: array
+                  relayUrl:
+                    nullable: true
+                    type: string
+                  subdomain:
+                    nullable: true
+                    type: string
+                type: object
+            required:
+            - networkRef
+            - service
+            - tunnel
+            type: object
+          status:
+            nullable: true
+            properties:
+              conditions:
+                items:
+                  description: Standard status condition.
+                  properties:
+                    lastTransitionTime:
+                      nullable: true
+                      type: string
+                    message:
+                      nullable: true
+                      type: string
+                    reason:
+                      nullable: true
+                      type: string
+                    status:
+                      type: string
+                    type:
+                      type: string
+                  required:
+                  - status
+                  - type
+                  type: object
+                type: array
+              customDomainVerified:
+                nullable: true
+                type: boolean
+              observedGeneration:
+                format: int64
+                nullable: true
+                type: integer
+              publicUrl:
+                nullable: true
+                type: string
+            type: object
+        required:
+        - spec
+        title: TunnetTunnel
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: tunnetegresses.tunnet.io
+spec:
+  group: tunnet.io
+  names:
+    categories: []
+    kind: TunnetEgress
+    plural: tunnetegresses
+    shortNames:
+    - tne
+    singular: tunnetegress
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.conditions[?(@.type=="EgressReady")].status
+      name: Ready
+      type: string
+    - jsonPath: .status.targetMeshIP
+      name: Target
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Auto-generated derived type for TunnetEgressSpec via `CustomResource`
+        properties:
+          spec:
+            properties:
+              authSecretRef:
+                description: Shared auth secret reference (optional cross-namespace).
+                nullable: true
+                properties:
+                  name:
+                    type: string
+                  namespace:
+                    nullable: true
+                    type: string
+                required:
+                - name
+                type: object
+              clusterService:
+                properties:
+                  name:
+                    type: string
+                  port:
+                    format: uint16
+                    maximum: 65535.0
+                    minimum: 0.0
+                    type: integer
+                required:
+                - name
+                - port
+                type: object
+              networkRef:
+                description: Network selection by UUID or human name.
+                properties:
+                  id:
+                    nullable: true
+                    type: string
+                  name:
+                    nullable: true
+                    type: string
+                type: object
+              proxyGroupRef:
+                nullable: true
+                type: string
+              target:
+                properties:
+                  endpointId:
+                    nullable: true
+                    type: string
+                  hostname:
+                    nullable: true
+                    type: string
+                  meshIp:
+                    nullable: true
+                    type: string
+                  port:
+                    format: uint16
+                    maximum: 65535.0
+                    minimum: 0.0
+                    type: integer
+                required:
+                - port
+                type: object
+            required:
+            - clusterService
+            - networkRef
+            - target
+            type: object
+          status:
+            nullable: true
+            properties:
+              clusterServiceIp:
+                nullable: true
+                type: string
+              conditions:
+                items:
+                  description: Standard status condition.
+                  properties:
+                    lastTransitionTime:
+                      nullable: true
+                      type: string
+                    message:
+                      nullable: true
+                      type: string
+                    reason:
+                      nullable: true
+                      type: string
+                    status:
+                      type: string
+                    type:
+                      type: string
+                  required:
+                  - status
+                  - type
+                  type: object
+                type: array
+              observedGeneration:
+                format: int64
+                nullable: true
+                type: integer
+              targetMeshIp:
+                nullable: true
+                type: string
+            type: object
+        required:
+        - spec
+        title: TunnetEgress
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: tunnetproxygroups.tunnet.io
+spec:
+  group: tunnet.io
+  names:
+    categories: []
+    kind: TunnetProxyGroup
+    plural: tunnetproxygroups
+    shortNames:
+    - tnpg
+    singular: tunnetproxygroup
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.type
+      name: Type
+      type: string
+    - jsonPath: .status.readyReplicas
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Auto-generated derived type for TunnetProxyGroupSpec via `CustomResource`
+        properties:
+          spec:
+            properties:
+              authSecretRef:
+                description: Shared auth secret reference (optional cross-namespace).
+                nullable: true
+                properties:
+                  name:
+                    type: string
+                  namespace:
+                    nullable: true
+                    type: string
+                required:
+                - name
+                type: object
+              networkRef:
+                description: Network selection by UUID or human name.
+                properties:
+                  id:
+                    nullable: true
+                    type: string
+                  name:
+                    nullable: true
+                    type: string
+                type: object
+              proxyClassRef:
+                nullable: true
+                type: string
+              replicas:
+                default: 1
+                format: uint32
+                minimum: 0.0
+                type: integer
+              type:
+                description: '`ingress` | `egress` | `connector` | `tunnel`'
+                type: string
+            required:
+            - networkRef
+            - type
+            type: object
+          status:
+            nullable: true
+            properties:
+              conditions:
+                items:
+                  description: Standard status condition.
+                  properties:
+                    lastTransitionTime:
+                      nullable: true
+                      type: string
+                    message:
+                      nullable: true
+                      type: string
+                    reason:
+                      nullable: true
+                      type: string
+                    status:
+                      type: string
+                    type:
+                      type: string
+                  required:
+                  - status
+                  - type
+                  type: object
+                type: array
+              nodes:
+                items:
+                  description: Observed node enrolled by the operator.
+                  properties:
+                    endpointId:
+                      type: string
+                    hostname:
+                      type: string
+                    meshIp:
+                      type: string
+                    ordinal:
+                      format: int32
+                      nullable: true
+                      type: integer
+                  required:
+                  - endpointId
+                  - hostname
+                  - meshIp
+                  type: object
+                type: array
+              observedGeneration:
+                format: int64
+                nullable: true
+                type: integer
+              readyReplicas:
+                format: uint32
+                minimum: 0.0
+                nullable: true
+                type: integer
+            type: object
+        required:
+        - spec
+        title: TunnetProxyGroup
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: tunnetproxyclasses.tunnet.io
+spec:
+  group: tunnet.io
+  names:
+    categories: []
+    kind: TunnetProxyClass
+    plural: tunnetproxyclasses
+    shortNames:
+    - tnpc
+    singular: tunnetproxyclass
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns: []
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Auto-generated derived type for TunnetProxyClassSpec via `CustomResource`
+        properties:
+          spec:
+            properties:
+              metrics:
+                nullable: true
+                properties:
+                  enabled:
+                    default: true
+                    type: boolean
+                  port:
+                    default: 9090
+                    format: uint16
+                    maximum: 65535.0
+                    minimum: 0.0
+                    type: integer
+                type: object
+              pod:
+                properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  imagePullSecrets:
+                    items:
+                      properties:
+                        name:
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    type: array
+                  labels:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  nodeSelector:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  resources:
+                    nullable: true
+                    properties:
+                      limits:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      requests:
+                        additionalProperties:
+                          type: string
+                        type: object
+                    type: object
+                  securityContext:
+                    nullable: true
+                    properties:
+                      capabilities:
+                        nullable: true
+                        properties:
+                          add:
+                            items:
+                              type: string
+                            type: array
+                        type: object
+                    type: object
+                  tolerations:
+                    items:
+                      properties:
+                        effect:
+                          type: string
+                        key:
+                          type: string
+                        operator:
+                          type: string
+                        value:
+                          nullable: true
+                          type: string
+                      required:
+                      - effect
+                      - key
+                      - operator
+                      type: object
+                    type: array
+                type: object
+            required:
+            - pod
+            type: object
+          status:
+            nullable: true
+            properties:
+              conditions:
+                items:
+                  description: Standard status condition.
+                  properties:
+                    lastTransitionTime:
+                      nullable: true
+                      type: string
+                    message:
+                      nullable: true
+                      type: string
+                    reason:
+                      nullable: true
+                      type: string
+                    status:
+                      type: string
+                    type:
+                      type: string
+                  required:
+                  - status
+                  - type
+                  type: object
+                type: array
+              observedGeneration:
+                format: int64
+                nullable: true
+                type: integer
+            type: object
+        required:
+        - spec
+        title: TunnetProxyClass
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

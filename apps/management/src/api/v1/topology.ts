@@ -2,7 +2,11 @@ import { schema } from "@tunnet/db";
 import { and, eq, inArray } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { db } from "../../lib/db";
-import { deviceDisplayName } from "../../lib/device-metadata";
+import {
+  deviceDisplayName,
+  deviceKind,
+  deviceNodeKind,
+} from "../../lib/device-metadata";
 import { toIso } from "../../lib/serialize";
 import { getAuth, requireAuth } from "./middleware/authz";
 import { notFound, sessionPlugin } from "./middleware/session";
@@ -113,6 +117,8 @@ export const topologyRoutes = new Elysia()
         serveCount?: number;
         tunnelCount?: number;
         publicHostname?: string | null;
+        deviceType?: "agent" | "sdk" | "k8s" | null;
+        nodeKind?: string | null;
       }> = [];
 
       const edges: Array<{
@@ -175,13 +181,16 @@ export const topologyRoutes = new Elysia()
           assignedIp: m.assignedIp,
           serveCount: serveCountByEndpoint.get(m.endpointId) ?? 0,
           tunnelCount: tunnelCountByEndpoint.get(m.endpointId) ?? 0,
+          deviceType: deviceKind(m.type, m.metadata),
+          nodeKind: deviceNodeKind(m.metadata),
         });
       }
 
-      // Mesh edges among online agents (P2P topology).
+      // Mesh edges among online agents and k8s nodes (P2P / mesh topology).
       const onlineAgents = activeMachines.filter(
         (m) =>
-          m.type === "agent" && isOnline(m.agentConnected, m.lastHeartbeatAt),
+          (m.type === "agent" || m.type === "k8s") &&
+          isOnline(m.agentConnected, m.lastHeartbeatAt),
       );
       for (let i = 0; i < onlineAgents.length; i++) {
         for (let j = i + 1; j < onlineAgents.length; j++) {

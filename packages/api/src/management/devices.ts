@@ -32,6 +32,11 @@ export const patchDeviceLabelsBody = z
     message: "At least one label must be provided",
   });
 
+export const deviceTypeSchema = z.enum(["agent", "sdk", "k8s"]);
+
+/** Concrete node kind from metadata (e.g. k8s-connector); null for plain agents. */
+export const deviceNodeKindSchema = z.string().min(1).max(64).nullable();
+
 export const deviceMembershipSchema = z.object({
   networkId: z.string().uuid(),
   networkName: z.string(),
@@ -47,7 +52,9 @@ export const deviceSchema = z.object({
   networkId: z.string().uuid(),
   name: z.string(),
   hostname: z.string(),
-  type: z.enum(["agent", "sdk"]),
+  type: deviceTypeSchema,
+  /** metadata.kind when present (k8s-connector, sdk, …). */
+  kind: deviceNodeKindSchema.optional(),
   os: z.string().nullable(),
   agentVersion: z.string().nullable(),
   assignedIp: z.string(),
@@ -70,6 +77,8 @@ export const deviceDetailSchema = z.object({
   endpointId: z.string().length(64),
   organizationId: z.string(),
   name: z.string(),
+  type: deviceTypeSchema,
+  kind: deviceNodeKindSchema.optional(),
   metadata: deviceMetadataSchema,
   publicIp: z.string().nullable(),
   ipv6Enabled: z.boolean(),
@@ -125,7 +134,7 @@ export const deleteDeviceItemSchema = z.object({
 });
 
 export const deleteDevicesBody = z.object({
-  items: z.array(deleteDeviceItemSchema).min(1).max(100),
+  items: z.array(deleteDeviceItemSchema).min(1).max(500),
 });
 
 export const deleteDevicesResponse = z.object({

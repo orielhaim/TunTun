@@ -35,6 +35,9 @@ pub enum ServerMsg {
         allowed_tags: Vec<String>,
         #[serde(default)]
         allowed_endpoint_ids: Vec<String>,
+        /// Optional upstream `host:port` (defaults to `127.0.0.1:{port}`).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        target_addr: Option<String>,
     },
     StopServe {
         serve_id: String,
@@ -52,6 +55,9 @@ pub enum ServerMsg {
         auth_token: String,
         #[serde(default)]
         redirect_rules: Vec<RedirectRule>,
+        /// Optional default upstream `host:port` (defaults to `127.0.0.1:{local_port}`).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        target_addr: Option<String>,
     },
     StopTunnel {
         tunnel_id: String,

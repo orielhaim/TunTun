@@ -85,6 +85,7 @@ async fn replay_tunnels(pool: &PgPool, hub: &WsHub, endpoint_id: &str) -> anyhow
                 protocol,
                 auth_token,
                 redirect_rules,
+                target_addr: None,
             },
         )
         .await;
@@ -209,6 +210,7 @@ async fn replay_serves(
                 access_mode,
                 allowed_tags,
                 allowed_endpoint_ids,
+                target_addr: None,
             },
         )
         .await;

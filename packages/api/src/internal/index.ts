@@ -27,8 +27,10 @@ export const registerDeviceBody = z.object({
   hostname: z.string().min(1).max(253),
   os: z.string().optional(),
   agentVersion: z.string().optional(),
-  deviceType: z.enum(["agent", "sdk"]).default("sdk"),
+  deviceType: z.enum(["agent", "sdk", "k8s"]).default("sdk"),
   metadata: z.record(z.string(), z.unknown()).optional(),
+  labels: z.record(z.string(), z.string()).optional(),
+  expiresIn: z.string().min(1).max(64).optional(),
 });
 
 export const registerDeviceResponse = z.object({

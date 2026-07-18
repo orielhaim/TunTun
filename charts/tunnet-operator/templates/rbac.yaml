@@ -1,0 +1,67 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "tunnet-operator.fullname" . }}
+  labels:
+    {{- include "tunnet-operator.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["tunnet.io"]
+    resources:
+      - tunnetconnectors
+      - tunnetingresses
+      - tunnettunnels
+      - tunnetegresses
+      - tunnetproxygroups
+      - tunnetproxyclasses
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["tunnet.io"]
+    resources:
+      - tunnetconnectors/status
+      - tunnetingresses/status
+      - tunnettunnels/status
+      - tunnetegresses/status
+      - tunnetproxygroups/status
+      - tunnetproxyclasses/status
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["tunnet.io"]
+    resources:
+      - tunnetconnectors/finalizers
+      - tunnetingresses/finalizers
+      - tunnettunnels/finalizers
+      - tunnetegresses/finalizers
+      - tunnetproxygroups/finalizers
+      - tunnetproxyclasses/finalizers
+    verbs: ["update"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets", "deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods", "services", "endpoints", "namespaces", "nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets", "configmaps", "services"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["mutatingwebhookconfigurations"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "tunnet-operator.fullname" . }}
+  labels:
+    {{- include "tunnet-operator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "tunnet-operator.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "tunnet-operator.serviceAccountName" . }}
+    namespace: {{ include "tunnet-operator.namespace" . }}

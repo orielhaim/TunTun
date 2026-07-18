@@ -84,6 +84,7 @@ impl ManagementClient {
         Ok(Self { base, http })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn register_sdk_node(
         &self,
         api_key: &str,
@@ -92,6 +93,10 @@ impl ManagementClient {
         endpoint_id: &str,
         hostname: &str,
         metadata: Option<serde_json::Value>,
+        kind: Option<&str>,
+        labels: Option<&std::collections::HashMap<String, String>>,
+        expires_in: Option<&str>,
+        tags: Option<&[String]>,
     ) -> anyhow::Result<EnrollResponse> {
         let url = format!(
             "{}/api/v1/organizations/{organization_id}/networks/{network_id}/sdk-nodes",
@@ -104,9 +109,20 @@ impl ManagementClient {
         if let Some(meta) = metadata
             && let Some(obj) = meta.as_object()
         {
-            for (k, v) in obj {
-                body[k] = v.clone();
-            }
+            // Nested under metadata key for free-form fields (not top-level merge).
+            body["metadata"] = serde_json::Value::Object(obj.clone());
+        }
+        if let Some(k) = kind {
+            body["kind"] = serde_json::Value::String(k.to_string());
+        }
+        if let Some(labels) = labels {
+            body["labels"] = serde_json::to_value(labels)?;
+        }
+        if let Some(exp) = expires_in {
+            body["expiresIn"] = serde_json::Value::String(exp.to_string());
+        }
+        if let Some(tags) = tags {
+            body["tags"] = serde_json::to_value(tags)?;
         }
         let resp = self
             .http
@@ -129,6 +145,41 @@ impl ManagementClient {
             status: "active".into(),
             snapshot: parsed.snapshot,
         })
+    }
+
+    pub async fn delete_devices(
+        &self,
+        api_key: &str,
+        organization_id: &str,
+        items: &[(uuid::Uuid, &str)],
+    ) -> anyhow::Result<u32> {
+        let url = format!(
+            "{}/api/v1/organizations/{organization_id}/sdk-nodes",
+            self.base.trim_end_matches('/')
+        );
+        let body = serde_json::json!({
+            "items": items.iter().map(|(network_id, endpoint_id)| {
+                serde_json::json!({
+                    "networkId": network_id,
+                    "endpointId": endpoint_id,
+                })
+            }).collect::<Vec<_>>(),
+        });
+        let resp = self
+            .http
+            .delete(&url)
+            .bearer_auth(api_key)
+            .json(&body)
+            .send()
+            .await
+            .with_context(|| format!("DELETE {url}"))?;
+        let status = resp.status();
+        let text = resp.text().await?;
+        if !status.is_success() {
+            anyhow::bail!("device delete failed: {status}: {text}");
+        }
+        let parsed: serde_json::Value = serde_json::from_str(&text)?;
+        Ok(parsed.get("deleted").and_then(|v| v.as_u64()).unwrap_or(0) as u32)
     }
 }
 

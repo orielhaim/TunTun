@@ -8,6 +8,7 @@ import {
   formatInactivityLimitCompact,
   getExpiryUrgency,
   inactivityWindowSecs,
+  isExpiryCountdownActive,
   resolveExpiresAtMs,
 } from "@/lib/machine-expiry";
 import { cn } from "@/lib/utils";
@@ -39,9 +40,24 @@ export function MachineExpiryCountdown({
 }) {
   const now = useNow();
   const urgency = getExpiryUrgency(device, now);
+  const windowSecs = inactivityWindowSecs(device);
 
   if (device.status === "expired" || device.expiredAt) {
     return <span className={cn("text-destructive", className)}>Expired</span>;
+  }
+
+  if (windowSecs === null) {
+    return (
+      <span className={cn("text-muted-foreground", className)}>Never</span>
+    );
+  }
+
+  if (!isExpiryCountdownActive(device, now)) {
+    return (
+      <span className={cn("text-muted-foreground", className)}>
+        After {formatInactivityLimitCompact(windowSecs)} inactive
+      </span>
+    );
   }
 
   const expiresAtMs = resolveExpiresAtMs(device);
@@ -69,6 +85,7 @@ export function MachineExpiryCountdown({
 export function MachineExpirySettings({ device }: { device: ExpiryDevice }) {
   const now = useNow();
   const urgency = getExpiryUrgency(device, now);
+  const counting = isExpiryCountdownActive(device, now);
 
   if (device.status === "expired" || device.expiredAt) {
     return (
@@ -85,7 +102,7 @@ export function MachineExpirySettings({ device }: { device: ExpiryDevice }) {
   const remaining = expiresAtMs === null ? null : expiresAtMs - now;
   const windowSecs = inactivityWindowSecs(device);
 
-  if (expiresAtMs === null) {
+  if (windowSecs === null) {
     return (
       <p className="text-muted-foreground text-sm leading-relaxed">
         No inactivity TTL. This machine will not be auto-cleaned unless org
@@ -96,48 +113,60 @@ export function MachineExpirySettings({ device }: { device: ExpiryDevice }) {
 
   return (
     <div className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-3">
-        {windowSecs !== null ? (
-          <div className="rounded-lg border border-border/70 px-3 py-2.5">
-            <p className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
-              Limit
-            </p>
-            <p className="mt-1 text-sm font-medium">
-              {formatInactivityLimitCompact(windowSecs)}
-            </p>
-            <p className="text-muted-foreground mt-0.5 text-xs">
-              {formatInactivityLimit(windowSecs)}
-            </p>
-          </div>
-        ) : null}
+      <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-lg border border-border/70 px-3 py-2.5">
           <p className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
-            Remaining
-          </p>
-          <p
-            className={cn(
-              "mt-1 font-mono text-sm font-medium tabular-nums",
-              expiryTextClass(urgency),
-            )}
-          >
-            {remaining === null ? "—" : formatExpiryCountdown(remaining)}
-          </p>
-        </div>
-        <div className="rounded-lg border border-border/70 px-3 py-2.5 sm:col-span-1">
-          <p className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
-            Deadline
+            Policy
           </p>
           <p className="mt-1 text-sm font-medium">
-            {format(new Date(expiresAtMs), "MMM d, HH:mm")}
+            {formatInactivityLimitCompact(windowSecs)}
           </p>
           <p className="text-muted-foreground mt-0.5 text-xs">
-            {format(new Date(expiresAtMs), "yyyy")}
+            {formatInactivityLimit(windowSecs)} without contact
           </p>
         </div>
+        {counting && expiresAtMs !== null ? (
+          <>
+            <div className="rounded-lg border border-border/70 px-3 py-2.5">
+              <p className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
+                Remaining
+              </p>
+              <p
+                className={cn(
+                  "mt-1 font-mono text-sm font-medium tabular-nums",
+                  expiryTextClass(urgency),
+                )}
+              >
+                {remaining === null ? "—" : formatExpiryCountdown(remaining)}
+              </p>
+            </div>
+            <div className="rounded-lg border border-border/70 px-3 py-2.5 sm:col-span-2">
+              <p className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
+                Deadline
+              </p>
+              <p className="mt-1 text-sm font-medium">
+                {format(new Date(expiresAtMs), "MMM d, HH:mm")}
+              </p>
+              <p className="text-muted-foreground mt-0.5 text-xs">
+                {format(new Date(expiresAtMs), "yyyy")} · from last seen
+              </p>
+            </div>
+          </>
+        ) : (
+          <div className="rounded-lg border border-border/70 px-3 py-2.5">
+            <p className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
+              Clock
+            </p>
+            <p className="mt-1 text-sm font-medium">Paused while online</p>
+            <p className="text-muted-foreground mt-0.5 text-xs">
+              Countdown starts when the machine goes inactive
+            </p>
+          </div>
+        )}
       </div>
       <p className="text-muted-foreground text-xs leading-relaxed">
-        Deadline is last seen plus the inactivity TTL. Any control-plane contact
-        resets the clock.
+        Any control-plane contact resets the inactivity window. The deadline
+        only runs while the machine is offline or stale.
       </p>
     </div>
   );

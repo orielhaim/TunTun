@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 type PageHeaderProps = {
   title: string;
-  description?: string;
+  description?: ReactNode;
   actions?: ReactNode;
   className?: string;
   dense?: boolean;
@@ -34,14 +34,14 @@ export function PageHeader({
           {title}
         </h1>
         {description ? (
-          <p
+          <div
             className={cn(
-              "text-muted-foreground max-w-2xl text-pretty",
+              "text-muted-foreground max-w-3xl text-pretty",
               dense ? "text-[13px] leading-relaxed" : "text-sm leading-relaxed",
             )}
           >
             {description}
-          </p>
+          </div>
         ) : null}
       </div>
       {actions ? (

@@ -186,7 +186,14 @@ pub fn spawn_ws_processor(
                             access_mode,
                             allowed_tags,
                             allowed_endpoint_ids,
+                            target_addr,
                         } => {
+                            let parsed_target = target_addr.as_deref().and_then(|s| {
+                                s.parse::<std::net::SocketAddr>().map_err(|e| {
+                                    tracing::warn!(?e, target = %s, "invalid StartServe target_addr");
+                                    e
+                                }).ok()
+                            });
                             let result = if let Some(mgr) = &serves {
                                 mgr.start(
                                     serve_id.clone(),
@@ -200,6 +207,7 @@ pub fn spawn_ws_processor(
                                         allowed_tags,
                                         allowed_endpoint_ids,
                                     },
+                                    parsed_target,
                                 )
                                 .await
                             } else {
@@ -243,7 +251,14 @@ pub fn spawn_ws_processor(
                             protocol,
                             auth_token,
                             redirect_rules,
+                            target_addr,
                         } => {
+                            let parsed_target = target_addr.as_deref().and_then(|s| {
+                                s.parse::<std::net::SocketAddr>().map_err(|e| {
+                                    tracing::warn!(?e, target = %s, "invalid OpenTunnel target_addr");
+                                    e
+                                }).ok()
+                            });
                             let result = if let Some(mgr) = &tunnels {
                                 mgr.start(
                                     tunnel_id.clone(),
@@ -254,6 +269,7 @@ pub fn spawn_ws_processor(
                                     &protocol,
                                     &auth_token,
                                     redirect_rules,
+                                    parsed_target,
                                 )
                                 .await
                             } else {

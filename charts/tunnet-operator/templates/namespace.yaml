@@ -1,0 +1,8 @@
+{{- if .Values.createNamespace }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "tunnet-operator.namespace" . }}
+  labels:
+    {{- include "tunnet-operator.labels" . | nindent 4 }}
+{{- end }}

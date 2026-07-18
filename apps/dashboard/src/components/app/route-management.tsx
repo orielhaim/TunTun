@@ -172,7 +172,9 @@ export function CreateSubnetRouteDialog({
   const [endpointId, setEndpointId] = useState(fixedEndpointId ?? "");
   const [cidr, setCidr] = useState("");
   const [description, setDescription] = useState("");
-  const agentDevices = (devices ?? []).filter((d) => d.type === "agent");
+  const agentDevices = (devices ?? []).filter(
+    (d) => d.type === "agent" || d.type === "k8s",
+  );
 
   useEffect(() => {
     if (open) {
@@ -270,7 +272,9 @@ export function CreateHostnameRouteDialog({
   const [hostname, setHostname] = useState("");
   const [targetIp, setTargetIp] = useState("");
   const [description, setDescription] = useState("");
-  const agentDevices = (devices ?? []).filter((d) => d.type === "agent");
+  const agentDevices = (devices ?? []).filter(
+    (d) => d.type === "agent" || d.type === "k8s",
+  );
 
   useEffect(() => {
     if (open) {

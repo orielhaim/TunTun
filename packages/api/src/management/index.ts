@@ -9,6 +9,7 @@ export * from "./enrollment-tokens";
 export * from "./entitlements";
 export * from "./hostname-routes";
 export * from "./internal-ca";
+export * from "./kubernetes";
 export * from "./networks";
 export * from "./node-groups";
 export * from "./org-settings";

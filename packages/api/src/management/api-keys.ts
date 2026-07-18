@@ -1,10 +1,11 @@
 import { z } from "zod";
 
-export const API_KEY_SCOPE_VALUES = ["sdk:enroll"] as const;
+export const API_KEY_SCOPE_VALUES = ["sdk:enroll", "sdk:manage"] as const;
 
 export type ApiKeyScope = (typeof API_KEY_SCOPE_VALUES)[number];
 
 export const SDK_ENROLL_SCOPE: ApiKeyScope = "sdk:enroll";
+export const SDK_MANAGE_SCOPE: ApiKeyScope = "sdk:manage";
 
 export const API_KEY_SCOPES: ReadonlyArray<{
   id: ApiKeyScope;
@@ -16,6 +17,12 @@ export const API_KEY_SCOPES: ReadonlyArray<{
     label: "Enroll SDK nodes",
     description:
       "Register SDK runtimes in allowed networks. Idempotent per endpoint ID.",
+  },
+  {
+    id: SDK_MANAGE_SCOPE,
+    label: "Manage SDK / K8s nodes",
+    description:
+      "Enroll and delete operator-managed or SDK nodes in allowed networks.",
   },
 ];
 

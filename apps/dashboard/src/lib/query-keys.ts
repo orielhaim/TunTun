@@ -22,6 +22,8 @@ export const queryKeys = {
     [...queryKeys.network(orgId, networkId), "hostname-routes"] as const,
   topology: (orgId: string, networkId: string) =>
     [...queryKeys.network(orgId, networkId), "topology"] as const,
+  kubernetes: (orgId: string) =>
+    [...queryKeys.org(orgId), "kubernetes"] as const,
   networkMetrics: (orgId: string, networkId: string) =>
     [...queryKeys.network(orgId, networkId), "metrics"] as const,
   enrollmentTokens: (orgId: string, networkId: string) =>

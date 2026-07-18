@@ -19,6 +19,7 @@ pub mod send;
 pub mod serve;
 pub mod state;
 pub mod stream;
+pub mod stream_proxy;
 pub mod sync;
 pub mod tunnel;
 pub mod ws_client;
@@ -30,7 +31,7 @@ pub use secret_store::{
 
 pub use acl::{AclEngine, SelfIdentity};
 pub use acl_hook::AclHook;
-pub use control::{SignedClient, UnauthedClient};
+pub use control::{ManagementClient, SignedClient, UnauthedClient};
 pub use identity::AgentIdentity;
 pub use iroh_pool::ConnPool;
 pub use node::{CoreNode, CoreNodeConfig, DirectNetworkRuntime, KillSshHook};
@@ -41,5 +42,6 @@ pub use state::{CliAuthTokens, DirectState, ManagedState, NodeMode, PersistedSta
 pub use stream::{
     StreamHandler, TUNNEL_STREAM_ALPN, dial_stream, serve_stream_acceptor, serve_stream_connection,
 };
+pub use stream_proxy::stream_handler;
 pub use tunnel::TunnelManager;
 pub use tunnet_common as common;

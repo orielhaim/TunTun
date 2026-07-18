@@ -54,7 +54,7 @@ export const membershipStatusValues = [
   "pending",
 ] as const;
 
-export const deviceTypeValues = ["agent", "sdk"] as const;
+export const deviceTypeValues = ["agent", "sdk", "k8s"] as const;
 
 export const apiKeys = pgTable("api_keys", {
   id: id(),
@@ -129,7 +129,7 @@ export const devices = pgTable(
       "devices_endpoint_id_len",
       sql`char_length(${table.endpointId}) = 64`,
     ),
-    check("devices_type_check", sql`${table.type} IN ('agent', 'sdk')`),
+    check("devices_type_check", sql`${table.type} IN ('agent', 'sdk', 'k8s')`),
     check(
       "devices_ipv6_enabled_at_check",
       sql`(NOT ${table.ipv6Enabled}) OR (${table.ipv6EnabledAt} IS NOT NULL)`,

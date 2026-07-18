@@ -9,7 +9,12 @@ import { formatIp } from "@tunnet/ip";
 import { and, eq } from "drizzle-orm";
 import { db } from "./db";
 import { mergeDeviceLabels, normalizeDeviceLabels } from "./device-labels";
-import { deviceDisplayName, normalizeDeviceMetadata } from "./device-metadata";
+import {
+  deviceDisplayName,
+  deviceKind,
+  deviceNodeKind,
+  normalizeDeviceMetadata,
+} from "./device-metadata";
 import { toIso } from "./serialize";
 
 type DbConn = Database | Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -38,6 +43,8 @@ export function serializeDeviceDetail(
     endpointId: device.endpointId,
     organizationId: device.organizationId,
     name: deviceDisplayName(device.name, device.metadata, device.endpointId),
+    type: deviceKind(device.type, device.metadata),
+    kind: deviceNodeKind(device.metadata),
     metadata: normalizeDeviceMetadata(device.metadata, device.endpointId),
     publicIp: formatNullableIp(device.publicIp),
     ipv6Enabled: device.ipv6Enabled,

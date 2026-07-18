@@ -1,5 +1,5 @@
 //! Agent-side reverse tunnel manager - dials a public relay over iroh and
-//! forwards relay-opened streams to localhost.
+//! forwards relay-opened streams to a configurable upstream (default localhost).
 
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, SocketAddr};
@@ -69,6 +69,8 @@ impl TunnelManager {
         protocol: &str,
         auth_token: &str,
         redirect_rules: Vec<RedirectRule>,
+        // Default upstream when RedirectRule / Forward do not override (defaults to `127.0.0.1:local_port`).
+        target_addr: Option<SocketAddr>,
     ) -> anyhow::Result<TunnelInfo> {
         {
             let guard = self.inner.lock();
@@ -131,6 +133,8 @@ impl TunnelManager {
         let control_send = send;
         let rules = redirect_rules.clone();
         let proto = protocol.to_string();
+        let default_target =
+            target_addr.unwrap_or_else(|| SocketAddr::from((Ipv4Addr::LOCALHOST, local_port)));
         tokio::spawn(async move {
             if let Err(e) = run_tunnel_session(
                 conn,
@@ -139,6 +143,7 @@ impl TunnelManager {
                 local_port,
                 proto,
                 rules,
+                default_target,
                 stop_rx,
             )
             .await
@@ -187,6 +192,7 @@ impl TunnelManager {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_tunnel_session(
     conn: Connection,
     mut control_send: SendStream,
@@ -194,6 +200,7 @@ async fn run_tunnel_session(
     local_port: u16,
     protocol: String,
     redirect_rules: Vec<RedirectRule>,
+    default_target: SocketAddr,
     mut stop: oneshot::Receiver<()>,
 ) -> anyhow::Result<()> {
     let mut ping = tokio::time::interval(Duration::from_secs(20));
@@ -235,7 +242,7 @@ async fn run_tunnel_session(
                 let proto = protocol.clone();
                 tokio::spawn(async move {
                     if let Err(e) =
-                        handle_relay_stream(send, recv, local_port, &proto, &rules).await
+                        handle_relay_stream(send, recv, local_port, &proto, &rules, default_target).await
                     {
                         tracing::debug!(?e, "relay stream proxy ended");
                     }
@@ -261,10 +268,11 @@ async fn handle_relay_stream(
     default_port: u16,
     protocol: &str,
     redirect_rules: &[RedirectRule],
+    default_target: SocketAddr,
 ) -> anyhow::Result<()> {
     if protocol == "tcp" {
         let (target_port, target_ip) = read_forward_target(&mut recv).await?;
-        return splice_to_target(send, recv, target_port, target_ip, None).await;
+        return splice_to_target(send, recv, target_port, target_ip, None, default_target).await;
     }
 
     if !redirect_rules.is_empty() {
@@ -283,10 +291,10 @@ async fn handle_relay_stream(
         let target_port = matched.map(|r| r.target_port).unwrap_or(default_port);
         let target_ip = matched.and_then(|r| r.target_ipv4);
         let prefix = if n > 0 { Some(peek) } else { None };
-        return splice_to_target(send, recv, target_port, target_ip, prefix).await;
+        return splice_to_target(send, recv, target_port, target_ip, prefix, default_target).await;
     }
 
-    splice_to_target(send, recv, default_port, None, None).await
+    splice_to_target(send, recv, default_port, None, None, default_target).await
 }
 
 async fn read_forward_target(recv: &mut RecvStream) -> anyhow::Result<(u16, Option<Ipv4Addr>)> {
@@ -327,9 +335,13 @@ async fn splice_to_target(
     port: u16,
     target_ip: Option<Ipv4Addr>,
     prefix: Option<Vec<u8>>,
+    default_target: SocketAddr,
 ) -> anyhow::Result<()> {
-    let host = target_ip.unwrap_or(Ipv4Addr::LOCALHOST);
-    let addr = SocketAddr::from((host, port));
+    let addr = match target_ip {
+        Some(ip) => SocketAddr::from((ip, port)),
+        None if port != default_target.port() => SocketAddr::from((default_target.ip(), port)),
+        None => default_target,
+    };
     let tcp = TcpStream::connect(addr)
         .await
         .with_context(|| format!("connect {addr}"))?;

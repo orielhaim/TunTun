@@ -1,0 +1,60 @@
+# Default install namespace (override with --namespace).
+namespace: tunnet-system
+createNamespace: true
+
+image:
+  operator:
+    repository: ghcr.io/tunnet/tunnet-operator
+    tag: "0.6.0"
+    pullPolicy: IfNotPresent
+  kubeNode:
+    repository: ghcr.io/tunnet/tunnet-kube-node
+    tag: "0.6.0"
+    pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# Org credentials Secret (create before install, or set createCredentialsSecret).
+credentials:
+  secretName: tunnet-operator-credentials
+  # When true, chart creates an empty Secret shell — fill keys after install.
+  create: false
+  apiKey: ""
+  orgId: ""
+  controlUrl: ""
+  managementUrl: ""
+
+nodeExpiresIn: "24h"
+
+webhook:
+  enabled: true
+  # Failure policy for the mutating admission webhook.
+  failurePolicy: Ignore
+  # Service / listener port (TLS).
+  port: 9443
+  # Object selector: only pods with tunnet.io/inject annotation are mutated.
+  # (Webhook still filters in-handler; this reduces load.)
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+leaderElection:
+  enabled: true
+
+metrics:
+  enabled: true
+
+podAnnotations: {}
+podLabels: {}

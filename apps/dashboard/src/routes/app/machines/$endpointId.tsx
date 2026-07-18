@@ -46,6 +46,7 @@ import {
   usePresenceStream,
 } from "@/hooks/use-presence-stream";
 import { useActiveOrganization } from "@/lib/auth-client";
+import { deviceKindLabel, deviceTypeLabel } from "@/lib/device-type";
 import { deriveInactivityLimitCompact } from "@/lib/machine-expiry";
 import {
   useDevice,
@@ -365,15 +366,26 @@ function MachineDetailPage() {
 
   const listDevice = useMemo(() => {
     if (!device || !membership || !networkId) return undefined;
+    const type =
+      device.type ??
+      (typeof device.metadata.kind === "string" &&
+      device.metadata.kind.startsWith("k8s")
+        ? "k8s"
+        : device.metadata.kind === "sdk"
+          ? "sdk"
+          : "agent");
     return {
       endpointId: device.endpointId,
       organizationId: device.organizationId,
       networkId,
       name: device.name,
       hostname: device.metadata.hostname,
-      type: (device.metadata.kind === "sdk" ? "sdk" : "agent") as
-        | "agent"
-        | "sdk",
+      type: type as "agent" | "sdk" | "k8s",
+      kind:
+        device.kind ??
+        (typeof device.metadata.kind === "string"
+          ? device.metadata.kind
+          : null),
       os: device.metadata.os,
       agentVersion: device.metadata.agentVersion ?? null,
       assignedIp: membership.assignedIp,
@@ -440,14 +452,63 @@ function MachineDetailPage() {
         </BreadcrumbList>
       </Breadcrumb>
 
-      <PageHeader
-        title={device.name}
-        description={
-          membership
-            ? `Member of ${membership.networkName}`
-            : `${device.memberships.length} network membership${device.memberships.length === 1 ? "" : "s"}`
-        }
-      />
+      <div className="space-y-3">
+        <PageHeader
+          title={device.name}
+          dense
+          description={
+            membership
+              ? `Member of ${membership.networkName}`
+              : `${device.memberships.length} network membership${device.memberships.length === 1 ? "" : "s"}`
+          }
+          actions={
+            networkId ? (
+              <Button
+                nativeButton={false}
+                size="sm"
+                variant="outline"
+                render={
+                  <Link
+                    to="/app/networks/$networkId"
+                    params={{ networkId }}
+                    search={
+                      device.type === "k8s" ? { kind: "k8s" as const } : {}
+                    }
+                  />
+                }
+              >
+                Open Mesh
+              </Button>
+            ) : null
+          }
+        />
+        <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
+          {listDevice ? (
+            <StatusBadge orgId={orgId} device={listDevice} />
+          ) : null}
+          {membership ? (
+            <Link
+              to="/app/networks/$networkId"
+              params={{ networkId: membership.networkId }}
+              search={device.type === "k8s" ? { kind: "k8s" as const } : {}}
+              className="text-foreground hover:underline"
+            >
+              {membership.networkName}
+            </Link>
+          ) : null}
+          {membership ? (
+            <span className="text-foreground font-mono text-[12px]">
+              {membership.assignedIp}
+            </span>
+          ) : null}
+          <span>
+            {deviceTypeLabel(device.type)}
+            {device.kind
+              ? ` · ${deviceKindLabel(device.kind) ?? device.kind}`
+              : ""}
+          </span>
+        </div>
+      </div>
 
       <Tabs defaultValue="overview" className="gap-5">
         <div className="border-b border-border/70">
@@ -485,12 +546,14 @@ function MachineDetailPage() {
         </div>
 
         <TabsContent value="overview">
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Presence</CardTitle>
-              </CardHeader>
-              <CardContent>
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+            <section className="panel overflow-hidden">
+              <div className="border-b border-border/50 px-3 py-2.5">
+                <h2 className="text-[13px] font-medium tracking-tight">
+                  Presence & identity
+                </h2>
+              </div>
+              <div className="px-3">
                 {listDevice ? (
                   <DetailRow label="Status">
                     <StatusBadge orgId={orgId} device={listDevice} />
@@ -524,10 +587,17 @@ function MachineDetailPage() {
                     })}
                   </DetailRow>
                 )}
-                <DetailRow label="Expiry">
+                <DetailRow label="Inactivity">
                   <MachineExpiryCountdown
                     device={{
-                      ...device,
+                      ...(listDevice ?? {
+                        lastSeen: device.lastSeen,
+                        inactivityTtl: device.inactivityTtl,
+                        expiredAt: device.expiredAt,
+                        status: membership?.status ?? "active",
+                        agentConnected: device.agentConnected,
+                        lastHeartbeatAt: device.lastHeartbeatAt,
+                      }),
                       orgAutoCleanupEnabled:
                         orgSettings?.machines.autoCleanup.enabled ?? false,
                       orgInactivityAfter:
@@ -536,6 +606,23 @@ function MachineDetailPage() {
                     }}
                   />
                 </DetailRow>
+                <DetailRow label="Type">
+                  {deviceTypeLabel(device.type)}
+                </DetailRow>
+                {device.kind ? (
+                  <DetailRow label="Kind">
+                    {deviceKindLabel(device.kind) ?? device.kind}
+                  </DetailRow>
+                ) : null}
+                <DetailRow label="First seen">
+                  {formatDistanceToNow(new Date(device.firstSeen), {
+                    addSuffix: true,
+                  })}
+                </DetailRow>
+                <DetailRow label="Agent version">
+                  {device.metadata.agentVersion ?? "—"}
+                </DetailRow>
+                <DetailRow label="OS">{device.metadata.os ?? "—"}</DetailRow>
                 {Object.keys(device.labels).length > 0 ? (
                   <DetailRow label="Labels">
                     <MachineLabelChips
@@ -546,28 +633,54 @@ function MachineDetailPage() {
                     />
                   </DetailRow>
                 ) : null}
-              </CardContent>
-            </Card>
+              </div>
+            </section>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Identity</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <CopyField label="Endpoint ID" value={device.endpointId} />
-                <DetailRow label="First seen">
-                  {formatDistanceToNow(new Date(device.firstSeen), {
-                    addSuffix: true,
-                  })}
-                </DetailRow>
-                <DetailRow label="Agent version">
-                  {device.metadata.agentVersion ?? "-"}
-                </DetailRow>
-                <DetailRow label="Operating system">
-                  {device.metadata.os}
-                </DetailRow>
-              </CardContent>
-            </Card>
+            <aside className="space-y-3">
+              <section className="panel space-y-2.5 p-3 text-[12px]">
+                <div className="text-muted-foreground font-medium tracking-wide uppercase">
+                  Endpoint
+                </div>
+                <CopyField label="ID" value={device.endpointId} />
+                {membership ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">Mesh IP</span>
+                    <span className="font-mono">{membership.assignedIp}</span>
+                  </div>
+                ) : null}
+                {networkId && membership ? (
+                  <Link
+                    to="/app/networks/$networkId"
+                    params={{ networkId }}
+                    search={
+                      device.type === "k8s" ? { kind: "k8s" as const } : {}
+                    }
+                    className="text-foreground flex items-center justify-between gap-2 pt-1 hover:underline"
+                  >
+                    <span>Open on Mesh</span>
+                    <ChevronRightIcon className="size-3.5 opacity-60" />
+                  </Link>
+                ) : null}
+              </section>
+              <section className="panel grid grid-cols-2 gap-2 p-3">
+                <div>
+                  <div className="text-muted-foreground text-[11px]">
+                    Tunnels
+                  </div>
+                  <div className="mt-0.5 text-xl font-semibold tabular-nums">
+                    {machineTunnels.length}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground text-[11px]">
+                    Serves
+                  </div>
+                  <div className="mt-0.5 text-xl font-semibold tabular-nums">
+                    {machineServes.length}
+                  </div>
+                </div>
+              </section>
+            </aside>
           </div>
         </TabsContent>
 
@@ -885,7 +998,14 @@ function MachineDetailPage() {
               >
                 <MachineExpirySettings
                   device={{
-                    ...device,
+                    ...(listDevice ?? {
+                      lastSeen: device.lastSeen,
+                      inactivityTtl: device.inactivityTtl,
+                      expiredAt: device.expiredAt,
+                      status: membership?.status ?? "active",
+                      agentConnected: device.agentConnected,
+                      lastHeartbeatAt: device.lastHeartbeatAt,
+                    }),
                     orgAutoCleanupEnabled:
                       orgSettings?.machines.autoCleanup.enabled ?? false,
                     orgInactivityAfter:
@@ -1025,7 +1145,9 @@ function MachineDetailPage() {
       <MachineExpiryDialog
         open={expiryOpen}
         onOpenChange={setExpiryOpen}
-        current={deriveInactivityLimitCompact(device)}
+        current={deriveInactivityLimitCompact({
+          inactivityTtl: device.inactivityTtl,
+        })}
         loading={deviceMutations.update.isPending}
         onSave={async (expiresIn) => {
           await deviceMutations.update.mutateAsync({

@@ -16,6 +16,7 @@ import {
   HiOutlineShieldCheck,
   HiOutlineUsers,
 } from "react-icons/hi2";
+import { SiKubernetes } from "react-icons/si";
 
 import { UserMenu } from "@/components/app/user-menu";
 import {
@@ -62,13 +63,21 @@ const overviewItem: NavItem = {
 
 const navSections: NavSection[] = [
   {
-    id: "infrastructure",
-    label: "Infrastructure",
+    id: "mesh",
+    label: "Mesh",
+    defaultOpen: true,
+    items: [
+      { to: "/app/networks", label: "Networks", icon: HiOutlineShare },
+      { to: "/app/kubernetes", label: "Kubernetes", icon: SiKubernetes },
+    ],
+  },
+  {
+    id: "fleet",
+    label: "Fleet",
     defaultOpen: true,
     items: [
       { to: "/app/machines", label: "Machines", icon: HiOutlineServer },
       { to: "/app/relays", label: "Relays", icon: HiOutlineServerStack },
-      { to: "/app/networks", label: "Networks", icon: HiOutlineShare },
     ],
   },
   {

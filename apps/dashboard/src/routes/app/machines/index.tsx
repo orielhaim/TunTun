@@ -15,13 +15,11 @@ import { LastSeenCell } from "@/components/app/last-seen-cell";
 import { MachineAddressPopover } from "@/components/app/machine-address-popover";
 import {
   MachineExpiryDialog,
-  MachineLabelChips,
   MachineLabelsEditor,
 } from "@/components/app/machine-labels";
 import { PageHeader } from "@/components/app/page-header";
 import { PageToolbar } from "@/components/app/page-toolbar";
 import { StatusBadge } from "@/components/app/status-badge";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -44,6 +42,7 @@ import {
   usePresenceStream,
 } from "@/hooks/use-presence-stream";
 import { useActiveOrganization } from "@/lib/auth-client";
+import { deviceKindLabel, deviceTypeLabel } from "@/lib/device-type";
 import {
   deriveInactivityLimitCompact,
   type ExpiryDevice,
@@ -57,8 +56,6 @@ import {
   useDeviceMutations,
   useMachines,
   useOrgSettings,
-  useServes,
-  useTunnels,
 } from "@/lib/queries/management";
 
 export const Route = createFileRoute("/app/machines/")({
@@ -83,8 +80,6 @@ function MachinesPage() {
     [orgSettings],
   );
 
-  const { data: tunnels } = useTunnels(orgId);
-  const { data: serves } = useServes(orgId);
   const deviceMutations = useDeviceMutations(orgId);
   usePresenceStream(orgId);
 
@@ -97,6 +92,9 @@ function MachinesPage() {
   const [statusFilter, setStatusFilter] = useState<
     "all" | "online" | "offline" | "pending" | "expired"
   >("all");
+  const [typeFilter, setTypeFilter] = useState<"all" | "agent" | "sdk" | "k8s">(
+    "all",
+  );
   const [enrollOpen, setEnrollOpen] = useState(false);
   const [tunnelOpen, setTunnelOpen] = useState(false);
   const [serveOpen, setServeOpen] = useState(false);
@@ -118,22 +116,6 @@ function MachinesPage() {
   const [expiryEditor, setExpiryEditor] = useState<AggregatedMachine | null>(
     null,
   );
-
-  const tunnelCounts = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const t of tunnels ?? []) {
-      map.set(t.endpointId, (map.get(t.endpointId) ?? 0) + 1);
-    }
-    return map;
-  }, [tunnels]);
-
-  const serveCounts = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const s of serves ?? []) {
-      map.set(s.endpointId, (map.get(s.endpointId) ?? 0) + 1);
-    }
-    return map;
-  }, [serves]);
 
   const pendingCount = useMemo(
     () => (machines ?? []).filter((m) => m.status === "pending").length,
@@ -159,6 +141,9 @@ function MachinesPage() {
       });
     }
     const q = search.trim().toLowerCase();
+    if (typeFilter !== "all") {
+      list = list.filter((m) => m.type === typeFilter);
+    }
     if (!q) return list;
     return list.filter((m) => {
       if (matchesLabelSearch(m.labels, q)) return true;
@@ -168,10 +153,12 @@ function MachinesPage() {
         m.networkName.toLowerCase().includes(q) ||
         m.assignedIp.includes(q) ||
         (m.tenantIpv6?.includes(q) ?? false) ||
-        (m.os?.toLowerCase().includes(q) ?? false)
+        (m.os?.toLowerCase().includes(q) ?? false) ||
+        deviceTypeLabel(m.type).toLowerCase().includes(q) ||
+        (m.kind?.toLowerCase().includes(q) ?? false)
       );
     });
-  }, [machines, search, statusFilter]);
+  }, [machines, search, statusFilter, typeFilter]);
 
   const selectedMachines = useMemo(() => {
     if (!filtered.length) return [];
@@ -194,37 +181,51 @@ function MachinesPage() {
           const machine = row.original;
           const urgency = getExpiryUrgency(withOrgExpiry(machine));
           return (
-            <div className="min-w-0 space-y-1.5 py-0.5">
+            <div className="min-w-0 py-0.5">
               <Link
                 to="/app/machines/$endpointId"
                 params={{ endpointId: machine.endpointId }}
                 className={
                   urgency === "warning"
-                    ? "font-medium text-amber-600 hover:underline dark:text-amber-400"
+                    ? "text-[13px] font-medium text-amber-600 hover:underline dark:text-amber-400"
                     : urgency === "critical"
-                      ? "font-medium text-destructive hover:underline"
-                      : "font-medium hover:underline"
+                      ? "text-destructive text-[13px] font-medium hover:underline"
+                      : "text-[13px] font-medium hover:underline"
                 }
               >
                 {machine.name}
               </Link>
-              <MachineLabelChips labels={machine.labels} max={3} empty={null} />
+              {machine.hostname !== machine.name ? (
+                <p className="text-muted-foreground truncate font-mono text-[11px]">
+                  {machine.hostname}
+                </p>
+              ) : null}
             </div>
           );
         },
       },
       {
+        id: "status",
+        header: "Presence",
+        cell: ({ row }) => <StatusBadge orgId={orgId} device={row.original} />,
+      },
+      {
         id: "network",
         header: "Network",
         cell: ({ row }) => (
-          <Badge variant="secondary">
+          <Link
+            to="/app/networks/$networkId"
+            params={{ networkId: row.original.networkId }}
+            search={row.original.type === "k8s" ? { kind: "k8s" as const } : {}}
+            className="text-[13px] hover:underline"
+          >
             {formatNetworkName(row.original.networkName)}
-          </Badge>
+          </Link>
         ),
       },
       {
         id: "address",
-        header: "Address",
+        header: "Mesh IP",
         cell: ({ row }) =>
           orgId ? (
             <MachineAddressPopover
@@ -235,48 +236,44 @@ function MachinesPage() {
               tenantIpv6={row.original.tenantIpv6}
             />
           ) : (
-            <span className="font-mono text-xs">{row.original.assignedIp}</span>
+            <span className="font-mono text-[11px]">
+              {row.original.assignedIp}
+            </span>
           ),
       },
       {
-        id: "version",
-        header: "Version",
+        id: "type",
+        header: "Type",
         cell: ({ row }) => (
-          <>
-            <div className="text-sm">{row.original.agentVersion ?? "-"}</div>
-            <div className="text-muted-foreground text-xs">
-              {row.original.os ?? "Unknown OS"}
-            </div>
-          </>
+          <div className="text-[12px]">
+            <span>{deviceTypeLabel(row.original.type)}</span>
+            {row.original.kind && row.original.type === "k8s" ? (
+              <p className="text-muted-foreground text-[11px]">
+                {deviceKindLabel(row.original.kind) ?? row.original.kind}
+              </p>
+            ) : null}
+          </div>
         ),
-      },
-      {
-        id: "tunnels",
-        header: "Tunnels",
-        cell: ({ row }) => (
-          <span className="tabular-nums">
-            {tunnelCounts.get(row.original.endpointId) ?? 0}
-          </span>
-        ),
-      },
-      {
-        id: "serves",
-        header: "Serves",
-        cell: ({ row }) => (
-          <span className="tabular-nums">
-            {serveCounts.get(row.original.endpointId) ?? 0}
-          </span>
-        ),
-      },
-      {
-        id: "status",
-        header: "Status",
-        cell: ({ row }) => <StatusBadge orgId={orgId} device={row.original} />,
       },
       {
         id: "lastSeen",
         header: "Last seen",
         cell: ({ row }) => <LastSeenCell orgId={orgId} device={row.original} />,
+      },
+      {
+        id: "mesh",
+        header: "",
+        meta: { headerClassName: "w-[88px]", className: "w-[88px]" },
+        cell: ({ row }) => (
+          <Link
+            to="/app/networks/$networkId"
+            params={{ networkId: row.original.networkId }}
+            search={row.original.type === "k8s" ? { kind: "k8s" as const } : {}}
+            className="text-muted-foreground hover:text-foreground text-[11px] whitespace-nowrap"
+          >
+            View on Mesh
+          </Link>
+        ),
       },
       {
         id: "actions",
@@ -304,6 +301,19 @@ function MachinesPage() {
                     }
                   >
                     View details
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    render={
+                      <Link
+                        to="/app/networks/$networkId"
+                        params={{ networkId: machine.networkId }}
+                        search={
+                          machine.type === "k8s" ? { kind: "k8s" as const } : {}
+                        }
+                      />
+                    }
+                  >
+                    Open Mesh
                   </DropdownMenuItem>
                   {canManage ? (
                     machine.status === "pending" ? (
@@ -419,8 +429,6 @@ function MachinesPage() {
       deviceMutations.updateMembership,
       canManage,
       orgId,
-      serveCounts,
-      tunnelCounts,
       withOrgExpiry,
     ],
   );
@@ -429,7 +437,8 @@ function MachinesPage() {
     <>
       <PageHeader
         title="Machines"
-        description="Manage the agents connected to your organization."
+        description="Org-wide fleet index — open Mesh for topology, or a machine for detail."
+        dense
         actions={
           canManage ? (
             <Button onClick={() => setEnrollOpen(true)}>
@@ -467,30 +476,50 @@ function MachinesPage() {
         count={filtered.length}
         countLabel={filtered.length === 1 ? "machine" : "machines"}
         filters={
-          <Select
-            value={statusFilter}
-            onValueChange={(value) =>
-              setStatusFilter(
-                (value as
-                  | "all"
-                  | "online"
-                  | "offline"
-                  | "pending"
-                  | "expired") ?? "all",
-              )
-            }
-          >
-            <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              <SelectItem value="online">Online</SelectItem>
-              <SelectItem value="offline">Offline</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="expired">Expired</SelectItem>
-            </SelectContent>
-          </Select>
+          <>
+            <Select
+              value={statusFilter}
+              onValueChange={(value) =>
+                setStatusFilter(
+                  (value as
+                    | "all"
+                    | "online"
+                    | "offline"
+                    | "pending"
+                    | "expired") ?? "all",
+                )
+              }
+            >
+              <SelectTrigger className="w-[140px]">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="online">Online</SelectItem>
+                <SelectItem value="offline">Offline</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="expired">Expired</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select
+              value={typeFilter}
+              onValueChange={(value) =>
+                setTypeFilter(
+                  (value as "all" | "agent" | "sdk" | "k8s") ?? "all",
+                )
+              }
+            >
+              <SelectTrigger className="w-[140px]">
+                <SelectValue placeholder="Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All types</SelectItem>
+                <SelectItem value="agent">Agent</SelectItem>
+                <SelectItem value="sdk">SDK</SelectItem>
+                <SelectItem value="k8s">Kubernetes</SelectItem>
+              </SelectContent>
+            </Select>
+          </>
         }
         actions={
           canManage && selectedMachines.length > 0 ? (

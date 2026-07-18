@@ -6,18 +6,28 @@ import {
   pgIntervalToSeconds,
 } from "@tunnet/api/management";
 
+import { getMachinePresence, type MachinePresence } from "@/lib/machine-utils";
+
 export type ExpiryUrgency = "critical" | "warning" | null;
 
 export type ExpiryDevice = Pick<
   Device,
-  "lastSeen" | "inactivityTtl" | "expiredAt" | "status"
+  | "lastSeen"
+  | "inactivityTtl"
+  | "expiredAt"
+  | "status"
+  | "agentConnected"
+  | "lastHeartbeatAt"
 > & {
   /** Org default inactivity duration when device has no override. */
   orgInactivityAfter?: string | null;
   orgAutoCleanupEnabled?: boolean;
 };
 
-export function resolveInactivityTtlSecs(device: ExpiryDevice): number | null {
+export function resolveInactivityTtlSecs(
+  device: Pick<ExpiryDevice, "inactivityTtl"> &
+    Pick<Partial<ExpiryDevice>, "orgInactivityAfter" | "orgAutoCleanupEnabled">,
+): number | null {
   if (device.inactivityTtl) {
     return pgIntervalToSeconds(device.inactivityTtl);
   }
@@ -36,23 +46,41 @@ export function resolveExpiresAtMs(device: ExpiryDevice): number | null {
   return new Date(device.lastSeen).getTime() + ttlSecs * 1000;
 }
 
-export function inactivityWindowSecs(device: ExpiryDevice): number | null {
+export function inactivityWindowSecs(
+  device: Pick<ExpiryDevice, "inactivityTtl"> &
+    Pick<Partial<ExpiryDevice>, "orgInactivityAfter" | "orgAutoCleanupEnabled">,
+): number | null {
   return resolveInactivityTtlSecs(device);
 }
 
 export function deriveInactivityLimitCompact(
-  device: ExpiryDevice,
+  device: Pick<ExpiryDevice, "inactivityTtl"> &
+    Pick<Partial<ExpiryDevice>, "orgInactivityAfter" | "orgAutoCleanupEnabled">,
 ): string | null {
-  const secs = inactivityWindowSecs(device);
+  const secs = inactivityWindowSecs(device as ExpiryDevice);
   if (secs === null) return null;
   return formatDurationCompact(secs);
+}
+
+/** True when the inactivity clock should tick (offline / stale / not online). */
+export function isExpiryCountdownActive(
+  device: ExpiryDevice,
+  now = Date.now(),
+): boolean {
+  if (device.status === "expired" || device.expiredAt) return true;
+  const presence = getMachinePresence(device, now);
+  return presence !== "online";
 }
 
 export function getExpiryUrgency(
   device: ExpiryDevice,
   now = Date.now(),
+  presence?: MachinePresence,
 ): ExpiryUrgency {
   if (device.status === "expired" || device.expiredAt) return "critical";
+
+  const resolved = presence ?? getMachinePresence(device, now);
+  if (resolved === "online") return null;
 
   const expiresAtMs = resolveExpiresAtMs(device);
   if (expiresAtMs === null) return null;
@@ -100,6 +128,13 @@ export function formatExpiryLabel(
   now = Date.now(),
 ): string | null {
   if (device.status === "expired" || device.expiredAt) return "Expired";
+
+  const windowSecs = inactivityWindowSecs(device);
+  if (windowSecs === null) return "Never expires";
+
+  if (!isExpiryCountdownActive(device, now)) {
+    return `After ${formatDurationCompact(windowSecs)} inactive`;
+  }
 
   const expiresAtMs = resolveExpiresAtMs(device);
   if (expiresAtMs === null) return "Never expires";

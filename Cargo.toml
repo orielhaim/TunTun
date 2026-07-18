@@ -7,6 +7,8 @@ members = [
   "crates/tunnet-agent",
   "crates/tunnet-relay",
   "crates/tunnet-node-napi",
+  "crates/tunnet-kube-node",
+  "crates/tunnet-operator",
 ]
 
 [workspace.package]
@@ -117,6 +119,17 @@ napi-build = "2"
 # Local
 tunnet-common = { path = "crates/tunnet-common" }
 tunnet-core = { path = "crates/tunnet-core" }
+
+# Kubernetes operator
+kube = { version = "4.0.0", default-features = false, features = [
+  "client",
+  "runtime",
+  "derive",
+  "rustls-tls",
+] }
+k8s-openapi = { version = "0.28.0", features = ["v1_36"] }
+schemars = "1.2.1"
+futures = "0.3"
 
 [profile.release]
 opt-level = 3

@@ -1,6 +1,15 @@
 import { z } from "zod";
 
-export { SDK_ENROLL_SCOPE } from "./api-keys";
+export { SDK_ENROLL_SCOPE, SDK_MANAGE_SCOPE } from "./api-keys";
+
+export const k8sNodeKindSchema = z.enum([
+  "sdk",
+  "k8s-connector",
+  "k8s-ingress",
+  "k8s-tunnel",
+  "k8s-egress",
+  "k8s-sidecar",
+]);
 
 export const registerSdkNodeBody = z.object({
   endpointId: z.string().length(64),
@@ -8,6 +17,13 @@ export const registerSdkNodeBody = z.object({
   processName: z.string().max(128).optional(),
   runtime: z.string().max(128).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
+  /** Concrete node kind; defaults to sdk. K8s kinds map to devices.type = k8s. */
+  kind: k8sNodeKindSchema.optional(),
+  labels: z.record(z.string(), z.string()).optional(),
+  /** Human duration (e.g. "24h") → inactivity TTL. */
+  expiresIn: z.string().min(1).max(64).optional(),
+  /** ACL tags assigned at registration. */
+  tags: z.array(z.string().min(1).max(128)).max(64).optional(),
 });
 
 /** Mirrors control-plane `EndpointSnapshot` (snake_case JSON). */

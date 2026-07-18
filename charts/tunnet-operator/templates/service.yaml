@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "tunnet-operator.fullname" . }}
+  namespace: {{ include "tunnet-operator.namespace" . }}
+  labels:
+    {{- include "tunnet-operator.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "tunnet-operator.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: health
+      port: 8080
+      targetPort: health
+---
+{{- if .Values.webhook.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "tunnet-operator.webhookServiceName" . }}
+  namespace: {{ include "tunnet-operator.namespace" . }}
+  labels:
+    {{- include "tunnet-operator.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "tunnet-operator.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: https
+      port: 443
+      targetPort: webhook
+{{- end }}

@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "tunnet-operator.fullname" . }}
+  namespace: {{ include "tunnet-operator.namespace" . }}
+  labels:
+    {{- include "tunnet-operator.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "tunnet-operator.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "tunnet-operator.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "tunnet-operator.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: operator
+          image: "{{ .Values.image.operator.repository }}:{{ .Values.image.operator.tag }}"
+          imagePullPolicy: {{ .Values.image.operator.pullPolicy }}
+          args: ["run"]
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: TUNNET_KUBE_NODE_IMAGE
+              value: "{{ .Values.image.kubeNode.repository }}:{{ .Values.image.kubeNode.tag }}"
+            - name: TUNNET_DEFAULT_AUTH_SECRET
+              value: {{ .Values.credentials.secretName | quote }}
+            - name: TUNNET_NODE_EXPIRES_IN
+              value: {{ .Values.nodeExpiresIn | quote }}
+            - name: TUNNET_HEALTH_ADDR
+              value: "0.0.0.0:8080"
+            - name: TUNNET_WEBHOOK_ADDR
+              value: "0.0.0.0:{{ .Values.webhook.port }}"
+            - name: TUNNET_WEBHOOK_SERVICE
+              value: {{ include "tunnet-operator.webhookServiceName" . | quote }}
+            - name: TUNNET_WEBHOOK_CERT_FILE
+              value: /tls/tls.crt
+            - name: TUNNET_WEBHOOK_KEY_FILE
+              value: /tls/tls.key
+            - name: TUNNET_METRICS
+              value: {{ .Values.metrics.enabled | quote }}
+            - name: RUST_LOG
+              value: info,tunnet_operator=debug
+          ports:
+            - name: health
+              containerPort: 8080
+            - name: webhook
+              containerPort: {{ .Values.webhook.port }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          volumeMounts:
+            {{- if .Values.webhook.enabled }}
+            - name: webhook-tls
+              mountPath: /tls
+              readOnly: true
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        {{- if .Values.webhook.enabled }}
+        - name: webhook-tls
+          secret:
+            secretName: {{ include "tunnet-operator.fullname" . }}-webhook-tls
+        {{- end }}

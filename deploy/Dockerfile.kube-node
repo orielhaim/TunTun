@@ -1,0 +1,21 @@
+FROM rust:1.96-bookworm AS builder
+
+WORKDIR /src
+COPY Cargo.toml Cargo.lock ./
+COPY crates/ crates/
+
+RUN cargo fetch
+RUN cargo build --release --package tunnet-kube-node \
+    && strip target/release/tunnet-kube-node
+
+FROM debian:bookworm-slim
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /src/target/release/tunnet-kube-node /usr/local/bin/tunnet-kube-node
+
+EXPOSE 8080
+
+ENTRYPOINT ["tunnet-kube-node"]

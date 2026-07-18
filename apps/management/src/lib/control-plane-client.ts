@@ -135,6 +135,8 @@ function toSnakeRegisterBody(
     agent_version: body.agentVersion ?? "",
     device_type: body.deviceType,
     metadata: body.metadata,
+    labels: body.labels ?? null,
+    expires_in: body.expiresIn ?? null,
   };
 }
 

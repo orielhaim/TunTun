@@ -60,6 +60,10 @@ struct RegisterDeviceRequest {
     #[serde(default = "default_device_type")]
     device_type: String,
     metadata: Option<serde_json::Value>,
+    #[serde(default)]
+    labels: Option<std::collections::HashMap<String, String>>,
+    #[serde(default)]
+    expires_in: Option<String>,
 }
 
 fn default_device_type() -> String {
@@ -232,8 +236,8 @@ async fn register_device_handler(
             agent_version: parsed.agent_version,
             device_type: parsed.device_type,
             metadata: parsed.metadata,
-            labels: None,
-            expires_in: None,
+            labels: parsed.labels,
+            expires_in: parsed.expires_in,
             public_ip: None,
             membership_status: "active".into(),
         },
@@ -258,6 +262,8 @@ struct OpenTunnelPush {
     auth_token: String,
     #[serde(default)]
     redirect_rules: Vec<tunnet_common::RedirectRule>,
+    #[serde(default)]
+    target_addr: Option<String>,
 }
 
 #[derive(serde::Deserialize)]
@@ -302,6 +308,7 @@ async fn open_tunnel_handler(
                 protocol: parsed.protocol,
                 auth_token: parsed.auth_token,
                 redirect_rules: parsed.redirect_rules,
+                target_addr: parsed.target_addr,
             },
         )
         .await;
@@ -358,6 +365,8 @@ struct StartServePush {
     allowed_tags: Vec<String>,
     #[serde(default)]
     allowed_endpoint_ids: Vec<String>,
+    #[serde(default)]
+    target_addr: Option<String>,
 }
 
 fn default_all_peers() -> String {
@@ -407,6 +416,7 @@ async fn start_serve_handler(
                 access_mode: parsed.access_mode,
                 allowed_tags: parsed.allowed_tags,
                 allowed_endpoint_ids: parsed.allowed_endpoint_ids,
+                target_addr: parsed.target_addr,
             },
         )
         .await;

@@ -7,7 +7,8 @@ pub const SLIDE_ON_REGISTER: &str = concat!(
 );
 
 pub const SLIDE_ON_METADATA: &str = concat!(
-    "UPDATE devices SET last_seen = now() ",
+    "UPDATE devices SET last_seen = now(), ",
+    "metadata = devices.metadata || $2::jsonb ",
     "WHERE endpoint_id = $1 AND expired_at IS NULL"
 );
 

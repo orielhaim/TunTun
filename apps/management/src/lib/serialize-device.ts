@@ -5,6 +5,7 @@ import {
   deviceDisplayName,
   deviceHostname,
   deviceKind,
+  deviceNodeKind,
   deviceOs,
 } from "./device-metadata";
 import { toIso } from "./serialize";
@@ -46,6 +47,7 @@ export function serializeDevice(row: {
     name: deviceDisplayName(row.name, row.metadata, row.endpointId),
     hostname: deviceHostname(row.metadata, row.endpointId),
     type: deviceKind(row.type ?? "agent", row.metadata),
+    kind: deviceNodeKind(row.metadata),
     os: deviceOs(row.metadata),
     agentVersion: deviceAgentVersion(row.metadata),
     assignedIp: formatIp(row.assignedIp),

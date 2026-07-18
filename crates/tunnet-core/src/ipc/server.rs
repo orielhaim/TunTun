@@ -699,6 +699,7 @@ async fn start_serve(
             certificate_pem,
             private_key_pem,
             crate::serve::ServeAcl::default(),
+            None,
         )
         .await
 }
@@ -749,6 +750,7 @@ async fn start_tunnel(
             &created.protocol,
             &created.auth_token,
             created.redirect_rules,
+            None,
         )
         .await
     {

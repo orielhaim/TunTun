@@ -25,6 +25,10 @@ export const topologyNodeSchema = z.object({
   /** Active tunnel count (machines / relays). */
   tunnelCount: z.number().int().nonnegative().optional(),
   publicHostname: z.string().nullable().optional(),
+  /** devices.type for machine nodes. */
+  deviceType: z.enum(["agent", "sdk", "k8s"]).nullable().optional(),
+  /** metadata.kind for machine nodes (e.g. k8s-connector). */
+  nodeKind: z.string().min(1).max(64).nullable().optional(),
 });
 
 export const topologyEdgeKindSchema = z.enum([

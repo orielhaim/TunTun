@@ -1,7 +1,7 @@
-//! Tunnet Serve - TLS (or TCP) reverse proxy on the mesh interface → localhost.
+//! Tunnet Serve - TLS (or TCP) reverse proxy on the mesh interface → upstream.
 //!
 //! `tunnet serve 3000` listens on the agent's mesh IP with an internal-CA cert
-//! and forwards decrypted traffic to `127.0.0.1:3000`.
+//! and forwards decrypted traffic to a configurable upstream (default `127.0.0.1:port`).
 
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, SocketAddr};
@@ -95,6 +95,8 @@ impl ServeManager {
         certificate_pem: Option<&str>,
         private_key_pem: Option<&str>,
         acl: ServeAcl,
+        // Upstream to proxy to (defaults to `127.0.0.1:port` when `None`).
+        target_addr: Option<SocketAddr>,
     ) -> anyhow::Result<ServeInfo> {
         {
             let guard = self.inner.lock();
@@ -124,7 +126,7 @@ impl ServeManager {
 
         let (stop_tx, stop_rx) = oneshot::channel();
         let bind = SocketAddr::from((self.mesh_ip, port));
-        let local = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
+        let local = target_addr.unwrap_or_else(|| SocketAddr::from((Ipv4Addr::LOCALHOST, port)));
         let routes = self.routes.clone();
         let acl_c = acl.clone();
         let client_tx = self.client_tx.clone();

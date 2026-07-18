@@ -33,11 +33,24 @@ export function deviceAgentVersion(metadata: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-export function deviceKind(type: string, metadata: unknown): "agent" | "sdk" {
-  if (type === "sdk" || type === "agent") return type;
+export function deviceKind(
+  type: string,
+  metadata: unknown,
+): "agent" | "sdk" | "k8s" {
+  if (type === "sdk" || type === "agent" || type === "k8s") return type;
   const kind = parseDeviceMetadata(metadata).kind;
   if (kind === "sdk" || kind === "agent") return kind;
+  if (typeof kind === "string" && kind.startsWith("k8s")) return "k8s";
   return "agent";
+}
+
+/** Concrete metadata.kind string (k8s-connector, sdk, …), if set. */
+export function deviceNodeKind(metadata: unknown): string | null {
+  const kind = parseDeviceMetadata(metadata).kind;
+  if (typeof kind === "string" && kind.trim().length > 0) {
+    return kind.trim().slice(0, 64);
+  }
+  return null;
 }
 
 export function normalizeDeviceMetadata(

@@ -1,25 +1,61 @@
 import type { RegisterDeviceResponse } from "@tunnet/api/internal";
-import { registerSdkNodeBody, SDK_ENROLL_SCOPE } from "@tunnet/api/management";
+import {
+  registerSdkNodeBody,
+  SDK_ENROLL_SCOPE,
+  SDK_MANAGE_SCOPE,
+} from "@tunnet/api/management";
 import { schema } from "@tunnet/db";
 import { formatIpv4Cidr } from "@tunnet/ip";
 import { and, eq } from "drizzle-orm";
 import { Elysia } from "elysia";
-import { canAccessNetwork } from "../../lib/api-key-auth";
+import { canAccessNetwork, hasScope } from "../../lib/api-key-auth";
 import { writeAudit } from "../../lib/audit";
 import { registerDevice } from "../../lib/control-plane-client";
 import { db } from "../../lib/db";
+import { removeDeviceMembership } from "../../lib/remove-device-membership";
 import {
   apiKeyAuthPlugin,
   getApiKeyAuth,
   requireApiKey,
-  requireApiKeyScope,
 } from "./middleware/api-key-auth";
 import { badRequest, forbidden, notFound } from "./middleware/session";
+
+function requireEnrollOrManage() {
+  return new Elysia({ name: "require-enroll-or-manage" }).onBeforeHandle(
+    { as: "scoped" },
+    ({ apiKeyAuth }) => {
+      if (!apiKeyAuth) return forbidden();
+      if (
+        !hasScope(apiKeyAuth.scopes, SDK_ENROLL_SCOPE) &&
+        !hasScope(apiKeyAuth.scopes, SDK_MANAGE_SCOPE)
+      ) {
+        return forbidden();
+      }
+    },
+  );
+}
+
+function requireManage() {
+  return new Elysia({ name: "require-sdk-manage" }).onBeforeHandle(
+    { as: "scoped" },
+    ({ apiKeyAuth }) => {
+      if (!apiKeyAuth) return forbidden();
+      if (!hasScope(apiKeyAuth.scopes, SDK_MANAGE_SCOPE)) {
+        return forbidden();
+      }
+    },
+  );
+}
+
+function resolveDeviceType(kind: string | undefined): "sdk" | "k8s" {
+  if (kind && kind.startsWith("k8s-")) return "k8s";
+  return "sdk";
+}
 
 export const sdkNodesRoutes = new Elysia()
   .use(apiKeyAuthPlugin)
   .use(requireApiKey)
-  .use(requireApiKeyScope(SDK_ENROLL_SCOPE))
+  .use(requireEnrollOrManage())
   .post(
     "/organizations/:orgId/networks/:networkId/sdk-nodes",
     async ({ apiKeyAuth, params, body, request }) => {
@@ -33,6 +69,7 @@ export const sdkNodesRoutes = new Elysia()
       }
 
       const parsed = registerSdkNodeBody.parse(body);
+      const kind = parsed.kind ?? "sdk";
 
       const network = await db.query.networks.findFirst({
         where: and(
@@ -46,7 +83,7 @@ export const sdkNodesRoutes = new Elysia()
 
       const metadata: Record<string, unknown> = {
         ...(parsed.metadata ?? {}),
-        kind: "sdk",
+        kind,
         hostname: parsed.hostname,
       };
       if (parsed.processName) {
@@ -68,18 +105,34 @@ export const sdkNodesRoutes = new Elysia()
           organizationId: params.orgId,
           networkId: params.networkId,
           hostname: parsed.hostname,
-          os: typeof metadata.os === "string" ? metadata.os : "unknown",
+          os: typeof metadata.os === "string" ? metadata.os : "linux",
           agentVersion:
             typeof metadata.agentVersion === "string"
               ? metadata.agentVersion
-              : "sdk",
-          deviceType: "sdk",
+              : kind.startsWith("k8s")
+                ? "k8s"
+                : "sdk",
+          deviceType: resolveDeviceType(kind),
           metadata,
+          labels: parsed.labels,
+          expiresIn: parsed.expiresIn,
         });
       } catch (error) {
         const message =
           error instanceof Error ? error.message : "Registration failed";
         return badRequest(message);
+      }
+
+      if (parsed.tags && parsed.tags.length > 0) {
+        for (const tag of parsed.tags) {
+          await db
+            .insert(schema.deviceTags)
+            .values({
+              endpointId: parsed.endpointId,
+              tag,
+            })
+            .onConflictDoNothing();
+        }
       }
 
       const membership = (
@@ -110,6 +163,7 @@ export const sdkNodesRoutes = new Elysia()
         metadata: {
           networkId: params.networkId,
           hostname: parsed.hostname,
+          kind,
         },
       });
 
@@ -121,5 +175,45 @@ export const sdkNodesRoutes = new Elysia()
         networkCidr: formatIpv4Cidr(network.cidr),
         snapshot: registerResult.snapshot,
       };
+    },
+  )
+  .use(requireManage())
+  .delete(
+    "/organizations/:orgId/sdk-nodes",
+    async ({ apiKeyAuth, params, body }) => {
+      const auth = getApiKeyAuth({ apiKeyAuth });
+      if (auth.organizationId !== params.orgId) {
+        return forbidden();
+      }
+
+      const items = (
+        body as {
+          items?: Array<{ networkId: string; endpointId: string }>;
+        }
+      )?.items;
+      if (!Array.isArray(items) || items.length === 0) {
+        return badRequest("items required");
+      }
+      if (items.length > 100) {
+        return badRequest("max 100 items");
+      }
+
+      let deleted = 0;
+      await db.transaction(async (tx) => {
+        for (const item of items) {
+          if (!canAccessNetwork(auth, item.networkId)) {
+            continue;
+          }
+          await removeDeviceMembership(tx, {
+            organizationId: auth.organizationId,
+            actor: `api_key:${auth.id}`,
+            networkId: item.networkId,
+            endpointId: item.endpointId,
+          });
+          deleted += 1;
+        }
+      });
+
+      return { ok: true as const, deleted };
     },
   );

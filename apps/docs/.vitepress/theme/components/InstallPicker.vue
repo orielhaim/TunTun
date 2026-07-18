@@ -3,13 +3,9 @@ import { computed, onMounted, ref } from "vue";
 
 type Platform = "linux" | "macos" | "windows";
 
-const { compact } = withDefaults(
-  defineProps<{
-    /** Tighter layout for in-guide pages */
-    compact?: boolean;
-  }>(),
-  { compact: false },
-);
+const { compact = false } = defineProps<{
+  compact?: boolean;
+}>();
 
 const platforms: {
   id: Platform;

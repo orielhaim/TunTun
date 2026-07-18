@@ -211,6 +211,18 @@ export function useTopology(orgId: string | undefined, networkId: string) {
   });
 }
 
+export function useKubernetes(orgId: string | undefined) {
+  return useQuery({
+    queryKey: orgId ? queryKeys.kubernetes(orgId) : ["kubernetes"],
+    enabled: Boolean(orgId),
+    queryFn: async () => {
+      const client = createManagementClient(orgId!);
+      return client.getKubernetes();
+    },
+    refetchInterval: 15_000,
+  });
+}
+
 export function useNetworkMetrics(
   orgId: string | undefined,
   networkId: string,

@@ -150,7 +150,7 @@ export function NetworkForceGraph({
   heightClassName?: string;
   showHub?: boolean;
   statusFilter?: "all" | "online" | "offline";
-  kindFilter?: "all" | TopologyNode["kind"];
+  kindFilter?: "all" | TopologyNode["kind"] | "k8s";
   /** When true, edge thickness scales more strongly with intensity. */
   heatmap?: boolean;
 }) {
@@ -194,7 +194,11 @@ export function NetworkForceGraph({
 
   const filteredNodes = useMemo(() => {
     return nodes.filter((n) => {
-      if (kindFilter !== "all" && n.kind !== kindFilter) return false;
+      if (kindFilter === "k8s") {
+        if (n.kind !== "machine" || n.deviceType !== "k8s") return false;
+      } else if (kindFilter !== "all" && n.kind !== kindFilter) {
+        return false;
+      }
       if (n.kind === "machine") {
         if (statusFilter === "online" && !n.online) return false;
         if (statusFilter === "offline" && n.online) return false;
@@ -326,6 +330,7 @@ export function NetworkForceGraph({
 
       if (node.kind === "machine") {
         const online = Boolean(node.online);
+        const isK8s = node.deviceType === "k8s";
         const name = node.label || "machine";
         const ip = node.secondary ?? node.assignedIp ?? "-";
         const nameSize = Math.max(12 / scale, 3.6);
@@ -347,11 +352,20 @@ export function NetworkForceGraph({
         roundRect(ctx, cardX, cardY, cardW, cardH, 6 / scale);
         ctx.fillStyle = online ? "#ffffff" : "rgba(248, 250, 252, 0.95)";
         ctx.fill();
-        ctx.strokeStyle = online
-          ? "rgba(15, 23, 42, 0.12)"
-          : "rgba(148, 163, 184, 0.45)";
-        ctx.lineWidth = 1 / scale;
+        ctx.strokeStyle = isK8s
+          ? online
+            ? "rgba(14, 116, 144, 0.55)"
+            : "rgba(14, 116, 144, 0.3)"
+          : online
+            ? "rgba(15, 23, 42, 0.12)"
+            : "rgba(148, 163, 184, 0.45)";
+        ctx.lineWidth = (isK8s ? 1.5 : 1) / scale;
         ctx.stroke();
+
+        if (isK8s) {
+          ctx.fillStyle = "rgba(14, 116, 144, 0.9)";
+          ctx.fillRect(cardX, cardY + 2 / scale, 3 / scale, cardH - 4 / scale);
+        }
 
         const textTop = cardY + padY;
         ctx.beginPath();

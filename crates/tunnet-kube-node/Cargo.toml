@@ -1,0 +1,26 @@
+[package]
+name = "tunnet-kube-node"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "tunnet-kube-node"
+path = "src/main.rs"
+
+[dependencies]
+tunnet-common.workspace = true
+tunnet-core.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+axum.workspace = true
+metrics.workspace = true
+metrics-exporter-prometheus.workspace = true
+hex.workspace = true
+uuid.workspace = true
+chrono.workspace = true

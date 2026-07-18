@@ -1,5 +1,10 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Link, useParams } from "@tanstack/react-router";
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearch,
+} from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { Device, TopologyNode } from "@tunnet/api/management";
 import {
@@ -19,6 +24,7 @@ import { NetworkForceGraph } from "@/components/app/network-force-graph";
 import { PageHeader } from "@/components/app/page-header";
 import { StatusBadge } from "@/components/app/status-badge";
 import { TopologyNodeSheet } from "@/components/app/topology-node-sheet";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -35,6 +41,7 @@ import {
   usePresenceStream,
 } from "@/hooks/use-presence-stream";
 import { useActiveOrganization } from "@/lib/auth-client";
+import { deviceTypeLabel } from "@/lib/device-type";
 import { getMachinePresence } from "@/lib/machine-utils";
 import { usePresenceClock } from "@/lib/presence-clock";
 import {
@@ -45,9 +52,12 @@ import {
   useTopology,
 } from "@/lib/queries/management";
 import { cn } from "@/lib/utils";
+import type { MeshKindFilter } from "@/routes/app/networks/$networkId/index";
 
 export function NetworkOverviewPage() {
   const { networkId } = useParams({ from: "/app/networks/$networkId/" });
+  const meshSearch = useSearch({ from: "/app/networks/$networkId/" });
+  const navigate = useNavigate({ from: "/app/networks/$networkId/" });
   const queryClient = useQueryClient();
   const { data: activeOrg } = useActiveOrganization();
   const orgId = activeOrg?.id;
@@ -74,16 +84,27 @@ export function NetworkOverviewPage() {
   const [statusFilter, setStatusFilter] = useState<
     "all" | "online" | "offline"
   >("all");
-  const [kindFilter, setKindFilter] = useState<"all" | TopologyNode["kind"]>(
-    "all",
-  );
+  const kindFilter: MeshKindFilter = meshSearch.kind ?? "all";
   const [heatmap, setHeatmap] = useState(false);
-  const [search, setSearch] = useState("");
+  const [query, setQuery] = useState("");
   const [tableStatus, setTableStatus] = useState<"all" | "online" | "offline">(
     "all",
   );
   const [selected, setSelected] = useState<TopologyNode | null>(null);
   const [enrollOpen, setEnrollOpen] = useState(false);
+
+  function setKindFilter(next: MeshKindFilter) {
+    void navigate({
+      search: (prev) => {
+        if (next === "all") {
+          const { kind: _kind, ...rest } = prev;
+          return rest;
+        }
+        return { ...prev, kind: next };
+      },
+      replace: true,
+    });
+  }
 
   const onlineCount = useMemo(() => {
     if (!devices) return 0;
@@ -96,11 +117,25 @@ export function NetworkOverviewPage() {
 
   const filteredDevices = useMemo(() => {
     const list = devices ?? [];
-    const q = search.trim().toLowerCase();
+    const q = query.trim().toLowerCase();
     return list.filter((d) => {
       const presence = getMachinePresence(d, now);
       if (tableStatus === "online" && presence !== "online") return false;
       if (tableStatus === "offline" && presence === "online") return false;
+      if (kindFilter === "k8s" && d.type !== "k8s") return false;
+      if (
+        kindFilter === "machine" &&
+        (d.type === "k8s" || (d.type !== "agent" && d.type !== "sdk"))
+      ) {
+        return false;
+      }
+      if (
+        kindFilter === "subnet" ||
+        kindFilter === "hostname" ||
+        kindFilter === "exit"
+      ) {
+        return false;
+      }
       if (!q) return true;
       return (
         d.name.toLowerCase().includes(q) ||
@@ -109,7 +144,7 @@ export function NetworkOverviewPage() {
         (d.os?.toLowerCase().includes(q) ?? false)
       );
     });
-  }, [devices, search, tableStatus, now]);
+  }, [devices, query, tableStatus, now, kindFilter]);
 
   const columns = useMemo<ColumnDef<Device>[]>(
     () => [
@@ -130,6 +165,15 @@ export function NetworkOverviewPage() {
         id: "status",
         header: "Status",
         cell: ({ row }) => <StatusBadge orgId={orgId} device={row.original} />,
+      },
+      {
+        id: "type",
+        header: "Type",
+        cell: ({ row }) => (
+          <Badge variant="outline" className="font-normal">
+            {deviceTypeLabel(row.original.type)}
+          </Badge>
+        ),
       },
       {
         id: "ip",
@@ -213,16 +257,15 @@ export function NetworkOverviewPage() {
                 </Select>
                 <Select
                   value={kindFilter}
-                  onValueChange={(v) =>
-                    v && setKindFilter(v as typeof kindFilter)
-                  }
+                  onValueChange={(v) => v && setKindFilter(v as MeshKindFilter)}
                 >
-                  <SelectTrigger className="h-8 w-[120px] text-xs">
-                    <SelectValue />
+                  <SelectTrigger className="h-8 w-[140px] text-xs">
+                    <SelectValue placeholder="Type" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All types</SelectItem>
-                    <SelectItem value="machine">Machines</SelectItem>
+                    <SelectItem value="machine">Agents & SDK</SelectItem>
+                    <SelectItem value="k8s">Kubernetes</SelectItem>
                     <SelectItem value="subnet">Subnets</SelectItem>
                     <SelectItem value="hostname">Hostnames</SelectItem>
                     <SelectItem value="exit">Exits</SelectItem>
@@ -259,8 +302,8 @@ export function NetworkOverviewPage() {
               <div className="relative min-w-[200px] flex-1">
                 <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
                 <Input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search nodes…"
                   className="h-8 pl-8 text-xs"
                 />

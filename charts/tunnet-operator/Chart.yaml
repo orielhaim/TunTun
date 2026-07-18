@@ -1,0 +1,11 @@
+apiVersion: v2
+name: tunnet-operator
+description: Tunnet Kubernetes Operator — mesh connector, ingress, tunnel, egress
+type: application
+version: 0.6.0
+appVersion: "0.6.0"
+keywords:
+  - tunnet
+  - mesh
+  - networking
+home: https://tunnet.io

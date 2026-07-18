@@ -114,6 +114,10 @@ pub async fn enroll(cfg: EnrollConfig) -> Result<EnrollResult> {
                 &identity.endpoint_id_hex(),
                 &hostname,
                 Some(metadata.clone()),
+                None,
+                None,
+                None,
+                None,
             )
             .await
             .map_err(err)?

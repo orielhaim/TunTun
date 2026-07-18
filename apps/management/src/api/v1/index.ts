@@ -8,6 +8,7 @@ import { enrollmentTokensRoutes } from "./enrollment-tokens";
 import { entitlementsRoutes } from "./entitlements";
 import { hostnameRoutesRoutes } from "./hostname-routes";
 import { internalCaRoutes } from "./internal-ca";
+import { kubernetesRoutes } from "./kubernetes";
 import { networksRoutes } from "./networks";
 import { nodeGroupsRoutes } from "./node-groups";
 import { orgSettingsRoutes } from "./org-settings";
@@ -39,6 +40,7 @@ export const apiV1 = new Elysia({ prefix: "/api/v1" })
   .use(deviceProfilesRoutes)
   .use(nodeGroupsRoutes)
   .use(topologyRoutes)
+  .use(kubernetesRoutes)
   .use(enrollmentTokensRoutes)
   .use(sdkNodesRoutes)
   .use(apiKeysRoutes)
