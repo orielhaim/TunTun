@@ -172,7 +172,7 @@ pub struct NetworkSection {
 }
 
 /// Automatic binary updates - dual with org remote policy.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateSection {
     /// When set, overrides org auto-update enabled flag.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -187,6 +187,16 @@ pub struct UpdateSection {
     /// Local-only: revert window after update (seconds).
     #[serde(default = "default_health_window_secs", rename = "health-window-secs")]
     pub health_window_secs: u64,
+}
+
+impl Default for UpdateSection {
+    fn default() -> Self {
+        Self {
+            enabled: None,
+            check_interval_hours: None,
+            health_window_secs: default_health_window_secs(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
