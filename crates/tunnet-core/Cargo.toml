@@ -2,7 +2,15 @@
 name = "tunnet-core"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
+description = "Core mesh runtime for Tunnet (identity, routing, streams, sync)"
+repository = "https://github.com/tunnetio/Tunnet"
+homepage = "https://tunnet.io"
+documentation = "https://docs.rs/tunnet-core"
+keywords = ["tunnet", "mesh", "vpn", "p2p", "iroh"]
+categories = ["network-programming"]
+readme = "README.md"
 
 [dependencies]
 tunnet-common.workspace = true

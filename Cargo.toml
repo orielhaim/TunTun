@@ -3,6 +3,7 @@ resolver = "2"
 members = [
   "crates/tunnet-common",
   "crates/tunnet-core",
+  "crates/tunnet",
   "crates/tunnet-control",
   "crates/tunnet-agent",
   "crates/tunnet-relay",
@@ -117,8 +118,9 @@ napi-derive = "3"
 napi-build = "2"
 
 # Local
-tunnet-common = { path = "crates/tunnet-common" }
-tunnet-core = { path = "crates/tunnet-core" }
+tunnet-common = { version = "0.6.0", path = "crates/tunnet-common" }
+tunnet-core = { version = "0.6.0", path = "crates/tunnet-core" }
+tunnet = { version = "0.1.0", path = "crates/tunnet" }
 
 # Kubernetes operator
 kube = { version = "4.0.0", default-features = false, features = [

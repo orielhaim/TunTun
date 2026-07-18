@@ -2,7 +2,15 @@
 name = "tunnet-common"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
+description = "Shared protocol types and helpers for Tunnet"
+repository = "https://github.com/tunnetio/Tunnet"
+homepage = "https://tunnet.io"
+documentation = "https://docs.rs/tunnet-common"
+keywords = ["tunnet", "mesh", "vpn", "p2p"]
+categories = ["network-programming"]
+readme = "README.md"
 
 [dependencies]
 serde.workspace = true

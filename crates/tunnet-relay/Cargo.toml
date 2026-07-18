@@ -3,6 +3,7 @@ name = "tunnet-relay"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish = false
 description = "Tunnet public edge relay - TLS termination + reverse tunnels"
 
 [[bin]]

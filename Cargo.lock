@@ -7699,6 +7699,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "tunnet"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "chrono",
+ "iroh",
+ "iroh-blobs",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "tunnet-common",
+ "tunnet-core",
+ "uuid",
+]
+
+[[package]]
 name = "tunnet-agent"
 version = "0.6.0"
 dependencies = [

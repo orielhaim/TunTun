@@ -3,6 +3,7 @@ name = "tunnet-control"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish = false
 
 [dependencies]
 tunnet-common.workspace = true
