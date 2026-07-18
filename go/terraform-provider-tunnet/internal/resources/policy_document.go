@@ -12,9 +12,16 @@ import (
 	tunnet "github.com/tunnetio/tunnet-go"
 )
 
-var _ resource.Resource = (*policyDocumentResource)(nil)
+var (
+	_ resource.Resource                = (*policyDocumentResource)(nil)
+	_ resource.ResourceWithConfigure   = (*policyDocumentResource)(nil)
+	_ resource.ResourceWithImportState = (*policyDocumentResource)(nil)
+	_ resource.ResourceWithIdentity    = (*policyDocumentResource)(nil)
+)
 
-type policyDocumentResource struct{ client *tunnet.Client }
+type policyDocumentResource struct {
+	client *tunnet.Client
+}
 
 type policyDocumentModel struct {
 	ID       types.String `tfsdk:"id"`
@@ -23,7 +30,9 @@ type policyDocumentModel struct {
 	Force    types.Bool   `tfsdk:"force"`
 }
 
-func NewPolicyDocumentResource() resource.Resource { return &policyDocumentResource{} }
+func NewPolicyDocumentResource() resource.Resource {
+	return &policyDocumentResource{}
+}
 
 func (r *policyDocumentResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_policy_document"
@@ -34,8 +43,11 @@ func (r *policyDocumentResource) Schema(_ context.Context, _ resource.SchemaRequ
 		Description: "Manages a monolithic Tunnet policy document.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				Computed: true,
-				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+				Computed:    true,
+				Description: "Policy revision ID.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"document": schema.StringAttribute{
 				Required:    true,
@@ -53,8 +65,16 @@ func (r *policyDocumentResource) Schema(_ context.Context, _ resource.SchemaRequ
 	}
 }
 
+func (r *policyDocumentResource) IdentitySchema(_ context.Context, _ resource.IdentitySchemaRequest, resp *resource.IdentitySchemaResponse) {
+	resp.IdentitySchema = idIdentitySchema()
+}
+
 func (r *policyDocumentResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	r.client = clientFromResource(context.Background(), req, resp)
+	r.client = clientFromResource(req, resp)
+}
+
+func (r *policyDocumentResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	importByID(ctx, req, resp)
 }
 
 func (r *policyDocumentResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -98,23 +118,36 @@ func (r *policyDocumentResource) Create(ctx context.Context, req resource.Create
 		plan.ID = types.StringValue("policy")
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+	resp.Diagnostics.Append(setResourceIdentity(ctx, resp.Identity, plan.ID.ValueString())...)
 }
 
-func (r *policyDocumentResource) Read(ctx context.Context, _ resource.ReadRequest, resp *resource.ReadResponse) {
+func (r *policyDocumentResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	if r.client == nil {
 		return
 	}
+
+	var state policyDocumentModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	force := state.Force
 
 	exportResult, err := r.client.ExportPolicy(ctx, tunnet.PolicyExportRequest{})
 	if resp.Diagnostics.Append(sdkErrorDiag("export policy", err)...); resp.Diagnostics.HasError() {
 		return
 	}
 
-	var state policyDocumentModel
-	state.ID = types.StringValue("policy")
+	if state.ID.IsNull() || state.ID.IsUnknown() {
+		state.ID = types.StringValue("policy")
+	}
 	state.Document = types.StringValue(string(exportResult.Document))
 	state.Format = types.StringValue(string(exportResult.Format))
+	state.Force = force
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+	resp.Diagnostics.Append(setResourceIdentity(ctx, resp.Identity, state.ID.ValueString())...)
 }
 
 func (r *policyDocumentResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -156,6 +189,7 @@ func (r *policyDocumentResource) Update(ctx context.Context, req resource.Update
 		plan.ID = types.StringValue(applyResult.RevisionID)
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+	resp.Diagnostics.Append(setResourceIdentity(ctx, resp.Identity, plan.ID.ValueString())...)
 }
 
 func (r *policyDocumentResource) Delete(ctx context.Context, _ resource.DeleteRequest, resp *resource.DeleteResponse) {

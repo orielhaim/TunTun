@@ -6,12 +6,16 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	tunnet "github.com/tunnetio/tunnet-go"
 )
 
-var _ datasource.DataSource = (*deviceDataSource)(nil)
+var (
+	_ datasource.DataSource              = (*deviceDataSource)(nil)
+	_ datasource.DataSourceWithConfigure = (*deviceDataSource)(nil)
+)
 
 type deviceDataSource struct {
-	client interface{}
+	client *tunnet.Client
 }
 
 type deviceModel struct {
@@ -27,18 +31,25 @@ func (d *deviceDataSource) Metadata(_ context.Context, req datasource.MetadataRe
 
 func (d *deviceDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Description: "Looks up a Tunnet device by ID.",
 		Attributes: map[string]schema.Attribute{
-			"id":   schema.StringAttribute{Required: true},
-			"name": schema.StringAttribute{Computed: true},
+			"id": schema.StringAttribute{
+				Required:    true,
+				Description: "Device ID.",
+			},
+			"name": schema.StringAttribute{
+				Computed:    true,
+				Description: "Device name.",
+			},
 		},
 	}
 }
 
 func (d *deviceDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
-	d.client = clientFromDataSource(context.Background(), req, resp)
+	d.client = clientFromDataSource(req, resp)
 }
 
-func (d *deviceDataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
+func (d *deviceDataSource) Read(_ context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
 	if d.client == nil {
 		return
 	}

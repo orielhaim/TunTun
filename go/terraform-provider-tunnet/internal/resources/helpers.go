@@ -1,7 +1,6 @@
 package resources
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -9,7 +8,7 @@ import (
 	tunnet "github.com/tunnetio/tunnet-go"
 )
 
-func clientFromResource(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) *tunnet.Client {
+func clientFromResource(req resource.ConfigureRequest, resp *resource.ConfigureResponse) *tunnet.Client {
 	if req.ProviderData == nil {
 		resp.Diagnostics.AddError(
 			"Unconfigured provider",

@@ -118,25 +118,41 @@ func (c *Client) DeleteUserGroup(ctx context.Context, id string) error {
 
 // ListDeviceGroups returns all device groups in the organization.
 func (c *Client) ListDeviceGroups(ctx context.Context) ([]DeviceGroup, error) {
-	return nil, ErrNotImplemented
+	var groups []DeviceGroup
+	if err := c.do(ctx, http.MethodGet, c.deviceGroupsPath(), nil, &groups); err != nil {
+		return nil, err
+	}
+	return groups, nil
 }
 
 // GetDeviceGroup returns a single device group by ID.
 func (c *Client) GetDeviceGroup(ctx context.Context, id string) (*DeviceGroup, error) {
-	return nil, ErrNotImplemented
+	var group DeviceGroup
+	if err := c.do(ctx, http.MethodGet, c.deviceGroupPath(id), nil, &group); err != nil {
+		return nil, err
+	}
+	return &group, nil
 }
 
 // CreateDeviceGroup creates a device group.
 func (c *Client) CreateDeviceGroup(ctx context.Context, input CreateDeviceGroupInput) (*DeviceGroup, error) {
-	return nil, ErrNotImplemented
+	var group DeviceGroup
+	if err := c.do(ctx, http.MethodPost, c.deviceGroupsPath(), input, &group); err != nil {
+		return nil, err
+	}
+	return &group, nil
 }
 
 // UpdateDeviceGroup updates a device group.
 func (c *Client) UpdateDeviceGroup(ctx context.Context, id string, input UpdateDeviceGroupInput) (*DeviceGroup, error) {
-	return nil, ErrNotImplemented
+	var group DeviceGroup
+	if err := c.do(ctx, http.MethodPatch, c.deviceGroupPath(id), input, &group); err != nil {
+		return nil, err
+	}
+	return &group, nil
 }
 
 // DeleteDeviceGroup deletes a device group.
 func (c *Client) DeleteDeviceGroup(ctx context.Context, id string) error {
-	return ErrNotImplemented
+	return c.do(ctx, http.MethodDelete, c.deviceGroupPath(id), nil, nil)
 }

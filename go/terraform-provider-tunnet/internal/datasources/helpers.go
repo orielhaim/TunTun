@@ -1,14 +1,14 @@
 package datasources
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	tunnet "github.com/tunnetio/tunnet-go"
 )
 
-func clientFromDataSource(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) interface{} {
+func clientFromDataSource(req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) *tunnet.Client {
 	if req.ProviderData == nil {
 		resp.Diagnostics.AddError(
 			"Unconfigured provider",
@@ -16,7 +16,17 @@ func clientFromDataSource(ctx context.Context, req datasource.ConfigureRequest, 
 		)
 		return nil
 	}
-	return req.ProviderData
+
+	client, ok := req.ProviderData.(*tunnet.Client)
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected provider data",
+			fmt.Sprintf("Expected *tunnet.Client, got %T", req.ProviderData),
+		)
+		return nil
+	}
+
+	return client
 }
 
 func notImplementedDiag(operation, dataSourceName string) diag.Diagnostics {

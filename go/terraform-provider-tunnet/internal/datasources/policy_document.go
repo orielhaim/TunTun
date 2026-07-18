@@ -9,7 +9,10 @@ import (
 	tunnet "github.com/tunnetio/tunnet-go"
 )
 
-var _ datasource.DataSource = (*policyDocumentDataSource)(nil)
+var (
+	_ datasource.DataSource              = (*policyDocumentDataSource)(nil)
+	_ datasource.DataSourceWithConfigure = (*policyDocumentDataSource)(nil)
+)
 
 type policyDocumentDataSource struct {
 	client *tunnet.Client
@@ -28,27 +31,22 @@ func (d *policyDocumentDataSource) Metadata(_ context.Context, req datasource.Me
 
 func (d *policyDocumentDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Description: "Exports the live Tunnet policy document.",
 		Attributes: map[string]schema.Attribute{
 			"format": schema.StringAttribute{
-				Optional: true,
+				Optional:    true,
+				Description: "Document format: hcl, json, or yaml.",
 			},
 			"document": schema.StringAttribute{
-				Computed: true,
+				Computed:    true,
+				Description: "Exported policy document body.",
 			},
 		},
 	}
 }
 
 func (d *policyDocumentDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
-	if req.ProviderData == nil {
-		return
-	}
-	client, ok := req.ProviderData.(*tunnet.Client)
-	if !ok {
-		resp.Diagnostics.AddError("Unexpected provider data", "expected *tunnet.Client")
-		return
-	}
-	d.client = client
+	d.client = clientFromDataSource(req, resp)
 }
 
 func (d *policyDocumentDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
@@ -72,6 +70,10 @@ func (d *policyDocumentDataSource) Read(ctx context.Context, req datasource.Read
 
 	var state policyDocumentModel
 	state.Document = types.StringValue(string(exportResult.Document))
-	state.Format = types.StringValue(string(exportResult.Format))
+	if exportResult.Format != "" {
+		state.Format = types.StringValue(string(exportResult.Format))
+	} else {
+		state.Format = config.Format
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }

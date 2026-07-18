@@ -98,12 +98,12 @@ type PolicySimulateRequest struct {
 
 // PolicySimulateScenario describes a single simulation scenario.
 type PolicySimulateScenario struct {
-	Name       string `json:"name,omitempty"`
-	Source     string `json:"source"`
-	Dest       string `json:"dest"`
-	Port       int    `json:"port,omitempty"`
-	Protocol   string `json:"protocol,omitempty"`
-	NetworkID  string `json:"networkId,omitempty"`
+	Name      string `json:"name,omitempty"`
+	Source    string `json:"source"`
+	Dest      string `json:"dest"`
+	Port      int    `json:"port,omitempty"`
+	Protocol  string `json:"protocol,omitempty"`
+	NetworkID string `json:"networkId,omitempty"`
 }
 
 // PolicySimulateResult is returned by policy simulation.
@@ -113,9 +113,9 @@ type PolicySimulateResult struct {
 
 // PolicySimulateOutcome is a single simulation outcome.
 type PolicySimulateOutcome struct {
-	Name    string `json:"name,omitempty"`
-	Verdict string `json:"verdict"`
-	Rule    string `json:"rule,omitempty"`
+	Name    string   `json:"name,omitempty"`
+	Verdict string   `json:"verdict"`
+	Rule    string   `json:"rule,omitempty"`
 	Trace   []string `json:"trace,omitempty"`
 }
 

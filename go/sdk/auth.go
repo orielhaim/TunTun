@@ -11,13 +11,13 @@ import (
 )
 
 const (
-	EnvAPIURL         = "TUNNET_API_URL"
-	EnvAPIKey         = "TUNNET_API_KEY"
-	EnvOrganizationID = "TUNNET_ORGANIZATION_ID"
-	EnvNetworkID      = "TUNNET_NETWORK_ID"
-	EnvOAuthClientID  = "TUNNET_OAUTH_CLIENT_ID"
+	EnvAPIURL            = "TUNNET_API_URL"
+	EnvAPIKey            = "TUNNET_API_KEY"
+	EnvOrganizationID    = "TUNNET_ORGANIZATION_ID"
+	EnvNetworkID         = "TUNNET_NETWORK_ID"
+	EnvOAuthClientID     = "TUNNET_OAUTH_CLIENT_ID"
 	EnvOAuthClientSecret = "TUNNET_OAUTH_CLIENT_SECRET"
-	DefaultAPIURL     = "https://api.tunnet.io"
+	DefaultAPIURL        = "https://api.tunnet.io"
 )
 
 // AuthConfig holds Tunnet Management API credentials.

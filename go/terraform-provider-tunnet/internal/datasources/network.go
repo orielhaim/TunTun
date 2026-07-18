@@ -6,12 +6,16 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	tunnet "github.com/tunnetio/tunnet-go"
 )
 
-var _ datasource.DataSource = (*networkDataSource)(nil)
+var (
+	_ datasource.DataSource              = (*networkDataSource)(nil)
+	_ datasource.DataSourceWithConfigure = (*networkDataSource)(nil)
+)
 
 type networkDataSource struct {
-	client interface{}
+	client *tunnet.Client
 }
 
 type networkModel struct {
@@ -27,18 +31,25 @@ func (d *networkDataSource) Metadata(_ context.Context, req datasource.MetadataR
 
 func (d *networkDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Description: "Looks up a Tunnet network.",
 		Attributes: map[string]schema.Attribute{
-			"id":   schema.StringAttribute{Optional: true},
-			"name": schema.StringAttribute{Computed: true},
+			"id": schema.StringAttribute{
+				Optional:    true,
+				Description: "Network ID.",
+			},
+			"name": schema.StringAttribute{
+				Computed:    true,
+				Description: "Network name.",
+			},
 		},
 	}
 }
 
 func (d *networkDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
-	d.client = clientFromDataSource(context.Background(), req, resp)
+	d.client = clientFromDataSource(req, resp)
 }
 
-func (d *networkDataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
+func (d *networkDataSource) Read(_ context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
 	if d.client == nil {
 		return
 	}

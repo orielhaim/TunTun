@@ -3,6 +3,7 @@ package resources
 import (
 	"context"
 
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -11,7 +12,12 @@ import (
 	tunnet "github.com/tunnetio/tunnet-go"
 )
 
-var _ resource.Resource = (*userGroupResource)(nil)
+var (
+	_ resource.Resource                = (*userGroupResource)(nil)
+	_ resource.ResourceWithConfigure   = (*userGroupResource)(nil)
+	_ resource.ResourceWithImportState = (*userGroupResource)(nil)
+	_ resource.ResourceWithIdentity    = (*userGroupResource)(nil)
+)
 
 type userGroupResource struct {
 	client *tunnet.Client
@@ -60,8 +66,16 @@ func (r *userGroupResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 	}
 }
 
+func (r *userGroupResource) IdentitySchema(_ context.Context, _ resource.IdentitySchemaRequest, resp *resource.IdentitySchemaResponse) {
+	resp.IdentitySchema = idIdentitySchema()
+}
+
 func (r *userGroupResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	r.client = clientFromResource(context.Background(), req, resp)
+	r.client = clientFromResource(req, resp)
+}
+
+func (r *userGroupResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	importByID(ctx, req, resp)
 }
 
 func (r *userGroupResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -90,12 +104,9 @@ func (r *userGroupResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	plan.ID = types.StringValue(group.ID)
-	plan.Name = types.StringValue(group.Name)
-	plan.Description = types.StringValue(group.Description)
-	plan.Labels, diags = mapToTerraform(ctx, group.Labels)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(setUserGroupState(ctx, &plan, group)...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+	resp.Diagnostics.Append(setResourceIdentity(ctx, resp.Identity, group.ID)...)
 }
 
 func (r *userGroupResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -114,13 +125,9 @@ func (r *userGroupResource) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 
-	state.ID = types.StringValue(group.ID)
-	state.Name = types.StringValue(group.Name)
-	state.Description = types.StringValue(group.Description)
-	labels, diags := mapToTerraform(ctx, group.Labels)
-	resp.Diagnostics.Append(diags...)
-	state.Labels = labels
+	resp.Diagnostics.Append(setUserGroupState(ctx, &state, group)...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+	resp.Diagnostics.Append(setResourceIdentity(ctx, resp.Identity, group.ID)...)
 }
 
 func (r *userGroupResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -151,11 +158,9 @@ func (r *userGroupResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	plan.Name = types.StringValue(group.Name)
-	plan.Description = types.StringValue(group.Description)
-	plan.Labels, diags = mapToTerraform(ctx, group.Labels)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(setUserGroupState(ctx, &plan, group)...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+	resp.Diagnostics.Append(setResourceIdentity(ctx, resp.Identity, group.ID)...)
 }
 
 func (r *userGroupResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -171,4 +176,19 @@ func (r *userGroupResource) Delete(ctx context.Context, req resource.DeleteReque
 
 	err := r.client.DeleteUserGroup(ctx, state.ID.ValueString())
 	resp.Diagnostics.Append(sdkErrorDiag("delete user group", err)...)
+}
+
+func setUserGroupState(ctx context.Context, model *userGroupModel, group *tunnet.UserGroup) diag.Diagnostics {
+	var diags diag.Diagnostics
+	model.ID = types.StringValue(group.ID)
+	model.Name = types.StringValue(group.Name)
+	if group.Description == "" {
+		model.Description = types.StringNull()
+	} else {
+		model.Description = types.StringValue(group.Description)
+	}
+	labels, labelDiags := mapToTerraform(ctx, group.Labels)
+	diags.Append(labelDiags...)
+	model.Labels = labels
+	return diags
 }

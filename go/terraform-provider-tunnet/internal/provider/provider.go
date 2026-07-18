@@ -10,16 +10,18 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
-	tunnet "github.com/tunnetio/tunnet-go"
 	"github.com/tunnetio/terraform-provider-tunnet/internal/datasources"
 	"github.com/tunnetio/terraform-provider-tunnet/internal/resources"
+	tunnet "github.com/tunnetio/tunnet-go"
 )
 
 const (
-	envAPIURL         = "TUNNET_API_URL"
-	envAPIKey         = "TUNNET_API_KEY"
-	envOrganizationID = "TUNNET_ORGANIZATION_ID"
-	envNetworkID      = "TUNNET_NETWORK_ID"
+	envAPIURL            = "TUNNET_API_URL"
+	envAPIKey            = "TUNNET_API_KEY"
+	envOrganizationID    = "TUNNET_ORGANIZATION_ID"
+	envNetworkID         = "TUNNET_NETWORK_ID"
+	envOAuthClientID     = "TUNNET_OAUTH_CLIENT_ID"
+	envOAuthClientSecret = "TUNNET_OAUTH_CLIENT_SECRET"
 )
 
 var _ provider.Provider = (*tunnetProvider)(nil)
@@ -36,16 +38,15 @@ func New(version string) func() provider.Provider {
 }
 
 type tunnetProviderModel struct {
-	APIURL         types.String `tfsdk:"api_url"`
-	APIKey         types.String `tfsdk:"api_key"`
-	OrganizationID types.String `tfsdk:"organization_id"`
-	NetworkID      types.String `tfsdk:"network_id"`
-	// Phase 3: OAuth2 client credentials (not yet supported).
-	// OAuthClientID     types.String `tfsdk:"oauth_client_id"`
-	// OAuthClientSecret types.String `tfsdk:"oauth_client_secret"`
+	APIURL            types.String `tfsdk:"api_url"`
+	APIKey            types.String `tfsdk:"api_key"`
+	OrganizationID    types.String `tfsdk:"organization_id"`
+	NetworkID         types.String `tfsdk:"network_id"`
+	OAuthClientID     types.String `tfsdk:"oauth_client_id"`
+	OAuthClientSecret types.String `tfsdk:"oauth_client_secret"`
 }
 
-func (p *tunnetProvider) Metadata(_ context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
+func (p *tunnetProvider) Metadata(_ context.Context, _ provider.MetadataRequest, resp *provider.MetadataResponse) {
 	resp.TypeName = "tunnet"
 	resp.Version = p.version
 }
@@ -59,7 +60,7 @@ func (p *tunnetProvider) Schema(_ context.Context, _ provider.SchemaRequest, res
 				Optional:    true,
 			},
 			"api_key": schema.StringAttribute{
-				Description: "Tunnet API key with management scopes. May also be set via TUNNET_API_KEY.",
+				Description: "Tunnet API key with management scopes. May also be set via TUNNET_API_KEY. Mutually exclusive with OAuth client credentials when both are unset from env.",
 				Optional:    true,
 				Sensitive:   true,
 			},
@@ -71,16 +72,15 @@ func (p *tunnetProvider) Schema(_ context.Context, _ provider.SchemaRequest, res
 				Description: "Default network ID for network-scoped resources. May also be set via TUNNET_NETWORK_ID.",
 				Optional:    true,
 			},
-			// Phase 3: OAuth2 client credentials (not yet supported).
-			// "oauth_client_id": schema.StringAttribute{
-			// 	Description: "OAuth2 client ID for client credentials flow.",
-			// 	Optional:    true,
-			// },
-			// "oauth_client_secret": schema.StringAttribute{
-			// 	Description: "OAuth2 client secret for client credentials flow.",
-			// 	Optional:    true,
-			// 	Sensitive:   true,
-			// },
+			"oauth_client_id": schema.StringAttribute{
+				Description: "OAuth2 client ID for client credentials flow. May also be set via TUNNET_OAUTH_CLIENT_ID.",
+				Optional:    true,
+			},
+			"oauth_client_secret": schema.StringAttribute{
+				Description: "OAuth2 client secret for client credentials flow. May also be set via TUNNET_OAUTH_CLIENT_SECRET.",
+				Optional:    true,
+				Sensitive:   true,
+			},
 		},
 	}
 }
@@ -97,11 +97,13 @@ func (p *tunnetProvider) Configure(ctx context.Context, req provider.ConfigureRe
 	apiKey := firstNonEmpty(config.APIKey.ValueString(), os.Getenv(envAPIKey))
 	organizationID := firstNonEmpty(config.OrganizationID.ValueString(), os.Getenv(envOrganizationID))
 	networkID := firstNonEmpty(config.NetworkID.ValueString(), os.Getenv(envNetworkID))
+	oauthClientID := firstNonEmpty(config.OAuthClientID.ValueString(), os.Getenv(envOAuthClientID))
+	oauthClientSecret := firstNonEmpty(config.OAuthClientSecret.ValueString(), os.Getenv(envOAuthClientSecret))
 
-	if apiKey == "" {
+	if apiKey == "" && (oauthClientID == "" || oauthClientSecret == "") {
 		resp.Diagnostics.AddError(
-			"Missing API key",
-			"Set api_key in the provider configuration or TUNNET_API_KEY in the environment.",
+			"Missing credentials",
+			"Set api_key (or TUNNET_API_KEY), or both oauth_client_id and oauth_client_secret (or TUNNET_OAUTH_CLIENT_ID / TUNNET_OAUTH_CLIENT_SECRET).",
 		)
 	}
 
@@ -117,10 +119,12 @@ func (p *tunnetProvider) Configure(ctx context.Context, req provider.ConfigureRe
 	}
 
 	client, err := tunnet.NewClient(tunnet.ClientConfig{
-		BaseURL:        apiURL,
-		APIKey:         apiKey,
-		OrganizationID: organizationID,
-		NetworkID:      networkID,
+		BaseURL:           apiURL,
+		APIKey:            apiKey,
+		OrganizationID:    organizationID,
+		NetworkID:         networkID,
+		OAuthClientID:     oauthClientID,
+		OAuthClientSecret: oauthClientSecret,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Client configuration error", err.Error())
@@ -131,10 +135,15 @@ func (p *tunnetProvider) Configure(ctx context.Context, req provider.ConfigureRe
 		"api_url":         apiURL,
 		"organization_id": organizationID,
 		"network_id":      networkID,
+		"auth":            authMode(apiKey, oauthClientID),
 	})
 
+	// Populate all consumer slots introduced in newer framework versions.
 	resp.DataSourceData = client
 	resp.ResourceData = client
+	resp.ActionData = client
+	resp.ListResourceData = client
+	resp.StateStoreData = client
 }
 
 func (p *tunnetProvider) Resources(_ context.Context) []func() resource.Resource {
@@ -171,4 +180,14 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func authMode(apiKey, oauthClientID string) string {
+	if apiKey != "" {
+		return "api_key"
+	}
+	if oauthClientID != "" {
+		return "oauth_client_credentials"
+	}
+	return "unknown"
 }
