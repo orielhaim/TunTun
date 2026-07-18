@@ -70,20 +70,38 @@ async fn listen_loop(
 ) -> anyhow::Result<()> {
     let mut listener = PgListener::connect(database_url).await?;
     listener.listen(CHANNEL).await?;
+    listener.listen(ORG_CHANNEL).await?;
     connected.store(true, Ordering::Relaxed);
-    tracing::info!(channel = CHANNEL, "postgres LISTEN connected");
+    tracing::info!(
+        network = CHANNEL,
+        org = ORG_CHANNEL,
+        "postgres LISTEN connected"
+    );
 
     loop {
         let notification = listener.recv().await?;
+        let channel = notification.channel();
         let payload = notification.payload();
-        match Uuid::parse_str(payload) {
-            Ok(network_id) => {
-                ws_hub
-                    .notify_network_changed(network_id, &pool, &policy_key)
-                    .await;
+        match channel {
+            CHANNEL => match Uuid::parse_str(payload) {
+                Ok(network_id) => {
+                    ws_hub
+                        .notify_network_changed(network_id, &pool, &policy_key)
+                        .await;
+                }
+                Err(e) => {
+                    tracing::warn!(?e, payload, "invalid network_id in NOTIFY payload");
+                }
+            },
+            ORG_CHANNEL => {
+                if payload.is_empty() {
+                    tracing::warn!("empty organization_id in org NOTIFY payload");
+                    continue;
+                }
+                ws_hub.notify_org_changed(payload, &pool, &policy_key).await;
             }
-            Err(e) => {
-                tracing::warn!(?e, payload, "invalid network_id in NOTIFY payload");
+            other => {
+                tracing::warn!(channel = other, payload, "unexpected NOTIFY channel");
             }
         }
     }

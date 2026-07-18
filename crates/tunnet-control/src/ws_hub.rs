@@ -19,6 +19,7 @@ pub struct WsHub {
 struct Inner {
     subs: DashMap<String, mpsc::Sender<ServerMsg>>,
     by_network: DashMap<Uuid, dashmap::DashSet<String>>,
+    by_org: DashMap<String, dashmap::DashSet<String>>,
 }
 
 impl WsHub {
@@ -27,6 +28,7 @@ impl WsHub {
             inner: Arc::new(Inner {
                 subs: DashMap::new(),
                 by_network: DashMap::new(),
+                by_org: DashMap::new(),
             }),
             metrics,
         }
@@ -35,10 +37,16 @@ impl WsHub {
     pub fn register(
         &self,
         endpoint_id: String,
+        organization_id: String,
         network_ids: Vec<Uuid>,
     ) -> mpsc::Receiver<ServerMsg> {
         let (tx, rx) = mpsc::channel(64);
         self.inner.subs.insert(endpoint_id.clone(), tx);
+        self.inner
+            .by_org
+            .entry(organization_id)
+            .or_default()
+            .insert(endpoint_id.clone());
         for network_id in network_ids {
             self.inner
                 .by_network
@@ -52,8 +60,11 @@ impl WsHub {
         rx
     }
 
-    pub fn unregister(&self, endpoint_id: &str, network_ids: &[Uuid]) {
+    pub fn unregister(&self, endpoint_id: &str, organization_id: &str, network_ids: &[Uuid]) {
         self.inner.subs.remove(endpoint_id);
+        if let Some(set) = self.inner.by_org.get(organization_id) {
+            set.remove(endpoint_id);
+        }
         for network_id in network_ids {
             if let Some(set) = self.inner.by_network.get(network_id) {
                 set.remove(endpoint_id);
@@ -84,8 +95,10 @@ impl WsHub {
         )
         .await;
         if self.inner.subs.remove(endpoint_id).is_some() {
-            // Clean network index entries for this endpoint.
             for entry in self.inner.by_network.iter() {
+                entry.value().remove(endpoint_id);
+            }
+            for entry in self.inner.by_org.iter() {
                 entry.value().remove(endpoint_id);
             }
             self.metrics.ws_connected_dec();
@@ -119,6 +132,41 @@ impl WsHub {
                         %endpoint_id,
                         %network_id,
                         "failed to build snapshot for network-change push"
+                    );
+                }
+            }
+        }
+    }
+
+    pub async fn notify_org_changed(
+        &self,
+        organization_id: &str,
+        pool: &PgPool,
+        policy_key: &SigningKey,
+    ) {
+        let Some(set) = self.inner.by_org.get(organization_id) else {
+            return;
+        };
+        let ids: Vec<String> = set.iter().map(|e| e.clone()).collect();
+        drop(set);
+
+        tracing::info!(
+            %organization_id,
+            agents = ids.len(),
+            "pushing snapshots after org change"
+        );
+
+        for endpoint_id in ids {
+            match crate::snapshot::build_endpoint_snapshot(pool, policy_key, &endpoint_id).await {
+                Ok(snap) => {
+                    self.push_to(&endpoint_id, ServerMsg::Snapshot(snap)).await;
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        ?e,
+                        %endpoint_id,
+                        %organization_id,
+                        "failed to build snapshot for org-change push"
                     );
                 }
             }

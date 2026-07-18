@@ -53,7 +53,7 @@ fn install_inner(state_dir: Option<&str>, announce: bool) -> anyhow::Result<()> 
     }
     #[cfg(windows)]
     {
-        install_windows(&exe, state_dir)?;
+        crate::win_service::install(&exe, state_dir)?;
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
     {
@@ -87,7 +87,7 @@ pub fn uninstall() -> anyhow::Result<()> {
     }
     #[cfg(windows)]
     {
-        uninstall_windows()?;
+        crate::win_service::uninstall()?;
     }
     println!("Service uninstalled.");
     Ok(())
@@ -157,7 +157,17 @@ pub fn start(state_dir: Option<&str>) -> anyhow::Result<()> {
         if let Err(e) = run_cmd("sc", &["start", SERVICE_NAME]) {
             anyhow::bail!("{e}\nIf the service is missing, run elevated: tunnet service install");
         }
-        println!("Service is running.");
+        // Give SCM a moment to receive SERVICE_RUNNING from the agent.
+        std::thread::sleep(std::time::Duration::from_millis(800));
+        let probe = probe();
+        if probe.active {
+            println!("Service is running.");
+        } else {
+            println!(
+                "Service start issued (state: {}); check Services panel or `sc query tunnet`",
+                probe.state
+            );
+        }
     }
     Ok(())
 }
@@ -281,6 +291,10 @@ pub fn probe() -> ServiceProbe {
                     "active"
                 } else if text.contains("STOPPED") {
                     "inactive"
+                } else if text.contains("START_PENDING") {
+                    "starting"
+                } else if text.contains("STOP_PENDING") {
+                    "stopping"
                 } else {
                     "unknown"
                 };
@@ -490,38 +504,6 @@ fn uninstall_launchd() -> anyhow::Result<()> {
     if path.exists() {
         std::fs::remove_file(&path)?;
     }
-    Ok(())
-}
-
-#[cfg(windows)]
-fn install_windows(exe: &str, state_dir: Option<&str>) -> anyhow::Result<()> {
-    let bin_path = format!("\"{exe}\" run --service");
-    let dir = state_dir
-        .map(str::to_string)
-        .unwrap_or_else(|| tunnet_core::StatePaths::system_dir().display().to_string());
-    let _ = Command::new("setx")
-        .args(["TUNNET_STATE_DIR", &dir, "/M"])
-        .status();
-    run_cmd(
-        "sc",
-        &[
-            "create",
-            SERVICE_NAME,
-            &format!("binPath= {bin_path}"),
-            "start= auto",
-            "DisplayName= Tunnet Agent",
-        ],
-    )?;
-    let _ = run_cmd(
-        "sc",
-        &["failure", SERVICE_NAME, "reset= 0", "actions= restart/2000"],
-    );
-    Ok(())
-}
-
-#[cfg(windows)]
-fn uninstall_windows() -> anyhow::Result<()> {
-    let _ = run_cmd("sc", &["delete", SERVICE_NAME]);
     Ok(())
 }
 

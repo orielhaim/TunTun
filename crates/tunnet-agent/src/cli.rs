@@ -439,13 +439,29 @@ pub async fn run_reset(args: ResetArgs, state_dir: Option<&str>) -> anyhow::Resu
 }
 
 pub async fn run_agent(args: RunArgs, state_dir: Option<&str>) -> anyhow::Result<()> {
+    run_agent_with_shutdown(args, state_dir, None).await
+}
+
+/// Same as [`run_agent`], but accepts an optional SCM / external shutdown token
+/// (used when running as a Windows service).
+pub async fn run_agent_with_shutdown(
+    args: RunArgs,
+    state_dir: Option<&str>,
+    shutdown: Option<tokio_util::sync::CancellationToken>,
+) -> anyhow::Result<()> {
     let paths = paths(state_dir);
     paths.ensure()?;
 
     #[cfg(unix)]
     crate::sd_notify::ready("waiting for create/enroll/join");
 
-    wait_for_network_state(&paths).await?;
+    wait_for_network_state(&paths, shutdown.as_ref()).await?;
+
+    if let Some(token) = &shutdown
+        && token.is_cancelled()
+    {
+        return Ok(());
+    }
 
     let policy = SealPolicy::from_env_and_flag(args.no_encrypt_state);
     let (identity, persisted, tier) = load_agent(&paths, policy).with_context(|| {
@@ -476,12 +492,20 @@ pub async fn run_agent(args: RunArgs, state_dir: Option<&str>) -> anyhow::Result
             );
         }
     }
-    crate::runtime::run(identity, persisted, paths, args).await
+    crate::runtime::run(identity, persisted, paths, args, shutdown).await
 }
 
-async fn wait_for_network_state(paths: &StatePaths) -> anyhow::Result<()> {
+async fn wait_for_network_state(
+    paths: &StatePaths,
+    shutdown: Option<&tokio_util::sync::CancellationToken>,
+) -> anyhow::Result<()> {
     let mut logged = false;
     loop {
+        if let Some(token) = shutdown
+            && token.is_cancelled()
+        {
+            return Ok(());
+        }
         let has_secrets = paths.secrets_file().is_file();
         if has_secrets && let Ok(Some(_)) = PersistedState::try_load(paths) {
             return Ok(());
@@ -493,6 +517,15 @@ async fn wait_for_network_state(paths: &StatePaths) -> anyhow::Result<()> {
             );
             logged = true;
         }
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        if let Some(token) = shutdown {
+            tokio::select! {
+                _ = token.cancelled() => {
+                    return Ok(());
+                }
+                _ = tokio::time::sleep(std::time::Duration::from_secs(2)) => {}
+            }
+        } else {
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        }
     }
 }

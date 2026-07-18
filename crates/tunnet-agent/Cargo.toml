@@ -48,7 +48,11 @@ russh-sftp.workspace = true
 async-trait.workspace = true
 rusqlite.workspace = true
 self_update = { version = "1.0.0-rc.5", default-features = false, features = ["github", "archive-tar", "compression-tar-gz", "archive-zip", "compression-zip-deflate", "rustls", "reqwest", "progress-bar", "checksums"] }
+tokio-util = { workspace = true, features = ["rt"] }
 
 [target.'cfg(unix)'.dependencies]
 ecdysis = { version = "1.1.1", features = ["tokio_ecdysis", "systemd_notify"] }
 libc = "0.2"
+
+[target."cfg(windows)".dependencies]
+windows-service = "0.8.1"

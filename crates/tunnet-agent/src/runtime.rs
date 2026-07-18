@@ -25,6 +25,7 @@ pub async fn run(
     persisted: tunnet_core::PersistedState,
     paths: tunnet_core::StatePaths,
     args: RunArgs,
+    shutdown: Option<tokio_util::sync::CancellationToken>,
 ) -> anyhow::Result<()> {
     let metrics = AgentMetrics::new().context("metrics")?;
     let started_at = Instant::now();
@@ -406,6 +407,7 @@ pub async fn run(
 
     #[cfg(unix)]
     {
+        let _ = shutdown;
         let upgrade = crate::upgrade::UpgradeGuard::install()?;
         let reason = upgrade.wait().await;
         tracing::info!(?reason, "shutdown signal; draining");
@@ -414,8 +416,13 @@ pub async fn run(
     }
     #[cfg(not(unix))]
     {
-        tokio::signal::ctrl_c().await?;
-        tracing::info!("ctrl-c, shutting down");
+        if let Some(token) = shutdown {
+            token.cancelled().await;
+            tracing::info!("service stop, shutting down");
+        } else {
+            tokio::signal::ctrl_c().await?;
+            tracing::info!("ctrl-c, shutting down");
+        }
         node.shutdown().await;
         Ok(())
     }

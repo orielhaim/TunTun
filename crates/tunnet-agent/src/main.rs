@@ -32,13 +32,43 @@ mod tun_io;
 #[cfg(unix)]
 mod upgrade;
 #[cfg(windows)]
+mod win_service;
+#[cfg(windows)]
 mod wintun_path;
 
 use crate::cli::Cli;
 use clap::Parser;
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
+fn main() {
+    // Windows service mode must call StartServiceCtrlDispatcher before building
+    // a tokio runtime. Detect `--service` early (before clap / #[tokio::main]).
+    #[cfg(windows)]
+    if std::env::args().any(|a| a == "--service") {
+        if let Err(e) = crate::win_service::run_as_service() {
+            eprintln!("{e:#}");
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    let rt = match tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => rt,
+        Err(e) => {
+            eprintln!("failed to create tokio runtime: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    if let Err(e) = rt.block_on(async_main()) {
+        eprintln!("{e:#}");
+        std::process::exit(1);
+    }
+}
+
+async fn async_main() -> anyhow::Result<()> {
     let _ = dotenvy::dotenv();
     let cli = Cli::parse();
 

@@ -668,8 +668,7 @@ async fn run_ws(
     network_ids: Vec<uuid::Uuid>,
     public_ip: Option<std::net::IpAddr>,
 ) {
-    tracing::info!(%endpoint_id, ?public_ip, "ws connected");
-    let _ = organization_id;
+    tracing::info!(%endpoint_id, %organization_id, ?public_ip, "ws connected");
 
     if let Err(e) =
         crate::presence::mark_agent_connected(&state.pool, &endpoint_id, public_ip).await
@@ -678,9 +677,11 @@ async fn run_ws(
     }
 
     let (mut ws_tx, mut ws_rx) = socket.split();
-    let mut rx = state
-        .ws_hub
-        .register(endpoint_id.clone(), network_ids.clone());
+    let mut rx = state.ws_hub.register(
+        endpoint_id.clone(),
+        organization_id.clone(),
+        network_ids.clone(),
+    );
 
     if let Ok(snap) =
         crate::snapshot::build_endpoint_snapshot(&state.pool, &state.policy_key, &endpoint_id).await
@@ -1116,7 +1117,7 @@ async fn run_ws(
         _ = recv_task => {},
     }
 
-    hub.unregister(&ep_for_cleanup, &network_ids);
+    hub.unregister(&ep_for_cleanup, &organization_id, &network_ids);
     if let Err(e) = crate::presence::mark_agent_disconnected(&state.pool, &ep_for_cleanup).await {
         tracing::warn!(?e, %ep_for_cleanup, "failed to mark agent disconnected");
     }
