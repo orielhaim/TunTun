@@ -2,8 +2,6 @@
 
 Inspect device posture attributes collected by the local agent, and evaluate posture definitions without going through the dashboard.
 
-Also see the [Device Posture](/products/posture/) product overview.
-
 ## Usage
 
 ```bash
