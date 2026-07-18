@@ -73,6 +73,7 @@ export default defineConfig({
       },
       { text: "CLI Reference", link: "/cli/" },
       { text: "SDK", link: "/sdk/" },
+      { text: "Integrations", link: "/integrations/" },
       { text: "Self-Hosting", link: "/self-hosting/" },
     ],
 
@@ -272,6 +273,35 @@ export default defineConfig({
             { text: "TunnetNode", link: "/sdk/node" },
             { text: "Streams & Fetch", link: "/sdk/streams" },
             { text: "File Transfer", link: "/sdk/file-transfer" },
+          ],
+        },
+      ],
+
+      "/integrations/": [
+        {
+          text: "Integrations",
+          items: [{ text: "Overview", link: "/integrations/" }],
+        },
+        {
+          text: "Kubernetes",
+          items: [
+            { text: "Overview", link: "/integrations/kubernetes/" },
+            {
+              text: "Install the Operator",
+              link: "/integrations/kubernetes/install",
+            },
+            {
+              text: "Connect a Cluster",
+              link: "/integrations/kubernetes/connector",
+            },
+            {
+              text: "Expose Services",
+              link: "/integrations/kubernetes/expose-services",
+            },
+            {
+              text: "Dashboard",
+              link: "/integrations/kubernetes/dashboard",
+            },
           ],
         },
       ],
