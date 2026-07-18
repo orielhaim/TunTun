@@ -53,6 +53,15 @@ pub async fn run(
     let is_direct = persisted.is_direct();
     let network_id = persisted.primary_network_id().unwrap_or(Uuid::nil());
 
+    let posture_runtime = if !is_direct {
+        Some(crate::posture::PostureRuntime::new(env!(
+            "CARGO_PKG_VERSION"
+        )))
+    } else {
+        None
+    };
+    let src_posture_ok = posture_runtime.as_ref().map(|p| p.src_posture_ok());
+
     let secret_resolver: Option<SecretResolver> = if is_direct {
         let secrets: HashMap<Uuid, String> = persisted
             .direct_networks()
@@ -78,12 +87,23 @@ pub async fn run(
             advertise_recording_alpn: args.recorder,
             kind: "agent",
             on_kill_ssh,
+            posture_hooks: posture_runtime.as_ref().map(|p| p.hooks()),
+            src_posture_ok,
             enable_mdns: agent_cfg.mdns.enabled && !args.no_mdns,
             enable_gossip: !args.disable_gossip || agent_cfg.mdns.service_relay,
             keep_alive: if is_direct { args.keep_alive } else { true },
         },
     )
     .await?;
+
+    if let Some(posture) = posture_runtime {
+        if let Some(tx) = node.serves.client_tx() {
+            let cancel = shutdown.as_ref().cloned().unwrap_or_default();
+            posture.spawn(tx, cancel);
+        } else {
+            tracing::warn!("posture reporter skipped (no control-plane WS channel)");
+        }
+    }
 
     if let Err(e) = crate::auto_update::on_agent_start(&node.paths) {
         tracing::warn!(?e, "auto-update pending check failed");

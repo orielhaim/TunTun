@@ -6,6 +6,7 @@ use sqlx::PgPool;
 
 use crate::config::Args;
 use crate::pg_notify;
+use crate::posture::PostureGraceMap;
 use crate::service_auth::ServiceAuth;
 use crate::ws_hub::WsHub;
 
@@ -17,6 +18,7 @@ pub struct AppState {
     pub metrics: crate::metrics::Metrics,
     pub service_auth: ServiceAuth,
     pub listen_connected: Arc<AtomicBool>,
+    pub posture_grace: PostureGraceMap,
 }
 
 impl AppState {
@@ -35,6 +37,7 @@ impl AppState {
             metrics,
             service_auth,
             listen_connected: Arc::new(AtomicBool::new(false)),
+            posture_grace: crate::posture::grace_map(),
         }
     }
 

@@ -216,7 +216,7 @@ pub async fn reconcile_node_workload(
         };
         let secret_name = resources::node_secret_name(&workload.name, ordinal);
 
-        // Reuse an existing identity Secret — re-enrolling every reconcile burns
+        // Reuse an existing identity Secret - re-enrolling every reconcile burns
         // mesh IPs and restarts pods (status patches re-trigger the controller).
         let node = if let Some(mut existing) =
             resources::load_node_secret(ctx, &workload.namespace, &secret_name).await?

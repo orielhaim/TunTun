@@ -51,6 +51,23 @@ use crate::tunnel::TunnelManager;
 /// Callback when CP requests killing an SSH session (`session_id`).
 pub type KillSshHook = Arc<dyn Fn(&str) + Send + Sync>;
 
+pub type PostureConfigUpdateHook =
+    Arc<dyn Fn(u64, Vec<String>, Vec<tunnet_common::posture::CustomScriptConfig>) + Send + Sync>;
+
+pub type PostureStatusHook = Arc<
+    dyn Fn(Vec<tunnet_common::posture::PostureEvalResult>, String, Option<u64>, Vec<String>)
+        + Send
+        + Sync,
+>;
+
+/// Optional hooks for control-plane posture WebSocket messages.
+#[derive(Clone, Default)]
+pub struct PostureHooks {
+    pub on_recheck: Option<Arc<dyn Fn() + Send + Sync>>,
+    pub on_config_update: Option<PostureConfigUpdateHook>,
+    pub on_status: Option<PostureStatusHook>,
+}
+
 /// Per-Direct-network runtime (docs + firewall + state).
 #[cfg(feature = "direct")]
 #[derive(Clone)]
@@ -72,6 +89,10 @@ pub struct CoreNodeConfig {
     pub kind: &'static str, // "agent" | "sdk"
     /// Optional hook when CP requests killing an SSH session (session_id string).
     pub on_kill_ssh: Option<KillSshHook>,
+    /// Optional hooks for posture control-plane messages.
+    pub posture_hooks: Option<PostureHooks>,
+    /// Shared flag updated by posture status; gates ACL rules with `srcPosture`.
+    pub src_posture_ok: Option<Arc<arc_swap::ArcSwap<bool>>>,
     /// Enable mDNS LAN address lookup (Direct default: true).
     pub enable_mdns: bool,
     /// Advertise/run shared iroh-gossip (Managed needs this for presence + service relay).
@@ -90,6 +111,8 @@ impl Default for CoreNodeConfig {
             advertise_recording_alpn: false,
             kind: "sdk",
             on_kill_ssh: None,
+            posture_hooks: None,
+            src_posture_ok: None,
             enable_mdns: true,
             enable_gossip: true,
             keep_alive: true,
@@ -233,16 +256,30 @@ impl CoreNode {
         let membership = membership_for_network(&snapshot, managed.network_id)?.clone();
         let routes = RoutingTable::new();
         let version = Arc::new(ArcSwap::from_pointee(snapshot.version));
-        let acl = AclEngine::new(
-            SelfIdentity {
-                endpoint_hex: my_id_hex.clone(),
-                ip: membership.assigned_ipv4,
-                tags: membership.self_tags.clone(),
-                network: managed.network_name.clone(),
-            },
-            routes.clone(),
-            membership.policy.clone(),
-        );
+        let acl = if let Some(flag) = cfg.src_posture_ok.clone() {
+            AclEngine::with_posture_flag(
+                SelfIdentity {
+                    endpoint_hex: my_id_hex.clone(),
+                    ip: membership.assigned_ipv4,
+                    tags: membership.self_tags.clone(),
+                    network: managed.network_name.clone(),
+                },
+                routes.clone(),
+                membership.policy.clone(),
+                flag,
+            )
+        } else {
+            AclEngine::new(
+                SelfIdentity {
+                    endpoint_hex: my_id_hex.clone(),
+                    ip: membership.assigned_ipv4,
+                    tags: membership.self_tags.clone(),
+                    network: managed.network_name.clone(),
+                },
+                routes.clone(),
+                membership.policy.clone(),
+            )
+        };
         apply_membership(
             &membership,
             &routes,
@@ -313,6 +350,7 @@ impl CoreNode {
             #[cfg(feature = "send")]
             Some(send.clone()),
             cfg.on_kill_ssh.clone(),
+            cfg.posture_hooks.clone(),
         );
         spawn_poll_fallback(
             signed.clone(),

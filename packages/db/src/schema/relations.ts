@@ -17,6 +17,10 @@ import {
   organizationCas,
   organizationTunnelSettings,
   policies,
+  postureDefinitions,
+  postureIntegrations,
+  postureOrgSettings,
+  postureWebhooks,
   relays,
   serves,
   tunnels,
@@ -47,6 +51,13 @@ export const organizationRelations = relations(
     tunnelSettings: one(organizationTunnelSettings, {
       fields: [organization.id],
       references: [organizationTunnelSettings.organizationId],
+    }),
+    postureDefinitions: many(postureDefinitions),
+    postureIntegrations: many(postureIntegrations),
+    postureWebhooks: many(postureWebhooks),
+    postureOrgSettings: one(postureOrgSettings, {
+      fields: [organization.id],
+      references: [postureOrgSettings.organizationId],
     }),
   }),
 );

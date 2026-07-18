@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::net::{Ipv4Addr, Ipv6Addr};
+
+use crate::posture::PostureEnforcementConfig;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -38,6 +41,9 @@ pub struct PolicyRule {
     #[serde(default)]
     pub protocol: Option<Protocol>,
     pub priority: i32,
+    /// Posture definition names required on the source device (OR semantics).
+    #[serde(default)]
+    pub src_posture: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -62,6 +68,14 @@ pub struct PolicyBundle {
     /// base64 Ed25519 signature by the control plane's policy key.
     #[serde(default)]
     pub signature: String,
+    /// Org posture definitions: name → assertion strings.
+    #[serde(default)]
+    pub postures: HashMap<String, Vec<String>>,
+    /// Default posture names applied to ACL rules without `src_posture`.
+    #[serde(default)]
+    pub default_src_posture: Vec<String>,
+    #[serde(default)]
+    pub posture_enforcement: Option<PostureEnforcementConfig>,
 }
 
 pub const AUTOGROUP_NONROOT: &str = "autogroup:nonroot";
@@ -165,6 +179,8 @@ pub struct EvalCtx<'a> {
     pub peer_network: &'a str,
     pub dst_port: Option<u16>,
     pub protocol: Protocol,
+    /// When false, rules with non-empty `src_posture` do not match.
+    pub src_posture_ok: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -177,6 +193,8 @@ pub struct Ipv6EvalCtx<'a> {
     pub peer_tags: &'a [String],
     pub dst_port: Option<u16>,
     pub protocol: Protocol,
+    /// When false, rules with non-empty `src_posture` do not match.
+    pub src_posture_ok: bool,
 }
 
 impl Selector {
@@ -312,6 +330,9 @@ fn rule_matches_v4(r: &PolicyRule, ctx: &EvalCtx<'_>, direction: Direction) -> b
     if !src_ok || !dst_ok {
         return false;
     }
+    if !r.src_posture.is_empty() && !ctx.src_posture_ok {
+        return false;
+    }
     proto_port_ok(r, ctx.protocol, ctx.dst_port)
 }
 
@@ -331,6 +352,9 @@ fn rule_matches_v6(r: &PolicyRule, ctx: &Ipv6EvalCtx<'_>, direction: Direction) 
         ),
     };
     if !src_ok || !dst_ok {
+        return false;
+    }
+    if !r.src_posture.is_empty() && !ctx.src_posture_ok {
         return false;
     }
     proto_port_ok(r, ctx.protocol, ctx.dst_port)
@@ -376,6 +400,7 @@ mod tests {
             peer_network: "",
             dst_port: Some(80),
             protocol: Protocol::Tcp,
+            src_posture_ok: true,
         };
         assert_eq!(
             evaluate(&PolicyBundle::default(), &ctx, Direction::Outbound),
@@ -396,6 +421,7 @@ mod tests {
             peer_network: "",
             dst_port: Some(80),
             protocol: Protocol::Tcp,
+            src_posture_ok: true,
         };
         let bundle = PolicyBundle {
             rules: vec![PolicyRule {
@@ -405,10 +431,14 @@ mod tests {
                 ports: vec![],
                 protocol: None,
                 priority: 10,
+                src_posture: vec![],
             }],
             ssh_rules: vec![],
             version: 1,
             signature: String::new(),
+            postures: HashMap::new(),
+            default_src_posture: vec![],
+            posture_enforcement: None,
         };
         assert_eq!(evaluate(&bundle, &ctx, Direction::Outbound), Action::Deny);
     }
@@ -424,6 +454,7 @@ mod tests {
             peer_tags: &[],
             dst_port: None,
             protocol: Protocol::Any,
+            src_posture_ok: true,
         };
         let action = evaluate_ipv6(&PolicyBundle::default(), &[], &ctx, Direction::Outbound);
         assert_eq!(action, Action::Allow);

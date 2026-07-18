@@ -5,6 +5,7 @@ mod cmds;
 mod cmds_device;
 mod cmds_direct;
 mod cmds_login;
+mod cmds_posture;
 mod cmds_send;
 mod cmds_ssh;
 mod cmds_update;
@@ -17,6 +18,7 @@ mod metrics;
 #[cfg(target_os = "linux")]
 mod offload;
 mod output;
+mod posture;
 mod recorder;
 mod runtime;
 #[cfg(unix)]
@@ -150,6 +152,7 @@ async fn async_main() -> anyhow::Result<()> {
         crate::cli::Command::Machine(a) => {
             crate::cmds_device::run_machine(a, cli.state_dir.as_deref()).await
         }
+        crate::cli::Command::Posture(a) => crate::cmds_posture::run(a).await,
         crate::cli::Command::Create(a) => {
             crate::cmds_direct::run_create(a, cli.state_dir.as_deref()).await
         }

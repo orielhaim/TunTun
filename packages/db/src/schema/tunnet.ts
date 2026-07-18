@@ -56,6 +56,24 @@ export const membershipStatusValues = [
 
 export const deviceTypeValues = ["agent", "sdk", "k8s"] as const;
 
+export const postureSourceValues = [
+  "agent",
+  "control",
+  "api",
+  "integration",
+] as const;
+export const postureEnforcementModeValues = [
+  "monitor",
+  "warn",
+  "enforce",
+] as const;
+export const postureIntegrationProviderValues = [
+  "crowdstrike",
+  "sentinelone",
+  "intune",
+  "custom",
+] as const;
+
 export const apiKeys = pgTable("api_keys", {
   id: id(),
   organizationId: text("organization_id")
@@ -235,6 +253,8 @@ export const policies = pgTable(
     ports: jsonb("ports").notNull().default([]),
     protocol: text("protocol"),
     priority: integer("priority").notNull().default(0),
+    /** Posture definition names required on source device; null/empty = inherit org default. */
+    srcPosture: jsonb("src_posture").$type<string[] | null>(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -1194,6 +1214,166 @@ export const fileTransfers = pgTable(
   ],
 );
 
+export const postureAttributes = pgTable(
+  "posture_attributes",
+  {
+    id: id(),
+    endpointId: text("endpoint_id")
+      .notNull()
+      .references(() => devices.endpointId, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    namespace: text("namespace").notNull(),
+    key: text("key").notNull(),
+    value: jsonb("value").notNull(),
+    collectedAt: timestamp("collected_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    source: text("source").notNull().default("agent"),
+  },
+  (t) => [
+    unique().on(t.endpointId, t.namespace, t.key),
+    index("posture_attributes_by_endpoint_idx").on(t.endpointId),
+    index("posture_attributes_by_org_idx").on(t.organizationId),
+    index("posture_attributes_by_expires_idx").on(t.expiresAt),
+    check(
+      "posture_attributes_source_check",
+      sql`${t.source} IN ('agent', 'control', 'api', 'integration')`,
+    ),
+  ],
+);
+
+export const postureDefinitions = pgTable(
+  "posture_definitions",
+  {
+    id: id(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    assertions: jsonb("assertions").$type<string[]>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [unique().on(t.organizationId, t.name)],
+);
+
+export const postureEvaluations = pgTable(
+  "posture_evaluations",
+  {
+    id: id(),
+    endpointId: text("endpoint_id")
+      .notNull()
+      .references(() => devices.endpointId, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    postureDefinitionId: uuid("posture_definition_id")
+      .notNull()
+      .references(() => postureDefinitions.id, { onDelete: "cascade" }),
+    passed: boolean("passed").notNull(),
+    failingAssertions: jsonb("failing_assertions").$type<string[]>(),
+    score: integer("score"),
+    evaluatedAt: timestamp("evaluated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("posture_evaluations_by_endpoint_evaluated_idx").on(
+      t.endpointId,
+      t.evaluatedAt,
+    ),
+    index("posture_evaluations_by_org_idx").on(t.organizationId),
+  ],
+);
+
+export const postureIntegrations = pgTable(
+  "posture_integrations",
+  {
+    id: id(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull(),
+    config: jsonb("config").notNull().default({}),
+    pollingIntervalSecs: integer("polling_interval_secs")
+      .notNull()
+      .default(300),
+    enabled: boolean("enabled").notNull().default(true),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("posture_integrations_by_org_idx").on(t.organizationId),
+    check(
+      "posture_integrations_provider_check",
+      sql`${t.provider} IN ('crowdstrike', 'sentinelone', 'intune', 'custom')`,
+    ),
+  ],
+);
+
+export const postureWebhooks = pgTable(
+  "posture_webhooks",
+  {
+    id: id(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    url: text("url").notNull(),
+    secret: text("secret"),
+    events: jsonb("events").$type<string[]>().notNull().default([]),
+    enabled: boolean("enabled").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [index("posture_webhooks_by_org_idx").on(t.organizationId)],
+);
+
+export const postureOrgSettings = pgTable(
+  "posture_org_settings",
+  {
+    organizationId: text("organization_id")
+      .primaryKey()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    mode: text("mode").notNull().default("monitor"),
+    gracePeriodMinutes: integer("grace_period_minutes").notNull().default(30),
+    recheckOnFailSeconds: integer("recheck_on_fail_seconds")
+      .notNull()
+      .default(60),
+    notifyUser: boolean("notify_user").notNull().default(true),
+    notifyAdmin: boolean("notify_admin").notNull().default(false),
+    autoReauthorize: boolean("auto_reauthorize").notNull().default(true),
+    defaultSrcPosture: jsonb("default_src_posture")
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+    scoringWeights: jsonb("scoring_weights").$type<Record<
+      string,
+      { weight: number; failScore: number }
+    > | null>(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    check(
+      "posture_org_settings_mode_check",
+      sql`${t.mode} IN ('monitor', 'warn', 'enforce')`,
+    ),
+  ],
+);
+
 /** Per-endpoint file-transfer consent / inbox settings. */
 export const endpointSendSettings = pgTable(
   "endpoint_send_settings",
@@ -1261,6 +1441,8 @@ export const devicesRelations = relations(devices, ({ one, many }) => ({
   tunnels: many(tunnels),
   serves: many(serves),
   internalCertificates: many(internalCertificates),
+  postureAttributes: many(postureAttributes),
+  postureEvaluations: many(postureEvaluations),
 }));
 
 export const relaysRelations = relations(relays, ({ one, many }) => ({
@@ -1653,3 +1835,76 @@ export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
     references: [organization.id],
   }),
 }));
+
+export const postureAttributesRelations = relations(
+  postureAttributes,
+  ({ one }) => ({
+    device: one(devices, {
+      fields: [postureAttributes.endpointId],
+      references: [devices.endpointId],
+    }),
+    organization: one(organization, {
+      fields: [postureAttributes.organizationId],
+      references: [organization.id],
+    }),
+  }),
+);
+
+export const postureDefinitionsRelations = relations(
+  postureDefinitions,
+  ({ one, many }) => ({
+    organization: one(organization, {
+      fields: [postureDefinitions.organizationId],
+      references: [organization.id],
+    }),
+    evaluations: many(postureEvaluations),
+  }),
+);
+
+export const postureEvaluationsRelations = relations(
+  postureEvaluations,
+  ({ one }) => ({
+    device: one(devices, {
+      fields: [postureEvaluations.endpointId],
+      references: [devices.endpointId],
+    }),
+    organization: one(organization, {
+      fields: [postureEvaluations.organizationId],
+      references: [organization.id],
+    }),
+    postureDefinition: one(postureDefinitions, {
+      fields: [postureEvaluations.postureDefinitionId],
+      references: [postureDefinitions.id],
+    }),
+  }),
+);
+
+export const postureIntegrationsRelations = relations(
+  postureIntegrations,
+  ({ one }) => ({
+    organization: one(organization, {
+      fields: [postureIntegrations.organizationId],
+      references: [organization.id],
+    }),
+  }),
+);
+
+export const postureWebhooksRelations = relations(
+  postureWebhooks,
+  ({ one }) => ({
+    organization: one(organization, {
+      fields: [postureWebhooks.organizationId],
+      references: [organization.id],
+    }),
+  }),
+);
+
+export const postureOrgSettingsRelations = relations(
+  postureOrgSettings,
+  ({ one }) => ({
+    organization: one(organization, {
+      fields: [postureOrgSettings.organizationId],
+      references: [organization.id],
+    }),
+  }),
+);

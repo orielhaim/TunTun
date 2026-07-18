@@ -117,7 +117,7 @@ pub async fn upsert_node_secret(
 
     let mut labels = owner_labels;
     labels.insert("app.kubernetes.io/name".into(), "tunnet-kube-node".into());
-    // K8s label values max 63 chars; endpoint ids are 64-char hex — keep a short prefix.
+    // K8s label values max 63 chars; endpoint ids are 64-char hex - keep a short prefix.
     let ep_label: String = node.endpoint_id.chars().take(63).collect();
     labels.insert("tunnet.io/endpoint-id".into(), ep_label);
 

@@ -20,16 +20,37 @@ pub struct AclEngine {
     pub routes: RoutingTable,
     pub bundle: Arc<ArcSwap<PolicyBundle>>,
     pub stale: Arc<ArcSwap<bool>>,
+    /// When false, ACL rules that require source posture do not match.
+    pub src_posture_ok: Arc<ArcSwap<bool>>,
 }
 
 impl AclEngine {
     pub fn new(self_id: SelfIdentity, routes: RoutingTable, bundle: PolicyBundle) -> Self {
+        Self::with_posture_flag(
+            self_id,
+            routes,
+            bundle,
+            Arc::new(ArcSwap::from_pointee(true)),
+        )
+    }
+
+    pub fn with_posture_flag(
+        self_id: SelfIdentity,
+        routes: RoutingTable,
+        bundle: PolicyBundle,
+        src_posture_ok: Arc<ArcSwap<bool>>,
+    ) -> Self {
         Self {
             self_id: Arc::new(ArcSwap::from_pointee(self_id)),
             routes,
             bundle: Arc::new(ArcSwap::from_pointee(bundle)),
             stale: Arc::new(ArcSwap::from_pointee(false)),
+            src_posture_ok,
         }
+    }
+
+    pub fn set_src_posture_ok(&self, ok: bool) {
+        self.src_posture_ok.store(Arc::new(ok));
     }
 
     pub fn replace_bundle(&self, b: PolicyBundle) {
@@ -104,6 +125,14 @@ impl AclEngine {
     ) -> bool {
         let empty_tags: Vec<String> = Vec::new();
         let self_id = self.self_id.load();
+        let bundle = self.bundle.load();
+        let posture_required = !bundle.default_src_posture.is_empty()
+            || bundle.rules.iter().any(|r| !r.src_posture.is_empty());
+        let src_posture_ok = if posture_required {
+            **self.src_posture_ok.load()
+        } else {
+            true
+        };
         let ctx = EvalCtx {
             self_endpoint_hex: &self_id.endpoint_hex,
             self_ip: self_id.ip,
@@ -115,13 +144,13 @@ impl AclEngine {
             peer_network: &self_id.network,
             dst_port,
             protocol: proto,
+            src_posture_ok,
         };
-        let action = evaluate(&self.bundle.load(), &ctx, direction);
+        let action = evaluate(&bundle, &ctx, direction);
         match action {
             Action::Allow => true,
             Action::Deny => {
-                let b = self.bundle.load();
-                if **self.stale.load() && b.rules.is_empty() {
+                if **self.stale.load() && bundle.rules.is_empty() {
                     return true;
                 }
                 false

@@ -95,6 +95,10 @@ pub enum Command {
     #[command(subcommand)]
     Machine(crate::cmds_device::MachineCommand),
 
+    /// Device posture collectors and checks
+    #[command(subcommand)]
+    Posture(crate::cmds_posture::PostureCommand),
+
     // --- Direct mode ---
     /// Create a Direct (P2P) network - no control plane
     Create(crate::cmds_direct::CreateArgs),

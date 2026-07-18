@@ -1,0 +1,44 @@
+[package]
+name = "tunnet-posture"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Device posture collectors and evaluation for Tunnet"
+publish = false
+
+[dependencies]
+tunnet-common.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+chrono.workspace = true
+async-trait.workspace = true
+sha2.workspace = true
+regex.workspace = true
+semver.workspace = true
+sysinfo.workspace = true
+os_info.workspace = true
+whoami.workspace = true
+tokio-util.workspace = true
+blake3.workspace = true
+futures-util.workspace = true
+hex.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+wmi = "0.18.4"
+winreg = "0.56.0"
+windows = { version = "0.62.2", features = [
+  "Win32_Foundation",
+  "Win32_System_Com",
+  "Win32_Security",
+] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.10"
+plist = "1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

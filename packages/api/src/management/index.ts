@@ -14,6 +14,7 @@ export * from "./networks";
 export * from "./node-groups";
 export * from "./org-settings";
 export * from "./policies";
+export * from "./posture";
 export * from "./relay-health";
 export * from "./relays";
 export * from "./sdk-nodes";

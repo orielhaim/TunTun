@@ -1,6 +1,7 @@
 pub mod duration;
 pub mod ipv6;
 pub mod policy;
+pub mod posture;
 pub mod recording;
 pub mod relay;
 pub mod send;

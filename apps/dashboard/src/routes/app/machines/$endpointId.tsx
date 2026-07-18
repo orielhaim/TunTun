@@ -21,6 +21,7 @@ import {
   MachineLabelChips,
   MachineLabelsEditor,
 } from "@/components/app/machine-labels";
+import { MachinePostureTab } from "@/components/app/machine-posture-tab";
 import { MachineRoutesPanel } from "@/components/app/machine-routes-panel";
 import { PageHeader } from "@/components/app/page-header";
 import { StatusBadge } from "@/components/app/status-badge";
@@ -534,6 +535,9 @@ function MachineDetailPage() {
             <TabsTrigger value="ssh" className="rounded-none px-3">
               SSH
             </TabsTrigger>
+            <TabsTrigger value="posture" className="rounded-none px-3">
+              Posture
+            </TabsTrigger>
             <TabsTrigger value="system" className="rounded-none px-3">
               System
             </TabsTrigger>
@@ -865,6 +869,10 @@ function MachineDetailPage() {
             endpointId={endpointId}
             hostname={device.name}
           />
+        </TabsContent>
+
+        <TabsContent value="posture">
+          <MachinePostureTab orgId={orgId} endpointId={endpointId} />
         </TabsContent>
 
         <TabsContent value="system">

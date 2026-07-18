@@ -1,6 +1,6 @@
 //! # tunnet
 //!
-//! Embed a Tunnet mesh node inside any Rust application — Tailscale's tsnet for Rust.
+//! Embed a Tunnet mesh node inside any Rust application - Tailscale's tsnet for Rust.
 //!
 //! ```no_run
 //! use tunnet::TunnetNode;
@@ -31,10 +31,10 @@
 //!
 //! ## Features
 //!
-//! - `managed` (default) — control-plane enrollment and sync
-//! - `direct` — re-exports for Direct / local-first mode types
-//! - `send` — file transfer APIs
-//! - `serve` — mesh reverse-proxy (`serve`) APIs
+//! - `managed` (default) - control-plane enrollment and sync
+//! - `direct` - re-exports for Direct / local-first mode types
+//! - `send` - file transfer APIs
+//! - `serve` - mesh reverse-proxy (`serve`) APIs
 
 #![deny(missing_docs)]
 

@@ -41,7 +41,7 @@ pub fn run_as_service() -> anyhow::Result<()> {
 
 fn service_main(_arguments: Vec<OsString>) {
     if let Err(e) = run_service() {
-        // No console under SCM — best-effort log if tracing was initialized.
+        // No console under SCM - best-effort log if tracing was initialized.
         eprintln!("tunnet service failed: {e:#}");
     }
 }
@@ -141,7 +141,7 @@ async fn run_agent_service(shutdown: CancellationToken) -> anyhow::Result<()> {
     }
 }
 
-/// Install (or update) the Tunnet service via the SCM API — avoids `sc create` quoting bugs.
+/// Install (or update) the Tunnet service via the SCM API - avoids `sc create` quoting bugs.
 pub fn install(exe: &str, state_dir: Option<&str>) -> anyhow::Result<()> {
     let dir = state_dir
         .map(str::to_string)

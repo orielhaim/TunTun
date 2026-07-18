@@ -218,7 +218,7 @@ async fn discover_cluster_cidrs(ctx: &OperatorContext) -> anyhow::Result<Vec<Str
     }
 
     // Service ClusterIP range: use the default/kubernetes Service as the anchor.
-    // Do not invent /8 from every Service ClusterIP — that produces invalid CIDRs
+    // Do not invent /8 from every Service ClusterIP - that produces invalid CIDRs
     // like 10.109.101.0/8 and triggers control-plane 500s.
     let services: Api<Service> = Api::namespaced(ctx.client.clone(), "default");
     if let Ok(svc) = services.get("kubernetes").await

@@ -6,6 +6,7 @@
 //! - Inbound TCP/UDP: deny unless conntrack or explicit rule
 //! - Local rules override suggested (coordinator) rules
 
+use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -953,10 +954,14 @@ pub fn firewall_to_policy(
                 ports: vec![],
                 protocol: Some(Protocol::Any),
                 priority: 0,
+                src_posture: vec![],
             }],
             ssh_rules: vec![],
             version: cfg.version,
             signature: String::new(),
+            postures: HashMap::new(),
+            default_src_posture: vec![],
+            posture_enforcement: None,
         };
     }
 
@@ -983,6 +988,7 @@ pub fn firewall_to_policy(
             ports: fr.ports.clone(),
             protocol: Some(fr.protocol),
             priority,
+            src_posture: vec![],
         });
         priority -= 1;
     }
@@ -997,6 +1003,7 @@ pub fn firewall_to_policy(
         ports: vec![],
         protocol: Some(Protocol::Any),
         priority: -100,
+        src_posture: vec![],
     });
     // Inbound: allow any (packet path enforces via FirewallEngine); connection accept
     // still gated by AuthCache in DirectAuthHook.
@@ -1007,6 +1014,7 @@ pub fn firewall_to_policy(
         ports: vec![],
         protocol: Some(Protocol::Any),
         priority: -200,
+        src_posture: vec![],
     });
 
     PolicyBundle {
@@ -1014,6 +1022,9 @@ pub fn firewall_to_policy(
         ssh_rules: vec![],
         version: cfg.version,
         signature: String::new(),
+        postures: HashMap::new(),
+        default_src_posture: vec![],
+        posture_enforcement: None,
     }
 }
 

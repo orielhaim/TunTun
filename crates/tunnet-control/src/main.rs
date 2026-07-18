@@ -19,6 +19,7 @@ mod observability;
 mod pg_inet;
 mod pg_notify;
 mod policy_store;
+mod posture;
 mod presence;
 mod reconnect;
 mod register;

@@ -96,6 +96,7 @@ pub fn spawn_ws_processor(
     #[cfg(feature = "tunnel")] tunnels: Option<crate::tunnel::TunnelManager>,
     #[cfg(feature = "send")] send: Option<crate::send::SendManager>,
     on_kill_ssh: Option<crate::node::KillSshHook>,
+    posture_hooks: Option<crate::node::PostureHooks>,
 ) {
     tokio::spawn(async move {
         let _ = ws
@@ -440,6 +441,47 @@ pub fn spawn_ws_processor(
                         #[cfg(not(feature = "send"))]
                         ServerMsg::SetSendConsent { mode, .. } => {
                             tracing::warn!(%mode, "SetSendConsent ignored (`send` feature disabled)");
+                        }
+                        ServerMsg::PostureRecheck => {
+                            if let Some(hooks) = &posture_hooks {
+                                if let Some(hook) = &hooks.on_recheck {
+                                    hook();
+                                    tracing::info!("PostureRecheck handled");
+                                } else {
+                                    tracing::warn!("PostureRecheck ignored (no hook)");
+                                }
+                            }
+                        }
+                        ServerMsg::PostureConfigUpdate {
+                            interval_secs,
+                            enabled_collectors,
+                            custom_scripts,
+                        } => {
+                            if let Some(hooks) = &posture_hooks {
+                                if let Some(hook) = &hooks.on_config_update {
+                                    hook(interval_secs, enabled_collectors, custom_scripts);
+                                    tracing::info!(interval_secs, "PostureConfigUpdate applied");
+                                } else {
+                                    tracing::warn!("PostureConfigUpdate ignored (no hook)");
+                                }
+                            }
+                        }
+                        ServerMsg::PostureStatus {
+                            postures,
+                            enforcement_action,
+                            grace_period_remaining_secs,
+                            remediation_messages,
+                        } => {
+                            if let Some(hooks) = &posture_hooks
+                                && let Some(hook) = &hooks.on_status
+                            {
+                                hook(
+                                    postures,
+                                    enforcement_action,
+                                    grace_period_remaining_secs,
+                                    remediation_messages,
+                                );
+                            }
                         }
                     }
                 }

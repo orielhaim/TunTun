@@ -1,4 +1,4 @@
-//! [`TunnetNode`] — embed a Tunnet mesh node in your process.
+//! [`TunnetNode`] - embed a Tunnet mesh node in your process.
 
 use std::net::Ipv4Addr;
 use std::path::PathBuf;

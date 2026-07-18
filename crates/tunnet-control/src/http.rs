@@ -713,6 +713,7 @@ async fn run_ws(
     // Ping loop + inbound reader.
     let pool = state.pool.clone();
     let ep = endpoint_id.clone();
+    let posture_state = state.clone();
     let recv_task = tokio::spawn(async move {
         while let Some(Ok(msg)) = ws_rx.next().await {
             match msg {
@@ -1100,6 +1101,23 @@ async fn run_ws(
                                 .await
                                 {
                                     tracing::warn!(?e, %transfer_id, "TransferFailed update failed");
+                                }
+                            }
+                            ClientMsg::PostureReport {
+                                full,
+                                attributes,
+                                collected_at,
+                            } => {
+                                if let Err(e) = crate::posture::handle_posture_report(
+                                    &posture_state,
+                                    &ep,
+                                    full,
+                                    attributes,
+                                    collected_at,
+                                )
+                                .await
+                                {
+                                    tracing::warn!(?e, %ep, "PostureReport failed");
                                 }
                             }
                             ClientMsg::Hello { .. } | ClientMsg::Pong { .. } => {}

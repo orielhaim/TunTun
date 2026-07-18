@@ -22,6 +22,7 @@ export const statement = {
   transfer: ["create", "read", "accept", "reject"],
   sshSession: ["read", "terminate"],
   ca: ["read", "update"],
+  posture: ["create", "read", "update", "delete", "recheck"],
 } as const;
 
 export const ac = createAccessControl(statement);
@@ -37,6 +38,7 @@ const allRoute = ["create", "read", "update", "delete"] as const;
 const allEnrollment = ["create", "read", "revoke"] as const;
 const allTransfer = ["create", "read", "accept", "reject"] as const;
 const allSshSession = ["read", "terminate"] as const;
+const allPosture = ["create", "read", "update", "delete", "recheck"] as const;
 
 export const owner = ac.newRole({
   ...ownerAc.statements,
@@ -54,6 +56,7 @@ export const owner = ac.newRole({
   transfer: [...allTransfer],
   sshSession: [...allSshSession],
   ca: ["read", "update"],
+  posture: [...allPosture],
 });
 
 export const admin = ac.newRole({
@@ -72,6 +75,7 @@ export const admin = ac.newRole({
   transfer: ["create", "read", "accept", "reject"],
   sshSession: ["read", "terminate"],
   ca: ["read", "update"],
+  posture: [...allPosture],
 });
 
 export const member = ac.newRole({
@@ -90,6 +94,7 @@ export const member = ac.newRole({
   transfer: ["create", "read"],
   sshSession: ["read"],
   ca: ["read"],
+  posture: ["read"],
 });
 
 /** Discord-style hierarchy: higher number = higher rank. */

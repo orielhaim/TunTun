@@ -14,6 +14,7 @@ import { nodeGroupsRoutes } from "./node-groups";
 import { orgSettingsRoutes } from "./org-settings";
 import { orgUsersRoutes } from "./org-users";
 import { policiesRoutes } from "./policies";
+import { postureRoutes } from "./posture";
 import { presenceRoutes } from "./presence";
 import { relaysRoutes } from "./relays";
 import { sdkNodesRoutes } from "./sdk-nodes";
@@ -33,6 +34,7 @@ export const apiV1 = new Elysia({ prefix: "/api/v1" })
   .use(devicesRoutes)
   .use(presenceRoutes)
   .use(policiesRoutes)
+  .use(postureRoutes)
   .use(sshPoliciesRoutes)
   .use(sshSessionsRoutes)
   .use(subnetRoutesRoutes)

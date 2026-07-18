@@ -10,6 +10,7 @@ members = [
   "crates/tunnet-node-napi",
   "crates/tunnet-kube-node",
   "crates/tunnet-operator",
+  "crates/tunnet-posture",
 ]
 
 [workspace.package]
@@ -105,6 +106,11 @@ portable-pty = "0.9"
 russh = { version = "0.61.2", default-features = false, features = ["ring"] }
 russh-sftp = "2.3"
 async-trait = "0.1"
+regex = "1"
+semver = "1"
+sysinfo = "0.35"
+os_info = "3"
+whoami = "2"
 rusqlite = { version = "0.39", features = ["bundled"] }
 
 # napi-rs
@@ -121,6 +127,7 @@ napi-build = "2"
 tunnet-common = { version = "0.7.0", path = "crates/tunnet-common" }
 tunnet-core = { version = "0.7.0", path = "crates/tunnet-core" }
 tunnet = { version = "0.2.0", path = "crates/tunnet" }
+tunnet-posture = { version = "0.7.0", path = "crates/tunnet-posture" }
 
 # Kubernetes operator
 kube = { version = "4.0.0", default-features = false, features = [

@@ -30,6 +30,9 @@ import { Route as AppMachinesIndexRouteImport } from './routes/app/machines/inde
 import { Route as AppMachinesEndpointIdRouteImport } from './routes/app/machines/$endpointId'
 import { Route as AppNetworksIndexRouteImport } from './routes/app/networks/index'
 import { Route as AppNetworksNetworkIdRouteRouteImport } from './routes/app/networks/$networkId/route'
+import { Route as AppPostureIndexRouteImport } from './routes/app/posture/index'
+import { Route as AppPostureComplianceRouteImport } from './routes/app/posture/compliance'
+import { Route as AppPostureIntegrationsRouteImport } from './routes/app/posture/integrations'
 import { Route as AppRelaysIndexRouteImport } from './routes/app/relays/index'
 import { Route as AppRelaysRelayIdRouteImport } from './routes/app/relays/$relayId'
 import { Route as AppServesIndexRouteImport } from './routes/app/serves/index'
@@ -154,6 +157,21 @@ const AppNetworksNetworkIdRouteRoute =
     path: '/networks/$networkId',
     getParentRoute: () => AppRouteRoute,
   } as any)
+const AppPostureIndexRoute = AppPostureIndexRouteImport.update({
+  id: '/posture/',
+  path: '/posture/',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppPostureComplianceRoute = AppPostureComplianceRouteImport.update({
+  id: '/posture/compliance',
+  path: '/posture/compliance',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppPostureIntegrationsRoute = AppPostureIntegrationsRouteImport.update({
+  id: '/posture/integrations',
+  path: '/posture/integrations',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const AppRelaysIndexRoute = AppRelaysIndexRouteImport.update({
   id: '/relays/',
   path: '/relays/',
@@ -260,12 +278,15 @@ export interface FileRoutesByFullPath {
   '/device/': typeof DeviceIndexRoute
   '/app/networks/$networkId': typeof AppNetworksNetworkIdRouteRouteWithChildren
   '/app/machines/$endpointId': typeof AppMachinesEndpointIdRoute
+  '/app/posture/compliance': typeof AppPostureComplianceRoute
+  '/app/posture/integrations': typeof AppPostureIntegrationsRoute
   '/app/relays/$relayId': typeof AppRelaysRelayIdRoute
   '/app/serves/$serveId': typeof AppServesServeIdRoute
   '/app/tunnels/$tunnelId': typeof AppTunnelsTunnelIdRoute
   '/app/kubernetes/': typeof AppKubernetesIndexRoute
   '/app/machines/': typeof AppMachinesIndexRoute
   '/app/networks/': typeof AppNetworksIndexRoute
+  '/app/posture/': typeof AppPostureIndexRoute
   '/app/relays/': typeof AppRelaysIndexRoute
   '/app/serves/': typeof AppServesIndexRoute
   '/app/settings/': typeof AppSettingsIndexRoute
@@ -296,12 +317,15 @@ export interface FileRoutesByTo {
   '/app': typeof AppIndexRoute
   '/device': typeof DeviceIndexRoute
   '/app/machines/$endpointId': typeof AppMachinesEndpointIdRoute
+  '/app/posture/compliance': typeof AppPostureComplianceRoute
+  '/app/posture/integrations': typeof AppPostureIntegrationsRoute
   '/app/relays/$relayId': typeof AppRelaysRelayIdRoute
   '/app/serves/$serveId': typeof AppServesServeIdRoute
   '/app/tunnels/$tunnelId': typeof AppTunnelsTunnelIdRoute
   '/app/kubernetes': typeof AppKubernetesIndexRoute
   '/app/machines': typeof AppMachinesIndexRoute
   '/app/networks': typeof AppNetworksIndexRoute
+  '/app/posture': typeof AppPostureIndexRoute
   '/app/relays': typeof AppRelaysIndexRoute
   '/app/serves': typeof AppServesIndexRoute
   '/app/settings': typeof AppSettingsIndexRoute
@@ -336,12 +360,15 @@ export interface FileRoutesById {
   '/device/': typeof DeviceIndexRoute
   '/app/networks/$networkId': typeof AppNetworksNetworkIdRouteRouteWithChildren
   '/app/machines/$endpointId': typeof AppMachinesEndpointIdRoute
+  '/app/posture/compliance': typeof AppPostureComplianceRoute
+  '/app/posture/integrations': typeof AppPostureIntegrationsRoute
   '/app/relays/$relayId': typeof AppRelaysRelayIdRoute
   '/app/serves/$serveId': typeof AppServesServeIdRoute
   '/app/tunnels/$tunnelId': typeof AppTunnelsTunnelIdRoute
   '/app/kubernetes/': typeof AppKubernetesIndexRoute
   '/app/machines/': typeof AppMachinesIndexRoute
   '/app/networks/': typeof AppNetworksIndexRoute
+  '/app/posture/': typeof AppPostureIndexRoute
   '/app/relays/': typeof AppRelaysIndexRoute
   '/app/serves/': typeof AppServesIndexRoute
   '/app/settings/': typeof AppSettingsIndexRoute
@@ -377,12 +404,15 @@ export interface FileRouteTypes {
     | '/device/'
     | '/app/networks/$networkId'
     | '/app/machines/$endpointId'
+    | '/app/posture/compliance'
+    | '/app/posture/integrations'
     | '/app/relays/$relayId'
     | '/app/serves/$serveId'
     | '/app/tunnels/$tunnelId'
     | '/app/kubernetes/'
     | '/app/machines/'
     | '/app/networks/'
+    | '/app/posture/'
     | '/app/relays/'
     | '/app/serves/'
     | '/app/settings/'
@@ -413,12 +443,15 @@ export interface FileRouteTypes {
     | '/app'
     | '/device'
     | '/app/machines/$endpointId'
+    | '/app/posture/compliance'
+    | '/app/posture/integrations'
     | '/app/relays/$relayId'
     | '/app/serves/$serveId'
     | '/app/tunnels/$tunnelId'
     | '/app/kubernetes'
     | '/app/machines'
     | '/app/networks'
+    | '/app/posture'
     | '/app/relays'
     | '/app/serves'
     | '/app/settings'
@@ -452,12 +485,15 @@ export interface FileRouteTypes {
     | '/device/'
     | '/app/networks/$networkId'
     | '/app/machines/$endpointId'
+    | '/app/posture/compliance'
+    | '/app/posture/integrations'
     | '/app/relays/$relayId'
     | '/app/serves/$serveId'
     | '/app/tunnels/$tunnelId'
     | '/app/kubernetes/'
     | '/app/machines/'
     | '/app/networks/'
+    | '/app/posture/'
     | '/app/relays/'
     | '/app/serves/'
     | '/app/settings/'
@@ -633,6 +669,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppNetworksNetworkIdRouteRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/app/posture/': {
+      id: '/app/posture/'
+      path: '/posture'
+      fullPath: '/app/posture/'
+      preLoaderRoute: typeof AppPostureIndexRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/app/posture/compliance': {
+      id: '/app/posture/compliance'
+      path: '/posture/compliance'
+      fullPath: '/app/posture/compliance'
+      preLoaderRoute: typeof AppPostureComplianceRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/app/posture/integrations': {
+      id: '/app/posture/integrations'
+      path: '/posture/integrations'
+      fullPath: '/app/posture/integrations'
+      preLoaderRoute: typeof AppPostureIntegrationsRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/app/relays/': {
       id: '/app/relays/'
       path: '/relays'
@@ -794,12 +851,15 @@ interface AppRouteRouteChildren {
   AppIndexRoute: typeof AppIndexRoute
   AppNetworksNetworkIdRouteRoute: typeof AppNetworksNetworkIdRouteRouteWithChildren
   AppMachinesEndpointIdRoute: typeof AppMachinesEndpointIdRoute
+  AppPostureComplianceRoute: typeof AppPostureComplianceRoute
+  AppPostureIntegrationsRoute: typeof AppPostureIntegrationsRoute
   AppRelaysRelayIdRoute: typeof AppRelaysRelayIdRoute
   AppServesServeIdRoute: typeof AppServesServeIdRoute
   AppTunnelsTunnelIdRoute: typeof AppTunnelsTunnelIdRoute
   AppKubernetesIndexRoute: typeof AppKubernetesIndexRoute
   AppMachinesIndexRoute: typeof AppMachinesIndexRoute
   AppNetworksIndexRoute: typeof AppNetworksIndexRoute
+  AppPostureIndexRoute: typeof AppPostureIndexRoute
   AppRelaysIndexRoute: typeof AppRelaysIndexRoute
   AppServesIndexRoute: typeof AppServesIndexRoute
   AppSshSessionsIndexRoute: typeof AppSshSessionsIndexRoute
@@ -819,12 +879,15 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppIndexRoute: AppIndexRoute,
   AppNetworksNetworkIdRouteRoute: AppNetworksNetworkIdRouteRouteWithChildren,
   AppMachinesEndpointIdRoute: AppMachinesEndpointIdRoute,
+  AppPostureComplianceRoute: AppPostureComplianceRoute,
+  AppPostureIntegrationsRoute: AppPostureIntegrationsRoute,
   AppRelaysRelayIdRoute: AppRelaysRelayIdRoute,
   AppServesServeIdRoute: AppServesServeIdRoute,
   AppTunnelsTunnelIdRoute: AppTunnelsTunnelIdRoute,
   AppKubernetesIndexRoute: AppKubernetesIndexRoute,
   AppMachinesIndexRoute: AppMachinesIndexRoute,
   AppNetworksIndexRoute: AppNetworksIndexRoute,
+  AppPostureIndexRoute: AppPostureIndexRoute,
   AppRelaysIndexRoute: AppRelaysIndexRoute,
   AppServesIndexRoute: AppServesIndexRoute,
   AppSshSessionsIndexRoute: AppSshSessionsIndexRoute,

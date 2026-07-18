@@ -108,6 +108,30 @@ import type { z } from "zod";
 import { z as zod } from "zod";
 
 import { getManagementApiUrl } from "@/lib/env";
+import {
+  type CreatePostureBody,
+  type CreatePostureIntegrationBody,
+  createPostureDefinitionBody as createPostureBodySchema,
+  createPostureIntegrationBody as createPostureIntegrationBodySchema,
+  listDevicePostureResponse as devicePostureResponseSchema,
+  postureStatusResponse as devicePostureStatusSchema,
+  normalizeCompliance,
+  type PatchCustomPostureAttributeBody,
+  type PatchPostureSettingsBody,
+  patchCustomPostureBody as patchCustomPostureAttributeBodySchema,
+  patchPostureOrgSettingsBody as patchPostureSettingsBodySchema,
+  complianceOverviewResponse as postureComplianceSchema,
+  postureDefinitionListResponse as postureDefinitionListResponseSchema,
+  postureDefinitionSchema,
+  postureIntegrationListResponse as postureIntegrationListResponseSchema,
+  postureIntegrationSchema,
+  postureIntegrationSyncResponse,
+  postureOrgSettingsResponse as postureSettingsResponseSchema,
+  type UpdatePostureBody,
+  type UpdatePostureIntegrationBody,
+  updatePostureDefinitionBody as updatePostureBodySchema,
+  updatePostureIntegrationBody as updatePostureIntegrationBodySchema,
+} from "@/lib/posture-types";
 
 const relayDetailResponse = zod.object({ relay: relaySchema });
 const tunnelDetailResponse = zod.object({ tunnel: tunnelSchema });
@@ -938,6 +962,160 @@ export function createManagementClient(orgId: string) {
         name: string;
         role: string;
       }>,
+
+    getDevicePosture: (endpointId: string) =>
+      request(
+        orgId,
+        org(`/devices/${endpointId}/posture`),
+        {},
+        devicePostureResponseSchema,
+      ),
+
+    getDevicePostureStatus: (endpointId: string) =>
+      request(
+        orgId,
+        org(`/devices/${endpointId}/posture/status`),
+        {},
+        devicePostureStatusSchema,
+      ),
+
+    recheckDevicePosture: (endpointId: string) =>
+      request(orgId, org(`/devices/${endpointId}/posture/recheck`), {
+        method: "POST",
+      }),
+
+    patchCustomPostureAttribute: (
+      endpointId: string,
+      key: string,
+      body: PatchCustomPostureAttributeBody,
+    ) =>
+      request(
+        orgId,
+        org(`/devices/${endpointId}/posture/custom/${encodeURIComponent(key)}`),
+        {
+          method: "PATCH",
+          body: JSON.stringify(
+            patchCustomPostureAttributeBodySchema.parse(body),
+          ),
+        },
+        devicePostureResponseSchema,
+      ),
+
+    deleteCustomPostureAttribute: (endpointId: string, key: string) =>
+      request(
+        orgId,
+        org(`/devices/${endpointId}/posture/custom/${encodeURIComponent(key)}`),
+        { method: "DELETE" },
+      ),
+
+    listPostures: () =>
+      request(orgId, org("/postures"), {}, postureDefinitionListResponseSchema),
+
+    createPosture: (body: CreatePostureBody) =>
+      request(
+        orgId,
+        org("/postures"),
+        {
+          method: "POST",
+          body: JSON.stringify(createPostureBodySchema.parse(body)),
+        },
+        postureDefinitionSchema,
+      ),
+
+    updatePosture: (name: string, body: UpdatePostureBody) =>
+      request(
+        orgId,
+        org(`/postures/${encodeURIComponent(name)}`),
+        {
+          method: "PUT",
+          body: JSON.stringify(updatePostureBodySchema.parse(body)),
+        },
+        postureDefinitionSchema,
+      ),
+
+    deletePosture: (name: string) =>
+      request<{ ok: boolean }>(
+        orgId,
+        org(`/postures/${encodeURIComponent(name)}`),
+        { method: "DELETE" },
+      ),
+
+    getPostureCompliance: async () => {
+      const raw = await request(
+        orgId,
+        org("/posture/compliance"),
+        {},
+        postureComplianceSchema,
+      );
+      return normalizeCompliance(raw);
+    },
+
+    listPostureIntegrations: () =>
+      request(
+        orgId,
+        org("/posture/integrations"),
+        {},
+        postureIntegrationListResponseSchema,
+      ),
+
+    createPostureIntegration: (body: CreatePostureIntegrationBody) =>
+      request(
+        orgId,
+        org("/posture/integrations"),
+        {
+          method: "POST",
+          body: JSON.stringify(createPostureIntegrationBodySchema.parse(body)),
+        },
+        postureIntegrationSchema,
+      ),
+
+    updatePostureIntegration: (
+      integrationId: string,
+      body: UpdatePostureIntegrationBody,
+    ) =>
+      request(
+        orgId,
+        org(`/posture/integrations/${integrationId}`),
+        {
+          method: "PUT",
+          body: JSON.stringify(updatePostureIntegrationBodySchema.parse(body)),
+        },
+        postureIntegrationSchema,
+      ),
+
+    deletePostureIntegration: (integrationId: string) =>
+      request<{ ok: boolean }>(
+        orgId,
+        org(`/posture/integrations/${integrationId}`),
+        { method: "DELETE" },
+      ),
+
+    syncPostureIntegration: (integrationId: string) =>
+      request(
+        orgId,
+        org(`/posture/integrations/${integrationId}/sync`),
+        { method: "POST" },
+        postureIntegrationSyncResponse,
+      ),
+
+    getPostureSettings: () =>
+      request(
+        orgId,
+        org("/posture/settings"),
+        {},
+        postureSettingsResponseSchema,
+      ),
+
+    updatePostureSettings: (body: PatchPostureSettingsBody) =>
+      request(
+        orgId,
+        org("/posture/settings"),
+        {
+          method: "PATCH",
+          body: JSON.stringify(patchPostureSettingsBodySchema.parse(body)),
+        },
+        postureSettingsResponseSchema,
+      ),
   };
 }
 

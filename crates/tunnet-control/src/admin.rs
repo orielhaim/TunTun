@@ -103,6 +103,14 @@ pub async fn serve(bind: &str, state: AdminState) -> anyhow::Result<()> {
             "/internal/v1/transfers/set-consent",
             post(set_send_consent_handler),
         )
+        .route(
+            "/internal/v1/posture/recheck",
+            post(posture_recheck_handler),
+        )
+        .route(
+            "/internal/v1/posture/attributes",
+            get(posture_attributes_handler),
+        )
         .with_state(Arc::new(state));
 
     let listener = tokio::net::TcpListener::bind(bind).await?;
@@ -631,6 +639,55 @@ async fn parse_admin_json<T: serde::de::DeserializeOwned>(
     let parsed: T = serde_json::from_slice(&body)
         .map_err(|_| (StatusCode::BAD_REQUEST, "invalid json").into_response())?;
     Ok((parsed, state))
+}
+
+#[derive(serde::Deserialize)]
+struct PostureRecheckPush {
+    endpoint_id: String,
+}
+
+async fn posture_recheck_handler(
+    State(state): State<Arc<AdminState>>,
+    req: Request<axum::body::Body>,
+) -> Response {
+    let (parsed, state) = match parse_admin_json::<PostureRecheckPush>(state, req).await {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+    crate::posture::request_posture_recheck(&state.ws_hub, &parsed.endpoint_id).await;
+    (StatusCode::OK, Json(serde_json::json!({ "ok": true }))).into_response()
+}
+
+async fn posture_attributes_handler(
+    State(state): State<Arc<AdminState>>,
+    req: Request<axum::body::Body>,
+) -> Response {
+    let endpoint_id = req
+        .uri()
+        .query()
+        .and_then(|q| {
+            q.split('&').find_map(|pair| {
+                let (k, v) = pair.split_once('=')?;
+                (k == "endpoint_id").then(|| v.to_string())
+            })
+        })
+        .unwrap_or_default();
+    if let Err(resp) = verify_service(&state, req).await {
+        return resp;
+    }
+    if endpoint_id.is_empty() {
+        return (StatusCode::BAD_REQUEST, "endpoint_id query param required").into_response();
+    }
+    match crate::posture::load_device_attributes(&state.pool, &endpoint_id).await {
+        Ok(attrs) => {
+            let json = crate::posture::json_attributes(&attrs);
+            (StatusCode::OK, Json(json)).into_response()
+        }
+        Err(e) => {
+            tracing::warn!(?e, %endpoint_id, "posture attributes load failed");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
 }
 
 async fn verify_service(

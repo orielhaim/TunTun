@@ -10,6 +10,7 @@ import {
   HiOutlineCommandLine,
   HiOutlineCube,
   HiOutlineKey,
+  HiOutlineLockClosed,
   HiOutlineServer,
   HiOutlineServerStack,
   HiOutlineShare,
@@ -110,13 +111,21 @@ const navSections: NavSection[] = [
     ],
   },
   {
+    id: "security",
+    label: "Security",
+    defaultOpen: false,
+    items: [
+      { to: "/app/posture", label: "Posture", icon: HiOutlineShieldCheck },
+      { to: "/app/access", label: "Access", icon: HiOutlineLockClosed },
+    ],
+  },
+  {
     id: "admin",
     label: "Administration",
     defaultOpen: false,
     items: [
       { to: "/app/users", label: "Users", icon: HiOutlineUsers },
       { to: "/app/roles", label: "Roles", icon: HiOutlineKey },
-      { to: "/app/access", label: "Access", icon: HiOutlineShieldCheck },
       {
         to: "/app/logs",
         label: "Logs",

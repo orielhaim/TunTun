@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     EndpointIdHex, EndpointSnapshot, NetworkMembershipSnapshot, RedirectRule, SnapshotDelta,
     policy::PolicyBundle,
+    posture::{CustomScriptConfig, PostureEvalResult},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -93,6 +94,25 @@ pub enum ServerMsg {
         inbox_path: Option<String>,
         #[serde(default)]
         pin_blobs: bool,
+    },
+
+    /// Control plane requests an immediate posture re-collection.
+    PostureRecheck,
+    /// Push updated posture collector configuration to the agent.
+    PostureConfigUpdate {
+        interval_secs: u64,
+        enabled_collectors: Vec<String>,
+        #[serde(default)]
+        custom_scripts: Vec<CustomScriptConfig>,
+    },
+    /// Evaluation results and enforcement state for this device.
+    PostureStatus {
+        postures: Vec<PostureEvalResult>,
+        enforcement_action: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        grace_period_remaining_secs: Option<u64>,
+        #[serde(default)]
+        remediation_messages: Vec<String>,
     },
 }
 
@@ -219,6 +239,13 @@ pub enum ClientMsg {
         error: String,
         #[serde(default)]
         rejected: bool,
+    },
+
+    /// Agent posture attribute report (full snapshot or delta).
+    PostureReport {
+        full: bool,
+        attributes: std::collections::HashMap<String, serde_json::Value>,
+        collected_at: chrono::DateTime<chrono::Utc>,
     },
 }
 

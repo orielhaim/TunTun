@@ -339,3 +339,16 @@ export async function pushSetSendConsent(body: {
     })
     .json();
 }
+
+/** Ask the control plane to push a PostureRecheck command to the agent. */
+export async function pushPostureRecheck(body: {
+  endpointId: string;
+}): Promise<void> {
+  await getClient()
+    .post("/internal/v1/posture/recheck", {
+      json: {
+        endpoint_id: body.endpointId,
+      },
+    })
+    .json();
+}

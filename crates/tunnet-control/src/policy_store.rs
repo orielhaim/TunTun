@@ -1,9 +1,11 @@
 use ed25519_dalek::{Signer, SigningKey};
 use serde::Deserialize;
 use sqlx::PgPool;
+use std::collections::HashMap;
 use tunnet_common::policy::{
     Action, PolicyBundle, PolicyRule, Protocol, Selector, SshAction, SshPolicyRule,
 };
+use tunnet_common::posture::PostureEnforcementConfig;
 use uuid::Uuid;
 
 #[derive(sqlx::FromRow)]
@@ -14,6 +16,7 @@ struct Row {
     ports: sqlx::types::Json<Vec<tunnet_common::policy::PortRange>>,
     protocol: Option<String>,
     priority: i32,
+    src_posture: Option<sqlx::types::Json<Vec<String>>>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -29,6 +32,23 @@ struct SshRow {
     priority: i32,
 }
 
+#[derive(sqlx::FromRow)]
+struct PostureDefinitionRow {
+    name: String,
+    assertions: sqlx::types::Json<Vec<String>>,
+}
+
+#[derive(sqlx::FromRow)]
+struct OrgPostureSettingsRow {
+    mode: String,
+    grace_period_minutes: i32,
+    recheck_on_fail_seconds: i32,
+    notify_user: bool,
+    notify_admin: bool,
+    auto_reauthorize: bool,
+    default_src_posture: sqlx::types::Json<Vec<String>>,
+}
+
 pub async fn load_network_bundle(
     pool: &PgPool,
     signing_key: &SigningKey,
@@ -36,7 +56,7 @@ pub async fn load_network_bundle(
     version: u64,
 ) -> anyhow::Result<PolicyBundle> {
     let rows: Vec<Row> = sqlx::query_as(
-        "SELECT src_selector, dst_selector, action, ports, protocol, priority \
+        "SELECT src_selector, dst_selector, action, ports, protocol, priority, src_posture \
          FROM policies WHERE network_id = $1 ORDER BY priority DESC",
     )
     .bind(network_id)
@@ -52,7 +72,21 @@ pub async fn load_network_bundle(
     .fetch_all(pool)
     .await?;
 
-    sign_bundle(signing_key, rows, ssh_rows, version)
+    let org_id: String = sqlx::query_scalar("SELECT organization_id FROM networks WHERE id = $1")
+        .bind(network_id)
+        .fetch_one(pool)
+        .await?;
+
+    let posture_meta = load_posture_metadata(pool, &org_id).await?;
+    sign_bundle(
+        signing_key,
+        rows,
+        ssh_rows,
+        version,
+        posture_meta.postures,
+        posture_meta.default_src_posture,
+        posture_meta.posture_enforcement,
+    )
 }
 
 pub async fn load_org_bundle(
@@ -62,7 +96,7 @@ pub async fn load_org_bundle(
     version: u64,
 ) -> anyhow::Result<PolicyBundle> {
     let rows: Vec<Row> = sqlx::query_as(
-        "SELECT src_selector, dst_selector, action, ports, protocol, priority \
+        "SELECT src_selector, dst_selector, action, ports, protocol, priority, src_posture \
          FROM policies \
          WHERE organization_id = $1 AND network_id IS NULL \
          ORDER BY priority DESC",
@@ -72,7 +106,71 @@ pub async fn load_org_bundle(
     .await?;
 
     // Org-level SSH rules are not modeled yet; network-scoped only.
-    sign_bundle(signing_key, rows, Vec::new(), version)
+    let posture_meta = load_posture_metadata(pool, organization_id).await?;
+    sign_bundle(
+        signing_key,
+        rows,
+        Vec::new(),
+        version,
+        posture_meta.postures,
+        posture_meta.default_src_posture,
+        posture_meta.posture_enforcement,
+    )
+}
+
+struct PostureMetadata {
+    postures: HashMap<String, Vec<String>>,
+    default_src_posture: Vec<String>,
+    posture_enforcement: Option<PostureEnforcementConfig>,
+}
+
+async fn load_posture_metadata(
+    pool: &PgPool,
+    organization_id: &str,
+) -> anyhow::Result<PostureMetadata> {
+    let definitions: Vec<PostureDefinitionRow> = sqlx::query_as(
+        "SELECT name, assertions FROM posture_definitions WHERE organization_id = $1",
+    )
+    .bind(organization_id)
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+
+    let postures = definitions
+        .into_iter()
+        .map(|d| (d.name, d.assertions.0))
+        .collect();
+
+    let settings: Option<OrgPostureSettingsRow> = sqlx::query_as(
+        "SELECT mode, grace_period_minutes, recheck_on_fail_seconds, notify_user, \
+                notify_admin, auto_reauthorize, default_src_posture \
+         FROM posture_org_settings WHERE organization_id = $1",
+    )
+    .bind(organization_id)
+    .fetch_optional(pool)
+    .await
+    .unwrap_or(None);
+
+    let (default_src_posture, posture_enforcement) = match settings {
+        Some(s) => (
+            s.default_src_posture.0,
+            Some(PostureEnforcementConfig {
+                mode: s.mode,
+                grace_period_minutes: s.grace_period_minutes.max(0) as u32,
+                recheck_on_fail_secs: s.recheck_on_fail_seconds.max(0) as u64,
+                notify_user: s.notify_user,
+                notify_admin: s.notify_admin,
+                auto_reauthorize: s.auto_reauthorize,
+            }),
+        ),
+        None => (Vec::new(), None),
+    };
+
+    Ok(PostureMetadata {
+        postures,
+        default_src_posture,
+        posture_enforcement,
+    })
 }
 
 fn sign_bundle(
@@ -80,6 +178,9 @@ fn sign_bundle(
     rows: Vec<Row>,
     ssh_rows: Vec<SshRow>,
     version: u64,
+    postures: HashMap<String, Vec<String>>,
+    default_src_posture: Vec<String>,
+    posture_enforcement: Option<PostureEnforcementConfig>,
 ) -> anyhow::Result<PolicyBundle> {
     let rules = rows
         .into_iter()
@@ -100,6 +201,14 @@ fn sign_bundle(
                 _ => None,
             }),
             priority: r.priority,
+            src_posture: {
+                let explicit = r.src_posture.map(|j| j.0).unwrap_or_default();
+                if explicit.is_empty() {
+                    default_src_posture.clone()
+                } else {
+                    explicit
+                }
+            },
         })
         .collect::<Vec<_>>();
 
@@ -131,6 +240,9 @@ fn sign_bundle(
         ssh_rules,
         version,
         signature: String::new(),
+        postures,
+        default_src_posture,
+        posture_enforcement,
     };
     let sign_bytes = serde_json::to_vec(&(&bundle.rules, &bundle.ssh_rules, bundle.version))?;
     let sig = signing_key.sign(&sign_bytes);

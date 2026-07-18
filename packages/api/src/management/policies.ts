@@ -32,6 +32,8 @@ export const policySchema = z.object({
   ports: z.array(portRangeSchema),
   protocol: z.enum(["tcp", "udp", "icmp", "any"]).nullable(),
   priority: z.number().int(),
+  /** Posture definition names required of the source (OR across names). */
+  srcPosture: z.array(z.string()).nullable().optional(),
   createdAt: z.string().datetime(),
 });
 
@@ -42,6 +44,7 @@ export const createPolicyBody = z.object({
   ports: z.array(portRangeSchema).default([]),
   protocol: z.enum(["tcp", "udp", "icmp", "any"]).nullable().optional(),
   priority: z.number().int().default(0),
+  srcPosture: z.array(z.string()).optional(),
 });
 
 export const patchPolicyBody = createPolicyBody.partial();

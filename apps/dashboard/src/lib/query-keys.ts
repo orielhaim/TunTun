@@ -82,4 +82,15 @@ export const queryKeys = {
     [...queryKeys.org(orgId), "tunnel-settings"] as const,
   orgSettings: (orgId: string) =>
     [...queryKeys.org(orgId), "org-settings"] as const,
+  devicePosture: (orgId: string, endpointId: string) =>
+    [...queryKeys.org(orgId), "device-posture", endpointId] as const,
+  devicePostureStatus: (orgId: string, endpointId: string) =>
+    [...queryKeys.org(orgId), "device-posture-status", endpointId] as const,
+  postures: (orgId: string) => [...queryKeys.org(orgId), "postures"] as const,
+  postureCompliance: (orgId: string) =>
+    [...queryKeys.org(orgId), "posture-compliance"] as const,
+  postureIntegrations: (orgId: string) =>
+    [...queryKeys.org(orgId), "posture-integrations"] as const,
+  postureSettings: (orgId: string) =>
+    [...queryKeys.org(orgId), "posture-settings"] as const,
 };

@@ -46,7 +46,7 @@ pub use identity::AgentIdentity;
 pub use iroh_pool::ConnPool;
 #[cfg(feature = "direct")]
 pub use node::DirectNetworkRuntime;
-pub use node::{CoreNode, CoreNodeConfig, KillSshHook};
+pub use node::{CoreNode, CoreNodeConfig, KillSshHook, PostureHooks};
 pub use routing::{PeerInfo, RoutingTable};
 #[cfg(feature = "send")]
 pub use send::{SendConfig, SendManager, TransferDirection, TransferRecord, TransferStatus};

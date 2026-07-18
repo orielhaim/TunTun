@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 tunnet-common.workspace = true
 tunnet-core.workspace = true
+tunnet-posture.workspace = true
 
 tokio.workspace = true
 futures-util.workspace = true

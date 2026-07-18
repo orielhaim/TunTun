@@ -25,6 +25,7 @@ function serializePolicy(row: typeof schema.policies.$inferSelect) {
     ports: row.ports as { start: number; end: number }[],
     protocol: row.protocol as "tcp" | "udp" | "icmp" | "any" | null,
     priority: row.priority,
+    srcPosture: row.srcPosture ?? null,
     createdAt: toIso(row.createdAt)!,
   };
 }
@@ -98,6 +99,7 @@ export const policiesRoutes = new Elysia()
                 ports: parsed.ports,
                 protocol: parsed.protocol ?? null,
                 priority: parsed.priority,
+                srcPosture: parsed.srcPosture ?? null,
               })
               .returning();
 
@@ -140,6 +142,7 @@ export const policiesRoutes = new Elysia()
               ports: parsed.ports,
               protocol: parsed.protocol ?? null,
               priority: parsed.priority,
+              srcPosture: parsed.srcPosture ?? null,
             })
             .returning();
 

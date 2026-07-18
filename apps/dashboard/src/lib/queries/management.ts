@@ -3,6 +3,14 @@ import type { Device, Network } from "@tunnet/api/management";
 
 import { type AggregatedMachine, aggregateMachines } from "@/lib/machine-utils";
 import { createManagementClient } from "@/lib/management-client";
+import type {
+  CreatePostureBody,
+  CreatePostureIntegrationBody,
+  PatchCustomPostureAttributeBody,
+  PatchPostureSettingsBody,
+  UpdatePostureBody,
+  UpdatePostureIntegrationBody,
+} from "@/lib/posture-types";
 import { queryKeys } from "@/lib/query-keys";
 
 export function useNetworks(orgId: string | undefined) {
@@ -1112,6 +1120,258 @@ export function useOrgSettingsMutations(orgId: string | undefined) {
         if (orgId) {
           void queryClient.invalidateQueries({
             queryKey: queryKeys.orgSettings(orgId),
+          });
+        }
+      },
+    }),
+  };
+}
+
+export function useDevicePosture(
+  orgId: string | undefined,
+  endpointId: string,
+) {
+  return useQuery({
+    queryKey:
+      orgId && endpointId
+        ? queryKeys.devicePosture(orgId, endpointId)
+        : ["device-posture"],
+    enabled: Boolean(orgId && endpointId),
+    queryFn: async () =>
+      createManagementClient(orgId!).getDevicePosture(endpointId),
+  });
+}
+
+export function useDevicePostureStatus(
+  orgId: string | undefined,
+  endpointId: string,
+) {
+  return useQuery({
+    queryKey:
+      orgId && endpointId
+        ? queryKeys.devicePostureStatus(orgId, endpointId)
+        : ["device-posture-status"],
+    enabled: Boolean(orgId && endpointId),
+    queryFn: async () =>
+      createManagementClient(orgId!).getDevicePostureStatus(endpointId),
+  });
+}
+
+export function useOrgPostures(orgId: string | undefined) {
+  return useQuery({
+    queryKey: orgId ? queryKeys.postures(orgId) : ["postures"],
+    enabled: Boolean(orgId),
+    queryFn: async () => {
+      const { postures } = await createManagementClient(orgId!).listPostures();
+      return postures;
+    },
+  });
+}
+
+export function usePostureCompliance(orgId: string | undefined) {
+  return useQuery({
+    queryKey: orgId
+      ? queryKeys.postureCompliance(orgId)
+      : ["posture-compliance"],
+    enabled: Boolean(orgId),
+    queryFn: async () => createManagementClient(orgId!).getPostureCompliance(),
+  });
+}
+
+export function usePostureIntegrations(orgId: string | undefined) {
+  return useQuery({
+    queryKey: orgId
+      ? queryKeys.postureIntegrations(orgId)
+      : ["posture-integrations"],
+    enabled: Boolean(orgId),
+    queryFn: async () => {
+      const { integrations } = await createManagementClient(
+        orgId!,
+      ).listPostureIntegrations();
+      return integrations;
+    },
+  });
+}
+
+export function usePostureSettings(orgId: string | undefined) {
+  return useQuery({
+    queryKey: orgId ? queryKeys.postureSettings(orgId) : ["posture-settings"],
+    enabled: Boolean(orgId),
+    queryFn: async () => {
+      const { settings } = await createManagementClient(
+        orgId!,
+      ).getPostureSettings();
+      return settings;
+    },
+  });
+}
+
+export function usePostureMutations(orgId: string | undefined) {
+  const queryClient = useQueryClient();
+  const invalidateOrgPosture = () => {
+    if (!orgId) return;
+    void queryClient.invalidateQueries({ queryKey: queryKeys.postures(orgId) });
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.postureCompliance(orgId),
+    });
+  };
+  const invalidateDevicePosture = (endpointId: string) => {
+    if (!orgId) return;
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.devicePosture(orgId, endpointId),
+    });
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.devicePostureStatus(orgId, endpointId),
+    });
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.postureCompliance(orgId),
+    });
+  };
+
+  return {
+    create: useMutation({
+      mutationFn: async (body: CreatePostureBody) => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).createPosture(body);
+      },
+      onSuccess: invalidateOrgPosture,
+    }),
+    update: useMutation({
+      mutationFn: async ({
+        name,
+        body,
+      }: {
+        name: string;
+        body: UpdatePostureBody;
+      }) => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).updatePosture(name, body);
+      },
+      onSuccess: invalidateOrgPosture,
+    }),
+    remove: useMutation({
+      mutationFn: async (name: string) => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).deletePosture(name);
+      },
+      onSuccess: invalidateOrgPosture,
+    }),
+    patchCustomAttribute: useMutation({
+      mutationFn: async ({
+        endpointId,
+        key,
+        body,
+      }: {
+        endpointId: string;
+        key: string;
+        body: PatchCustomPostureAttributeBody;
+      }) => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).patchCustomPostureAttribute(
+          endpointId,
+          key,
+          body,
+        );
+      },
+      onSuccess: (_data, { endpointId }) => invalidateDevicePosture(endpointId),
+    }),
+    removeCustomAttribute: useMutation({
+      mutationFn: async ({
+        endpointId,
+        key,
+      }: {
+        endpointId: string;
+        key: string;
+      }) => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).deleteCustomPostureAttribute(
+          endpointId,
+          key,
+        );
+      },
+      onSuccess: (_data, { endpointId }) => invalidateDevicePosture(endpointId),
+    }),
+    recheck: useMutation({
+      mutationFn: async (endpointId: string) => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).recheckDevicePosture(endpointId);
+      },
+      onSuccess: (_data, endpointId) => invalidateDevicePosture(endpointId),
+    }),
+    createIntegration: useMutation({
+      mutationFn: async (body: CreatePostureIntegrationBody) => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).createPostureIntegration(body);
+      },
+      onSuccess: () => {
+        if (orgId) {
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.postureIntegrations(orgId),
+          });
+        }
+      },
+    }),
+    updateIntegration: useMutation({
+      mutationFn: async ({
+        integrationId,
+        body,
+      }: {
+        integrationId: string;
+        body: UpdatePostureIntegrationBody;
+      }) => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).updatePostureIntegration(
+          integrationId,
+          body,
+        );
+      },
+      onSuccess: () => {
+        if (orgId) {
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.postureIntegrations(orgId),
+          });
+        }
+      },
+    }),
+    removeIntegration: useMutation({
+      mutationFn: async (integrationId: string) => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).deletePostureIntegration(
+          integrationId,
+        );
+      },
+      onSuccess: () => {
+        if (orgId) {
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.postureIntegrations(orgId),
+          });
+        }
+      },
+    }),
+    syncIntegration: useMutation({
+      mutationFn: async (integrationId: string) => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).syncPostureIntegration(
+          integrationId,
+        );
+      },
+      onSuccess: () => {
+        if (orgId) {
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.postureIntegrations(orgId),
+          });
+        }
+      },
+    }),
+    updateSettings: useMutation({
+      mutationFn: async (body: PatchPostureSettingsBody) => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).updatePostureSettings(body);
+      },
+      onSuccess: () => {
+        if (orgId) {
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.postureSettings(orgId),
           });
         }
       },
