@@ -18,6 +18,8 @@ Tunnet is not a single tool. It is a collection of networking primitives that co
 
 **SSH** provides identity-based SSH over the mesh. No SSH keys to distribute. Use `tunnet ssh` or stock OpenSSH (`ssh`, `scp`, `sftp`) against `*.tunnet` names. Auth is tied to Tunnet identity and organization policies. Sessions can be recorded and replayed from the dashboard.
 
+**Device Posture** checks the security state of each machine (disk encryption, firewall, antivirus, and more) and can require passing definitions before ACL policies allow traffic. Definitions and compliance live in the dashboard under **Security → Posture**.
+
 **Relay** is a self-hosted edge server that terminates public tunnels. You point DNS at it, optionally configure Let's Encrypt, and it becomes your tunnel infrastructure. This competes with Cloudflare Tunnel's edge network, except you own the servers.
 
 ## What makes Tunnet different

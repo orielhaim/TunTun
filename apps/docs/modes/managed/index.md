@@ -4,7 +4,7 @@ Managed mode is Tunnet's full-featured deployment. It includes a control plane, 
 
 ## When to use Managed mode
 
-Use managed mode when you need multi-user organizations with role-based access, SSO/OIDC integration (Okta, Google Workspace, etc.), centralized access policies and ACLs, a web dashboard for administration, tunnel and relay infrastructure, SSH session recording and audit, or API key access for automation.
+Use managed mode when you need multi-user organizations with role-based access, SSO/OIDC integration (Okta, Google Workspace, etc.), centralized access policies and ACLs, device posture compliance, a web dashboard for administration, tunnel and relay infrastructure, SSH session recording and audit, or API key access for automation.
 
 ## Components
 

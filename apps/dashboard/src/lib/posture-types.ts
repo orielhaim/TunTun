@@ -158,7 +158,13 @@ function parseScalarLiteral(raw: string): boolean | string | number {
   const quoted =
     (trimmed.startsWith("'") && trimmed.endsWith("'")) ||
     (trimmed.startsWith('"') && trimmed.endsWith('"'));
-  if (quoted) return trimmed.slice(1, -1);
+  if (quoted) {
+    return trimmed
+      .slice(1, -1)
+      .replace(/\\'/g, "'")
+      .replace(/\\"/g, '"')
+      .replace(/\\\\/g, "\\");
+  }
   return trimmed;
 }
 
@@ -236,7 +242,7 @@ function formatScalar(value: boolean | string | number): string {
   if (/^-?\d+(\.\d+)?$/.test(value) || value === "true" || value === "false") {
     return value;
   }
-  const escaped = value.replace(/'/g, "\\'");
+  const escaped = value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
   return `'${escaped}'`;
 }
 

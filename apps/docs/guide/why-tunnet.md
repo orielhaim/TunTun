@@ -14,7 +14,7 @@ In Tunnet, the control plane is part of the main repository. The management API,
 
 Other tools force you to stitch together multiple vendors for a complete solution. You might use Tailscale for mesh VPN, ngrok for public tunnels, scp for file transfer, and a separate SSH bastion. Tunnet integrates all of these under one identity system, one access policy engine, and one CLI.
 
-This is not about replacing each tool with a worse version. It is about the compounding value of having a single identity that flows through mesh connectivity, service exposure, tunnel creation, file transfer, and SSH sessions.
+This is not about replacing each tool with a worse version. It is about the compounding value of having a single identity that flows through mesh connectivity, service exposure, tunnel creation, file transfer, SSH sessions, and device posture checks.
 
 ## Two modes for two worlds
 

@@ -23,3 +23,9 @@ The ACL engine runs on every agent. When a packet arrives at the TUN interface d
 ## SSH policies
 
 SSH access has its own policy layer configured under **Networks → Access → SSH Rules**. These rules apply whether you connect with `tunnet ssh` or stock OpenSSH. SSH policies can require re-authentication (check mode), where the user must confirm their identity through a browser flow before the session is established. They can also mandate session recording.
+
+## Device posture
+
+Policies can also require the *source device* to pass named device posture definitions (for example disk encryption and firewall enabled). Agents collect attributes locally; the control plane evaluates definitions and feeds the result into ACL checks. Org settings choose monitor, warn, or enforce modes.
+
+Configure definitions and compliance under **Security → Posture** in the dashboard.

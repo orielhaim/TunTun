@@ -12,7 +12,7 @@
 
 Commercial mesh products are excellent but most of them keep the coordination server closed. Tunnet ships the **agent, control plane, management API, dashboard, and relays** in this repository. You can read every line, self-host everything, and never depend on a proprietary coordination service or a lagging third-party reimplementation.
 
-You also get more than a VPN. Instead of stitching Tailscale + ngrok + scp + a bastion, Tunnet puts mesh, public tunnels, internal services, file transfer, identity SSH, and Kubernetes under **one identity and one ACL system**.
+You also get more than a VPN. Instead of stitching Tailscale + ngrok + scp + a bastion, Tunnet puts mesh, public tunnels, internal services, file transfer, identity SSH, device posture, and Kubernetes under **one identity and one ACL system**.
 
 ## What you get
 
@@ -23,6 +23,7 @@ You also get more than a VPN. Instead of stitching Tailscale + ngrok + scp + a b
 | **Tunnel** | ngrok, Cloudflare Tunnel | [Tunnel](https://docs.tunnet.io/products/tunnel/) |
 | **Send** | Taildrop / ad-hoc file hops | [Send](https://docs.tunnet.io/products/send/) |
 | **SSH** | Key distribution + bastions | [SSH](https://docs.tunnet.io/products/ssh/) |
+| **Device posture** | MDM / EDR policy gates | [Posture](https://docs.tunnet.io/products/posture/) |
 | **Self-hosted relay** | Vendor edge networks | [Relay](https://docs.tunnet.io/products/relay/) |
 | **Kubernetes operator** | Custom VPN + Ingress glue | [Kubernetes](https://docs.tunnet.io/integrations/kubernetes/) |
 | **Node / Rust SDKs** | Embedding tunnels in apps | [SDK](https://docs.tunnet.io/sdk/) |
@@ -63,6 +64,7 @@ Open streams to peers, accept inbound connections, transfer files, and compose w
 | Internal services (Serve) | Yes | Serve | No | Access |
 | P2P file transfer | Yes | Taildrop | No | No |
 | Identity SSH + recording | Yes | Yes | No | Yes (browser) |
+| Device posture | Yes | Yes | No | Yes (Zero Trust) |
 | Self-hosted relay | Yes | DERP (self-hostable) | No | No |
 | Serverless P2P mode | **Direct** | No | No | No |
 | Kubernetes operator | Yes | Yes | Yes | Community¹ |

@@ -70,6 +70,7 @@ Raw WireGuard requires manual key exchange, manual IP allocation, and manual con
 | File transfer | Send | Taildrop | No | No |
 | SSH (identity-based) | Yes | Yes | No | Yes (browser-rendered) |
 | Session recording | Yes | Yes | No | Yes (SSH sessions) |
+| Device posture | Yes | Yes | No | Yes (WARP / Zero Trust) |
 | Self-hosted relay | Yes | DERP (self-hostable) | No | No |
 | Kubernetes operator | Yes | Yes | Yes | Community¹ |
 | Embeddable SDKs | JS, Rust | Go, C | Go, Rust, Python, JS, Java | No² |
