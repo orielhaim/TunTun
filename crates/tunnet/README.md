@@ -2,7 +2,7 @@
 
 Embed a Tunnet mesh node inside any Rust application.
 
-[Documentation](https://docs.rs/tunnet) · [Homepage](https://tunnet.io)
+[Documentation](https://docs.tunnet.io/sdk/rust/) · [API reference](https://docs.rs/tunnet) · [Homepage](https://tunnet.io)
 
 ## Install
 

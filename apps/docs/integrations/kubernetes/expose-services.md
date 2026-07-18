@@ -117,8 +117,8 @@ kubectl get tne -n default
 
 For higher availability or shared proxy pools:
 
-- **`TunnetProxyGroup`** — pool of proxy replicas for a type (`ingress`, `egress`, `connector`, or `tunnel`), tied to a network
-- **`TunnetProxyClass`** — pod defaults (resources, nodeSelector, tolerations, metrics)
+- **`TunnetProxyGroup`** - pool of proxy replicas for a type (`ingress`, `egress`, `connector`, or `tunnel`), tied to a network
+- **`TunnetProxyClass`** - pod defaults (resources, nodeSelector, tolerations, metrics)
 
 Reference them from connectors / ingresses / tunnels / egresses with `proxyGroupRef` / `proxyClassRef` when you outgrow the defaults. For a first install, the operator’s built-in pods are enough.
 

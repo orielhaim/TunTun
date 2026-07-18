@@ -81,7 +81,7 @@ function OverviewPage() {
       <PageHeader
         title="Overview"
         dense
-        description="Start in a network Mesh — topology, machines, and routes in one place."
+        description="Start in a network Mesh - topology, machines, and routes in one place."
       />
 
       {pending ? (

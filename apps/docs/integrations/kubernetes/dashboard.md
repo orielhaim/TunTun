@@ -6,9 +6,9 @@ Once the operator has enrolled connectors or proxies, use the Tunnet dashboard t
 
 Open **Kubernetes** in the sidebar.
 
-- **Network cards** — Each Tunnet network that has Kubernetes nodes, with online / total counts. Open a card for that network’s cluster graph.
-- **Nodes table** — Name, kind (connector, ingress proxy, tunnel proxy, egress proxy, …), network, mesh IP, presence, and advertised route count.
-- **Node detail** — Click a row for routes, serves/tunnels counts, and links to machine detail, the cluster graph, or the full network Mesh.
+- **Network cards** - Each Tunnet network that has Kubernetes nodes, with online / total counts. Open a card for that network’s cluster graph.
+- **Nodes table** - Name, kind (connector, ingress proxy, tunnel proxy, egress proxy, …), network, mesh IP, presence, and advertised route count.
+- **Node detail** - Click a row for routes, serves/tunnels counts, and links to machine detail, the cluster graph, or the full network Mesh.
 
 Kinds you may see:
 

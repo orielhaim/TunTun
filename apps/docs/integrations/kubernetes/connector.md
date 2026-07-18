@@ -1,6 +1,6 @@
 # Connect a Cluster
 
-A **TunnetConnector** enrolls one or more connector pods into a Tunnet network and advertises cluster (or custom) CIDRs as subnet routes. After it is Ready, mesh peers can reach those ranges through the connector — the same idea as a [subnet route gateway](/products/mesh/subnet-routes) on a VM, but managed by Kubernetes.
+A **TunnetConnector** enrolls one or more connector pods into a Tunnet network and advertises cluster (or custom) CIDRs as subnet routes. After it is Ready, mesh peers can reach those ranges through the connector - the same idea as a [subnet route gateway](/products/mesh/subnet-routes) on a VM, but managed by Kubernetes.
 
 ## Minimal example
 

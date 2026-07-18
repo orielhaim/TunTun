@@ -1,15 +1,15 @@
 # Kubernetes
 
-Connect a Kubernetes cluster to your Tunnet mesh with the Tunnet Operator. Pods and Services become reachable from any enrolled machine, and you can expose cluster apps to the mesh or the public internet using the same Tunnet products you already know — Serve and Tunnel.
+Connect a Kubernetes cluster to your Tunnet mesh with the Tunnet Operator. Pods and Services become reachable from any enrolled machine, and you can expose cluster apps to the mesh or the public internet using the same Tunnet products you already know - Serve and Tunnel.
 
 ## What you get
 
-- **Cluster on the mesh** — A connector node joins your network and can advertise cluster CIDRs as [subnet routes](/products/mesh/subnet-routes).
-- **Mesh-native services** — Publish a Kubernetes Service to peers with [Serve](/products/serve/) (`TunnetIngress`).
-- **Public HTTPS** — Give a Service a public URL with [Tunnel](/products/tunnel/) (`TunnetTunnel`).
-- **Reach mesh from the cluster** — Call a mesh hostname or IP from inside the cluster (`TunnetEgress`).
-- **Optional sidecars** — Inject a Tunnet sidecar into selected pods so those workloads join the mesh directly.
-- **Dashboard visibility** — Connectors and proxies show up under **Kubernetes** in the Tunnet dashboard.
+- **Cluster on the mesh** - A connector node joins your network and can advertise cluster CIDRs as [subnet routes](/products/mesh/subnet-routes).
+- **Mesh-native services** - Publish a Kubernetes Service to peers with [Serve](/products/serve/) (`TunnetIngress`).
+- **Public HTTPS** - Give a Service a public URL with [Tunnel](/products/tunnel/) (`TunnetTunnel`).
+- **Reach mesh from the cluster** - Call a mesh hostname or IP from inside the cluster (`TunnetEgress`).
+- **Optional sidecars** - Inject a Tunnet sidecar into selected pods so those workloads join the mesh directly.
+- **Dashboard visibility** - Connectors and proxies show up under **Kubernetes** in the Tunnet dashboard.
 
 ## How it fits
 
@@ -33,10 +33,10 @@ flowchart LR
 
 ## Guides in this section
 
-1. [Install the operator](/integrations/kubernetes/install) — Helm chart, credentials, and verification
-2. [Connect a cluster](/integrations/kubernetes/connector) — `TunnetConnector` and subnet routes
-3. [Expose services](/integrations/kubernetes/expose-services) — Ingress, Tunnel, and Egress CRDs
-4. [Dashboard](/integrations/kubernetes/dashboard) — What to expect in the UI
+1. [Install the operator](/integrations/kubernetes/install) - Helm chart, credentials, and verification
+2. [Connect a cluster](/integrations/kubernetes/connector) - `TunnetConnector` and subnet routes
+3. [Expose services](/integrations/kubernetes/expose-services) - Ingress, Tunnel, and Egress CRDs
+4. [Dashboard](/integrations/kubernetes/dashboard) - What to expect in the UI
 
 ## Resource overview
 

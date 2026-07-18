@@ -437,7 +437,7 @@ function MachinesPage() {
     <>
       <PageHeader
         title="Machines"
-        description="Org-wide fleet index — open Mesh for topology, or a machine for detail."
+        description="Org-wide fleet index - open Mesh for topology, or a machine for detail."
         dense
         actions={
           canManage ? (

@@ -17,7 +17,7 @@ In the Tunnet dashboard:
 | `sdk:enroll` | Enroll SDK nodes | Register connector and proxy nodes |
 | `sdk:manage` | Manage SDK / K8s nodes | Enroll **and** remove nodes when you delete CRDs (recommended for the operator) |
 
-Restrict the key to specific networks if you want, or allow all networks in the organization. Copy the secret once when it is created — it is not shown again.
+Restrict the key to specific networks if you want, or allow all networks in the organization. Copy the secret once when it is created - it is not shown again.
 
 Create a Kubernetes Secret in the operator namespace (default `tunnet-system`):
 

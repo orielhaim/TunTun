@@ -1,6 +1,6 @@
 # Integrations
 
-Tunnet connects to the tools you already run. Integrations install alongside your stack and join those environments to your mesh — without replacing how you deploy apps today.
+Tunnet connects to the tools you already run. Integrations install alongside your stack and join those environments to your mesh - without replacing how you deploy apps today.
 
 ## Available integrations
 

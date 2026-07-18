@@ -267,12 +267,25 @@ export default defineConfig({
 
       "/sdk/": [
         {
-          text: "Node SDK",
+          text: "SDK",
+          items: [{ text: "Overview", link: "/sdk/" }],
+        },
+        {
+          text: "Node.js / Bun",
           items: [
-            { text: "Overview", link: "/sdk/" },
+            { text: "Getting Started", link: "/sdk/js/" },
             { text: "TunnetNode", link: "/sdk/node" },
             { text: "Streams & Fetch", link: "/sdk/streams" },
             { text: "File Transfer", link: "/sdk/file-transfer" },
+          ],
+        },
+        {
+          text: "Rust",
+          items: [
+            { text: "Getting Started", link: "/sdk/rust/" },
+            { text: "TunnetNode", link: "/sdk/rust/node" },
+            { text: "Streams", link: "/sdk/rust/streams" },
+            { text: "File Transfer", link: "/sdk/rust/file-transfer" },
           ],
         },
       ],
