@@ -13,6 +13,7 @@ path = "src/main.rs"
 tunnet-common.workspace = true
 tunnet-core.workspace = true
 tunnet-posture.workspace = true
+tunnet-policy-engine.workspace = true
 
 tokio.workspace = true
 futures-util.workspace = true

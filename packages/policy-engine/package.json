@@ -1,0 +1,16 @@
+{
+  "name": "@tunnet/policy-engine",
+  "version": "0.0.0",
+  "dependencies": {
+    "yaml": "2.9.0",
+    "zod": "^4.4.3"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "private": true,
+  "scripts": {
+    "test": "bun test"
+  },
+  "type": "module"
+}

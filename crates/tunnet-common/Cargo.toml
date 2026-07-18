@@ -24,3 +24,6 @@ ed25519-dalek.workspace = true
 chrono.workspace = true
 ipnet.workspace = true
 uuid.workspace = true
+
+[dev-dependencies]
+rand.workspace = true

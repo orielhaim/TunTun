@@ -1,5 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Device, Network } from "@tunnet/api/management";
+import type {
+  CreateDeviceGroupBody,
+  CreateTagDefinitionBody,
+  CreateUserGroupBody,
+  Device,
+  Network,
+  PatchDeviceGroupBody,
+  PatchTagDefinitionBody,
+  PatchUserGroupBody,
+  PolicyDriftRequest,
+} from "@tunnet/api/management";
 
 import { type AggregatedMachine, aggregateMachines } from "@/lib/machine-utils";
 import { createManagementClient } from "@/lib/management-client";
@@ -100,6 +110,171 @@ export function useOrganizationPolicies(orgId: string | undefined) {
       return policies;
     },
   });
+}
+
+export function useUserGroups(orgId: string | undefined) {
+  return useQuery({
+    queryKey: orgId ? queryKeys.userGroups(orgId) : ["user-groups"],
+    enabled: Boolean(orgId),
+    queryFn: async () => {
+      const { groups } = await createManagementClient(orgId!).listUserGroups();
+      return groups;
+    },
+  });
+}
+
+export function useDeviceGroups(orgId: string | undefined) {
+  return useQuery({
+    queryKey: orgId ? queryKeys.deviceGroups(orgId) : ["device-groups"],
+    enabled: Boolean(orgId),
+    queryFn: async () => {
+      const { groups } = await createManagementClient(
+        orgId!,
+      ).listDeviceGroups();
+      return groups;
+    },
+  });
+}
+
+export function useTagDefinitions(orgId: string | undefined) {
+  return useQuery({
+    queryKey: orgId ? queryKeys.tagDefinitions(orgId) : ["tag-definitions"],
+    enabled: Boolean(orgId),
+    queryFn: async () => {
+      const { tags } = await createManagementClient(
+        orgId!,
+      ).listTagDefinitions();
+      return tags;
+    },
+  });
+}
+
+export function usePolicyHistory(orgId: string | undefined) {
+  return useQuery({
+    queryKey: orgId ? queryKeys.policyHistory(orgId) : ["policy-history"],
+    enabled: Boolean(orgId),
+    queryFn: async () => {
+      const { revisions } = await createManagementClient(
+        orgId!,
+      ).listPolicyHistory();
+      return revisions;
+    },
+  });
+}
+
+export function usePolicyEntityMutations(orgId: string | undefined) {
+  const queryClient = useQueryClient();
+  const invalidateUserGroups = () => {
+    if (orgId) {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.userGroups(orgId),
+      });
+    }
+  };
+  const invalidateDeviceGroups = () => {
+    if (orgId) {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.deviceGroups(orgId),
+      });
+    }
+  };
+  const invalidateTagDefinitions = () => {
+    if (orgId) {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.tagDefinitions(orgId),
+      });
+    }
+  };
+
+  return {
+    createUserGroup: useMutation({
+      mutationFn: async (body: CreateUserGroupBody) => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).createUserGroup(body);
+      },
+      onSuccess: invalidateUserGroups,
+    }),
+    patchUserGroup: useMutation({
+      mutationFn: async ({
+        id,
+        body,
+      }: {
+        id: string;
+        body: PatchUserGroupBody;
+      }) => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).patchUserGroup(id, body);
+      },
+      onSuccess: invalidateUserGroups,
+    }),
+    deleteUserGroup: useMutation({
+      mutationFn: async (id: string) => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).deleteUserGroup(id);
+      },
+      onSuccess: invalidateUserGroups,
+    }),
+    createDeviceGroup: useMutation({
+      mutationFn: async (body: CreateDeviceGroupBody) => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).createDeviceGroup(body);
+      },
+      onSuccess: invalidateDeviceGroups,
+    }),
+    patchDeviceGroup: useMutation({
+      mutationFn: async ({
+        id,
+        body,
+      }: {
+        id: string;
+        body: PatchDeviceGroupBody;
+      }) => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).patchDeviceGroup(id, body);
+      },
+      onSuccess: invalidateDeviceGroups,
+    }),
+    deleteDeviceGroup: useMutation({
+      mutationFn: async (id: string) => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).deleteDeviceGroup(id);
+      },
+      onSuccess: invalidateDeviceGroups,
+    }),
+    createTagDefinition: useMutation({
+      mutationFn: async (body: CreateTagDefinitionBody) => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).createTagDefinition(body);
+      },
+      onSuccess: invalidateTagDefinitions,
+    }),
+    patchTagDefinition: useMutation({
+      mutationFn: async ({
+        id,
+        body,
+      }: {
+        id: string;
+        body: PatchTagDefinitionBody;
+      }) => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).patchTagDefinition(id, body);
+      },
+      onSuccess: invalidateTagDefinitions,
+    }),
+    deleteTagDefinition: useMutation({
+      mutationFn: async (id: string) => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).deleteTagDefinition(id);
+      },
+      onSuccess: invalidateTagDefinitions,
+    }),
+    checkPolicyDrift: useMutation({
+      mutationFn: async (body: PolicyDriftRequest) => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).checkPolicyDrift(body);
+      },
+    }),
+  };
 }
 
 export function useSshPolicies(orgId: string | undefined, networkId: string) {

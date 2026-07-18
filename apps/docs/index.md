@@ -37,6 +37,10 @@ features:
     title: SSH
     details: Identity-based SSH with no keys to distribute. Works with stock OpenSSH, session recording, re-auth policies, and full audit trails in the dashboard.
     link: /products/ssh/
+  - icon: 📜
+    title: Policy as Code
+    details: HCL, JSON, or YAML in Git. Offline validate and simulate, semantic PR diffs, Terraform, drift detection, and one-click rollback - same policy the dashboard edits.
+    link: /guide/policy-as-code
   - icon: 🏗️
     title: Self-Hosted Relay
     details: Run your own edge relay for public tunnels. ACME support, bring your own certs, full control over your tunnel infrastructure.

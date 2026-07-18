@@ -20,6 +20,8 @@ pub enum Protocol {
     Any,
 }
 
+/// Stable selector kinds for Policy-as-Code (IR + wire).
+/// Syntax in documents: `tag:X`, `user:email`, `group:user:name`, `group:device:name`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "value", rename_all = "lowercase")]
 pub enum Selector {
@@ -28,6 +30,14 @@ pub enum Selector {
     Tag(String),
     Network(String),
     Cidr(String),
+    /// Org user group name (`group:user:<name>`). Expanded at compile time when possible.
+    #[serde(rename = "user_group")]
+    UserGroup(String),
+    /// Device group name (`group:device:<name>`). Expanded at compile time when possible.
+    #[serde(rename = "device_group")]
+    DeviceGroup(String),
+    /// User email or id (`user:<email>`).
+    User(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -214,6 +224,21 @@ impl Selector {
                 (Some(ip), Ok(net)) => net.contains(&ip),
                 _ => false,
             },
+            // Compile-time expansion should replace these with Tag/Endpoint/User.
+            // Until then, match synthetic tags `ug:<name>` / `dg:<name>` / `user:<id>`.
+            Selector::UserGroup(name) => {
+                let marker = format!("ug:{name}");
+                tags.iter().any(|x| x == &marker || x == name)
+            }
+            Selector::DeviceGroup(name) => {
+                let marker = format!("dg:{name}");
+                tags.iter().any(|x| x == &marker || x == name)
+            }
+            Selector::User(id) => {
+                let marker = format!("user:{id}");
+                tags.iter()
+                    .any(|x| x == &marker || x.eq_ignore_ascii_case(id))
+            }
         }
     }
 
@@ -232,8 +257,98 @@ impl Selector {
                 (Some(ip), Ok(net)) => net.contains(&std::net::IpAddr::V6(ip)),
                 _ => false,
             },
+            Selector::UserGroup(name) => {
+                let marker = format!("ug:{name}");
+                tags.iter().any(|x| x == &marker || x == name)
+            }
+            Selector::DeviceGroup(name) => {
+                let marker = format!("dg:{name}");
+                tags.iter().any(|x| x == &marker || x == name)
+            }
+            Selector::User(id) => {
+                let marker = format!("user:{id}");
+                tags.iter()
+                    .any(|x| x == &marker || x.eq_ignore_ascii_case(id))
+            }
         }
     }
+}
+
+/// Merge org-scoped and network-scoped bundles into one effective ruleset.
+/// Org rules are listed first; evaluation still sorts by `priority` desc.
+pub fn merge_policy_bundles(org: &PolicyBundle, network: &PolicyBundle) -> PolicyBundle {
+    let mut rules = Vec::with_capacity(org.rules.len() + network.rules.len());
+    rules.extend(org.rules.iter().cloned());
+    rules.extend(network.rules.iter().cloned());
+
+    let mut ssh_rules = Vec::with_capacity(org.ssh_rules.len() + network.ssh_rules.len());
+    ssh_rules.extend(org.ssh_rules.iter().cloned());
+    ssh_rules.extend(network.ssh_rules.iter().cloned());
+
+    let mut postures = org.postures.clone();
+    for (k, v) in &network.postures {
+        postures.insert(k.clone(), v.clone());
+    }
+
+    let default_src_posture = if !network.default_src_posture.is_empty() {
+        network.default_src_posture.clone()
+    } else {
+        org.default_src_posture.clone()
+    };
+
+    PolicyBundle {
+        rules,
+        ssh_rules,
+        version: org.version.max(network.version),
+        signature: String::new(),
+        postures,
+        default_src_posture,
+        posture_enforcement: network
+            .posture_enforcement
+            .clone()
+            .or_else(|| org.posture_enforcement.clone()),
+    }
+}
+
+/// Canonical bytes signed by the control plane for a policy bundle.
+pub fn policy_bundle_sign_bytes(bundle: &PolicyBundle) -> Result<Vec<u8>, serde_json::Error> {
+    serde_json::to_vec(&(&bundle.rules, &bundle.ssh_rules, bundle.version))
+}
+
+/// Verify Ed25519 signature on a policy bundle. Empty signature is allowed only
+/// when both rule lists are empty (open default). On failure keep last-good.
+pub fn verify_policy_bundle_signature(
+    bundle: &PolicyBundle,
+    verifying_key: &ed25519_dalek::VerifyingKey,
+) -> Result<(), crate::ProtocolError> {
+    use base64::Engine;
+    use ed25519_dalek::Verifier;
+
+    if bundle.signature.is_empty() {
+        if bundle.rules.is_empty() && bundle.ssh_rules.is_empty() {
+            return Ok(());
+        }
+        return Err(crate::ProtocolError::BadSignature);
+    }
+
+    let sign_bytes =
+        policy_bundle_sign_bytes(bundle).map_err(|_| crate::ProtocolError::BadSignature)?;
+    let sig_bytes = base64::engine::general_purpose::STANDARD
+        .decode(bundle.signature.as_bytes())
+        .map_err(|_| crate::ProtocolError::BadSignature)?;
+    let sig_arr: [u8; 64] = sig_bytes
+        .as_slice()
+        .try_into()
+        .map_err(|_| crate::ProtocolError::BadSignature)?;
+    let sig = ed25519_dalek::Signature::from_bytes(&sig_arr);
+    verifying_key
+        .verify(&sign_bytes, &sig)
+        .map_err(|_| crate::ProtocolError::BadSignature)
+}
+
+/// Content hash for drift detection (blake3 hex of canonical IR JSON).
+pub fn policy_content_hash(canonical_ir_json: &[u8]) -> String {
+    hex::encode(blake3::hash(canonical_ir_json).as_bytes())
 }
 
 pub fn evaluate(bundle: &PolicyBundle, ctx: &EvalCtx<'_>, direction: Direction) -> Action {
@@ -511,5 +626,115 @@ mod tests {
             local_user: "oriel",
         };
         assert!(evaluate_ssh(&rules, &ctx).is_none());
+    }
+
+    fn sample_rule(tag: &str, priority: i32) -> PolicyRule {
+        PolicyRule {
+            src: Selector::Tag(tag.into()),
+            dst: Selector::Any,
+            action: Action::Allow,
+            ports: vec![],
+            protocol: None,
+            priority,
+            src_posture: vec![],
+        }
+    }
+
+    #[test]
+    fn merge_policy_bundles_combines_rules_postures_and_max_version() {
+        let mut org_postures = HashMap::new();
+        org_postures.insert("os".into(), vec!["linux".into()]);
+        let mut network_postures = HashMap::new();
+        network_postures.insert("disk".into(), vec!["encrypted".into()]);
+
+        let org = PolicyBundle {
+            rules: vec![sample_rule("org", 10)],
+            ssh_rules: vec![],
+            version: 3,
+            signature: "org-sig".into(),
+            postures: org_postures,
+            default_src_posture: vec!["os".into()],
+            posture_enforcement: None,
+        };
+        let network = PolicyBundle {
+            rules: vec![sample_rule("net", 20)],
+            ssh_rules: vec![],
+            version: 7,
+            signature: "net-sig".into(),
+            postures: network_postures,
+            default_src_posture: vec![],
+            posture_enforcement: None,
+        };
+
+        let merged = merge_policy_bundles(&org, &network);
+        assert_eq!(merged.rules.len(), 2);
+        assert!(matches!(&merged.rules[0].src, Selector::Tag(t) if t == "org"));
+        assert!(matches!(&merged.rules[1].src, Selector::Tag(t) if t == "net"));
+        assert_eq!(merged.version, 7);
+        assert_eq!(merged.signature, "");
+        assert_eq!(merged.postures.len(), 2);
+        assert_eq!(
+            merged.postures.get("os").unwrap(),
+            &vec!["linux".to_string()]
+        );
+        assert_eq!(
+            merged.postures.get("disk").unwrap(),
+            &vec!["encrypted".to_string()]
+        );
+        assert_eq!(merged.default_src_posture, vec!["os".to_string()]);
+    }
+
+    #[test]
+    fn verify_policy_bundle_signature_round_trip_and_tamper() {
+        use base64::Engine;
+        use ed25519_dalek::{Signer, SigningKey};
+
+        let signing_key = SigningKey::generate(&mut rand::rng());
+        let verifying_key = signing_key.verifying_key();
+
+        let mut bundle = PolicyBundle {
+            rules: vec![sample_rule("admin", 5)],
+            ssh_rules: vec![],
+            version: 2,
+            signature: String::new(),
+            postures: HashMap::new(),
+            default_src_posture: vec![],
+            posture_enforcement: None,
+        };
+
+        let sign_bytes = policy_bundle_sign_bytes(&bundle).unwrap();
+        let sig = signing_key.sign(&sign_bytes);
+        bundle.signature = base64::engine::general_purpose::STANDARD.encode(sig.to_bytes());
+        assert!(verify_policy_bundle_signature(&bundle, &verifying_key).is_ok());
+
+        bundle.rules[0].priority = 99;
+        assert!(matches!(
+            verify_policy_bundle_signature(&bundle, &verifying_key),
+            Err(crate::ProtocolError::BadSignature)
+        ));
+    }
+
+    #[test]
+    fn verify_empty_signature_only_ok_with_empty_rules() {
+        use ed25519_dalek::SigningKey;
+
+        let verifying_key = SigningKey::generate(&mut rand::rng()).verifying_key();
+
+        let empty = PolicyBundle::default();
+        assert!(verify_policy_bundle_signature(&empty, &verifying_key).is_ok());
+
+        let nonempty = PolicyBundle {
+            rules: vec![sample_rule("x", 1)],
+            ssh_rules: vec![],
+            version: 1,
+            signature: String::new(),
+            postures: HashMap::new(),
+            default_src_posture: vec![],
+            posture_enforcement: None,
+        };
+        assert!(matches!(
+            verify_policy_bundle_signature(&nonempty, &verifying_key),
+            Err(crate::ProtocolError::BadSignature)
+        ));
     }
 }

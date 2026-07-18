@@ -3,6 +3,8 @@ use std::time::Duration;
 
 use anyhow::Context;
 use arc_swap::ArcSwap;
+use ed25519_dalek::VerifyingKey;
+use tunnet_common::policy::{PolicyBundle, merge_policy_bundles, verify_policy_bundle_signature};
 use tunnet_common::ws::{ClientMsg, ServerMsg};
 use tunnet_common::{EndpointSnapshot, NetworkMembershipSnapshot};
 use uuid::Uuid;
@@ -23,9 +25,20 @@ pub fn membership_for_network(
         .with_context(|| format!("network {network_id} not in snapshot"))
 }
 
+fn parse_policy_vk(hex_key: Option<&str>) -> Option<VerifyingKey> {
+    let hex = hex_key?;
+    let bytes = hex::decode(hex).ok()?;
+    let arr: [u8; 32] = bytes.as_slice().try_into().ok()?;
+    VerifyingKey::from_bytes(&arr).ok()
+}
+
+/// Verify org + network bundle signatures, then merge into the effective ACL.
+/// On bad signature: keep last-good bundle (do not replace).
 #[allow(clippy::too_many_arguments)]
 pub fn apply_membership(
     membership: &NetworkMembershipSnapshot,
+    org_policy: &PolicyBundle,
+    policy_verifying_key: Option<&str>,
     routes: &RoutingTable,
     acl: &AclEngine,
     version: &Arc<ArcSwap<u64>>,
@@ -65,7 +78,26 @@ pub fn apply_membership(
         self_endpoint_id,
         membership.version,
     );
-    acl.replace_bundle(membership.policy.clone());
+
+    if let Some(vk) = parse_policy_vk(policy_verifying_key) {
+        if let Err(e) = verify_policy_bundle_signature(&membership.policy, &vk) {
+            tracing::warn!(?e, "network policy signature invalid; keeping previous ACL");
+            version.store(Arc::new(org_version));
+            return;
+        }
+        if let Err(e) = verify_policy_bundle_signature(org_policy, &vk) {
+            tracing::warn!(?e, "org policy signature invalid; keeping previous ACL");
+            version.store(Arc::new(org_version));
+            return;
+        }
+    } else if !membership.policy.signature.is_empty() || !org_policy.signature.is_empty() {
+        tracing::debug!(
+            "policy verifying key missing; applying merged policy without signature check"
+        );
+    }
+
+    let merged = merge_policy_bundles(org_policy, &membership.policy);
+    acl.replace_bundle(merged);
     acl.replace_self_tags(membership.self_tags.clone());
     version.store(Arc::new(org_version));
 
@@ -118,6 +150,8 @@ pub fn spawn_ws_processor(
                             if let Ok(m) = membership_for_network(&snap, network_id) {
                                 apply_membership(
                                     m,
+                                    &snap.org_policy,
+                                    snap.policy_verifying_key.as_deref(),
                                     &routes,
                                     &acl,
                                     &version,
@@ -181,6 +215,8 @@ pub fn spawn_ws_processor(
                                         {
                                             apply_membership(
                                                 m,
+                                                &snap.org_policy,
+                                                snap.policy_verifying_key.as_deref(),
                                                 &routes,
                                                 &acl,
                                                 &version,
@@ -559,6 +595,8 @@ pub fn spawn_poll_fallback(
                     {
                         apply_membership(
                             m,
+                            &snap.org_policy,
+                            snap.policy_verifying_key.as_deref(),
                             &routes,
                             &acl,
                             &version,

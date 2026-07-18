@@ -257,6 +257,8 @@ export const policies = pgTable(
     priority: integer("priority").notNull().default(0),
     /** Posture definition names required on source device; null/empty = inherit org default. */
     srcPosture: jsonb("src_posture").$type<string[] | null>(),
+    /** Stable slug for GitOps / Terraform identity. */
+    slug: text("slug"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -269,6 +271,9 @@ export const policies = pgTable(
     index("policies_by_network_priority_idx")
       .on(table.networkId, table.priority)
       .where(sql`${table.networkId} IS NOT NULL`),
+    uniqueIndex("policies_org_slug_unique")
+      .on(table.organizationId, table.slug)
+      .where(sql`${table.slug} IS NOT NULL`),
     check("policies_action_check", sql`${table.action} IN ('allow', 'deny')`),
     check(
       "policies_scope_check",
@@ -1422,6 +1427,337 @@ export const endpointSendSettings = pgTable(
       "endpoint_send_settings_consent_check",
       sql`${table.consentMode} IN ('auto_accept', 'prompt', 'deny')`,
     ),
+  ],
+);
+
+export const policyRevisionSourceValues = [
+  "dashboard",
+  "api",
+  "gitops",
+  "terraform",
+] as const;
+
+/** ACL user groups (Better Auth users / emails) - not HA node_groups. */
+export const userGroups = pgTable(
+  "user_groups",
+  {
+    id: id(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    labels: jsonb("labels")
+      .$type<Record<string, string>>()
+      .notNull()
+      .default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    unique().on(t.organizationId, t.name),
+    index("user_groups_by_org_idx").on(t.organizationId),
+  ],
+);
+
+export const userGroupMembers = pgTable(
+  "user_group_members",
+  {
+    id: id(),
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => userGroups.id, { onDelete: "cascade" }),
+    userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
+    email: text("email"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("user_group_members_by_group_idx").on(t.groupId),
+    index("user_group_members_by_user_idx").on(t.userId),
+    uniqueIndex("user_group_members_group_user_uidx")
+      .on(t.groupId, t.userId)
+      .where(sql`${t.userId} IS NOT NULL`),
+    uniqueIndex("user_group_members_group_email_uidx")
+      .on(t.groupId, t.email)
+      .where(sql`${t.email} IS NOT NULL`),
+    check(
+      "user_group_members_identity_check",
+      sql`${t.userId} IS NOT NULL OR ${t.email} IS NOT NULL`,
+    ),
+  ],
+);
+
+/** ACL device groups - distinct from HA `node_groups`. */
+export const deviceGroups = pgTable(
+  "device_groups",
+  {
+    id: id(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    networkId: uuid("network_id").references(() => networks.id, {
+      onDelete: "cascade",
+    }),
+    name: text("name").notNull(),
+    description: text("description"),
+    labels: jsonb("labels")
+      .$type<Record<string, string>>()
+      .notNull()
+      .default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    unique().on(t.organizationId, t.name),
+    index("device_groups_by_org_idx").on(t.organizationId),
+    index("device_groups_by_network_idx").on(t.networkId),
+  ],
+);
+
+export const deviceGroupMembers = pgTable(
+  "device_group_members",
+  {
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => deviceGroups.id, { onDelete: "cascade" }),
+    endpointId: text("endpoint_id")
+      .notNull()
+      .references(() => devices.endpointId, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.groupId, t.endpointId] }),
+    index("device_group_members_by_endpoint_idx").on(t.endpointId),
+  ],
+);
+
+/** Tag ownership definitions (Tailscale tagOwners equivalent). */
+export const tagDefinitions = pgTable(
+  "tag_definitions",
+  {
+    id: id(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    owners: jsonb("owners").$type<string[]>().notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    unique().on(t.organizationId, t.name),
+    index("tag_definitions_by_org_idx").on(t.organizationId),
+  ],
+);
+
+export const hostAliases = pgTable(
+  "host_aliases",
+  {
+    id: id(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    target: text("target").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    unique().on(t.organizationId, t.name),
+    index("host_aliases_by_org_idx").on(t.organizationId),
+  ],
+);
+
+export const ipSets = pgTable(
+  "ip_sets",
+  {
+    id: id(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    entries: jsonb("entries").$type<string[]>().notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    unique().on(t.organizationId, t.name),
+    index("ip_sets_by_org_idx").on(t.organizationId),
+  ],
+);
+
+export const grants = pgTable(
+  "grants",
+  {
+    id: id(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    networkId: uuid("network_id").references(() => networks.id, {
+      onDelete: "cascade",
+    }),
+    slug: text("slug").notNull(),
+    description: text("description"),
+    srcSelectors: jsonb("src_selectors").notNull().default([]),
+    dstSelectors: jsonb("dst_selectors").notNull().default([]),
+    ipRules: jsonb("ip_rules").notNull().default([]),
+    appCapabilities: jsonb("app_capabilities").notNull().default([]),
+    priority: integer("priority").notNull().default(0),
+    enabled: boolean("enabled").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    unique().on(t.organizationId, t.slug),
+    index("grants_by_org_idx").on(t.organizationId),
+    index("grants_by_network_idx").on(t.networkId),
+  ],
+);
+
+export const autoApprovers = pgTable(
+  "auto_approvers",
+  {
+    id: id(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    networkId: uuid("network_id").references(() => networks.id, {
+      onDelete: "cascade",
+    }),
+    slug: text("slug").notNull(),
+    routes: jsonb("routes")
+      .$type<Record<string, string[]>>()
+      .notNull()
+      .default({}),
+    exitNodes: jsonb("exit_nodes").$type<string[]>().notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    unique().on(t.organizationId, t.slug),
+    index("auto_approvers_by_org_idx").on(t.organizationId),
+  ],
+);
+
+export const nodeAttributes = pgTable(
+  "node_attributes",
+  {
+    id: id(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    endpointId: text("endpoint_id").references(() => devices.endpointId, {
+      onDelete: "cascade",
+    }),
+    key: text("key").notNull(),
+    value: text("value").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("node_attributes_by_org_idx").on(t.organizationId),
+    index("node_attributes_by_endpoint_idx").on(t.endpointId),
+  ],
+);
+
+export const policyRevisions = pgTable(
+  "policy_revisions",
+  {
+    id: id(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    networkId: uuid("network_id").references(() => networks.id, {
+      onDelete: "cascade",
+    }),
+    version: bigint("version", { mode: "number" }).notNull(),
+    contentHash: text("content_hash").notNull(),
+    irSnapshot: jsonb("ir_snapshot"),
+    source: text("source").notNull(),
+    authorUserId: text("author_user_id"),
+    authorApiKeyId: uuid("author_api_key_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("policy_revisions_by_org_created_idx").on(
+      t.organizationId,
+      t.createdAt,
+    ),
+    check(
+      "policy_revisions_source_check",
+      sql`${t.source} IN ('dashboard', 'api', 'gitops', 'terraform')`,
+    ),
+  ],
+);
+
+/** OAuth2 client credentials clients (Phase 3 - Terraform / automation). */
+export const oauthClients = pgTable(
+  "oauth_clients",
+  {
+    id: id(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    clientId: text("client_id").notNull(),
+    hashedSecret: text("hashed_secret").notNull(),
+    name: text("name").notNull(),
+    scopes: text("scopes").array().notNull().default([]),
+    networkIds: uuid("network_ids").array(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    unique().on(t.clientId),
+    index("oauth_clients_by_org_idx").on(t.organizationId),
+  ],
+);
+
+/** Opaque access tokens issued by client-credentials grant. */
+export const oauthAccessTokens = pgTable(
+  "oauth_access_tokens",
+  {
+    id: id(),
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    scopes: text("scopes").array().notNull().default([]),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    unique().on(t.tokenHash),
+    index("oauth_access_tokens_by_client_idx").on(t.clientId),
   ],
 );
 

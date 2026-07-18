@@ -1,0 +1,60 @@
+name: Tunnet Policy
+description: Validate, test, diff, and apply Tunnet policy-as-code documents in CI.
+author: Tunnet
+
+branding:
+  icon: shield
+  color: blue
+
+inputs:
+  action:
+    description: "Run policy checks (test) or apply to the control plane (apply)."
+    required: true
+    default: test
+  policy-path:
+    description: "Path to a policy file or directory (e.g. .tunnet)."
+    required: true
+    default: .tunnet
+  tunnet-api-url:
+    description: "Management API base URL. Falls back to TUNNET_API_URL."
+    required: false
+  tunnet-api-key:
+    description: "API key with policy scopes. Falls back to TUNNET_API_KEY."
+    required: false
+  comment-on-pr:
+    description: "Post a markdown summary comment on pull requests (test action only)."
+    required: false
+    default: "true"
+  simulate-scenarios:
+    description: "JSON array of simulation scenarios for the test action."
+    required: false
+    default: "[]"
+  force:
+    description: "Skip drift checks when applying (apply action only)."
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: latest
+    - name: Install action dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: bun install --frozen-lockfile || bun install
+    - name: Run Tunnet policy action
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      env:
+        INPUT_ACTION: ${{ inputs.action }}
+        INPUT_POLICY_PATH: ${{ inputs.policy-path }}
+        INPUT_TUNNET_API_URL: ${{ inputs.tunnet-api-url }}
+        INPUT_TUNNET_API_KEY: ${{ inputs.tunnet-api-key }}
+        INPUT_COMMENT_ON_PR: ${{ inputs.comment-on-pr }}
+        INPUT_SIMULATE_SCENARIOS: ${{ inputs.simulate-scenarios }}
+        INPUT_FORCE: ${{ inputs.force }}
+        GITHUB_TOKEN: ${{ github.token }}
+      run: bun run src/index.ts

@@ -76,9 +76,35 @@ Raw WireGuard requires manual key exchange, manual IP allocation, and manual con
 | Embeddable SDKs | JS, Rust | Go, C | Go, Rust, Python, JS, Java | No² |
 | SSO / OIDC | Yes | Yes | Yes | Yes |
 | ACL policies | Yes | Yes | Partial³ | Yes |
+| Policy as Code | Yes | Limited⁴ | No | Limited⁵ |
 | P2P mode (no server) | Direct mode | No | No | No |
 | License | AGPL-3.0 | Proprietary | Proprietary | Proprietary |
 
 > ¹ Cloudflare provides official Kubernetes deployment guides for cloudflared but no first-party operator CRDs - community operators exist.
 > ² Cloudflare has API SDKs (Go, TypeScript, Python) but no embeddable tunnel/mesh SDK for in-process connectivity.
 > ³ ngrok has authtoken ACLs and RBAC but not network-level mesh ACL policies.
+> ⁴ Tailscale ACLs are HuJSON with optional test blocks; Terraform is a single monolithic ACL resource.
+> ⁵ Cloudflare Zero Trust is API/Terraform-driven but split across many products and resources.
+
+## Policy as Code matrix
+
+Declarative policy, GitOps, and Terraform compared to mesh / zero-trust peers:
+
+| | Tunnet | Tailscale | NetBird | Cloudflare ZT | ZeroTier | Firezone |
+| --- | --- | --- | --- | --- | --- | --- |
+| Offline validation | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Traffic simulation | ✅ CLI+API | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Multi-file policy | ✅ built-in | 🟡 community | ❌ | ❌ | ❌ | ❌ |
+| Granular TF resources | ✅ per entity | ❌ monolithic | ✅ | ✅ but fragmented | 🟡 minimal | ❌ |
+| Monolithic TF mode | ✅ also | ✅ only this | ❌ | ❌ | ❌ | ❌ |
+| GitOps + PR diffs | ✅ semantic | 🟡 basic | ❌ | ❌ | ❌ | ❌ |
+| Export → Terraform | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Drift detection | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Policy test framework | ✅ | 🟡 test blocks | ❌ | ❌ | ❌ | ❌ |
+| Policy formats | HCL+JSON+YAML | HuJSON only | JSON (API) | JSON (API) | JSON (API) | N/A |
+| Self-hosted | ✅ | ❌ | ✅ | ❌ | ❌ | ✅ |
+| OIDC CI auth | ✅ | ✅ | ❌ | ✅ | ❌ | ❌ |
+| Go SDK | ✅ | ✅ | ❌ official | ✅ | ✅ | ❌ |
+| Policy rollback | ✅ built-in | ❌ git only | ❌ | ❌ | ❌ | ❌ |
+
+Details and workflows: [Policy as Code](/guide/policy-as-code).

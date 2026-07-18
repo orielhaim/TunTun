@@ -29,3 +29,7 @@ SSH access has its own policy layer configured under **Networks → Access → S
 Policies can also require the *source device* to pass named device posture definitions (for example disk encryption and firewall enabled). Agents collect attributes locally; the control plane evaluates definitions and feeds the result into ACL checks. Org settings choose monitor, warn, or enforce modes.
 
 Configure definitions and compliance under **Security → Posture** in the dashboard.
+
+## Policy as Code
+
+You can also author the same access rules in HCL, JSON, or YAML, review them in pull requests, apply with Terraform or the CLI, detect drift against dashboard edits, and roll back revisions. See [Policy as Code](/guide/policy-as-code).

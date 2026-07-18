@@ -1,0 +1,65 @@
+# Reusable Tunnet policy-as-code jobs for GitLab CI.
+# Include from your `.gitlab-ci.yml`:
+#
+#   include:
+#     - local: tools/ci-templates/gitlab/tunnet-policy.yml
+#
+#   tunnet-policy-test:
+#     extends: .tunnet-policy-test
+#
+#   tunnet-policy-apply:
+#     extends: .tunnet-policy-apply
+#     rules:
+#       - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+variables:
+  TUNNET_POLICY_PATH: ".tunnet"
+  TUNNET_POLICY_SIMULATE_SCENARIOS: "[]"
+
+.tunnet-policy-base:
+  image: oven/bun:1
+  variables:
+    BUN_INSTALL_CACHE_DIR: "$CI_PROJECT_DIR/.bun-cache"
+  cache:
+    key: tunnet-policy-action
+    paths:
+      - tools/gitops-policy-action/node_modules/
+      - .bun-cache/
+  before_script:
+    - cd tools/gitops-policy-action
+    - bun install
+
+.tunnet-policy-test:
+  extends: .tunnet-policy-base
+  stage: test
+  script:
+    - |
+      export INPUT_ACTION=test
+      export INPUT_POLICY_PATH="${TUNNET_POLICY_PATH}"
+      export INPUT_TUNNET_API_URL="${TUNNET_API_URL}"
+      export INPUT_TUNNET_API_KEY="${TUNNET_API_KEY}"
+      export INPUT_COMMENT_ON_PR="false"
+      export INPUT_SIMULATE_SCENARIOS="${TUNNET_POLICY_SIMULATE_SCENARIOS}"
+      export INPUT_FORCE="false"
+      bun run src/index.ts
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH
+
+.tunnet-policy-apply:
+  extends: .tunnet-policy-base
+  stage: deploy
+  script:
+    - |
+      export INPUT_ACTION=apply
+      export INPUT_POLICY_PATH="${TUNNET_POLICY_PATH}"
+      export INPUT_TUNNET_API_URL="${TUNNET_API_URL}"
+      export INPUT_TUNNET_API_KEY="${TUNNET_API_KEY}"
+      export INPUT_COMMENT_ON_PR="false"
+      export INPUT_SIMULATE_SCENARIOS="[]"
+      export INPUT_FORCE="${TUNNET_POLICY_FORCE:-false}"
+      bun run src/index.ts
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

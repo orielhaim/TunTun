@@ -15,6 +15,7 @@ import {
   HiOutlineServerStack,
   HiOutlineShare,
   HiOutlineShieldCheck,
+  HiOutlineUserGroup,
   HiOutlineUsers,
 } from "react-icons/hi2";
 import { SiKubernetes } from "react-icons/si";
@@ -117,6 +118,7 @@ const navSections: NavSection[] = [
     items: [
       { to: "/app/posture", label: "Posture", icon: HiOutlineShieldCheck },
       { to: "/app/access", label: "Access", icon: HiOutlineLockClosed },
+      { to: "/app/groups", label: "Groups", icon: HiOutlineUserGroup },
     ],
   },
   {

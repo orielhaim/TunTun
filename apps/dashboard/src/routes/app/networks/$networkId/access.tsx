@@ -13,6 +13,12 @@ import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { DataTable } from "@/components/app/data-table";
 import { EmptyState } from "@/components/app/empty-state";
+import {
+  applyPolicyExtraFields,
+  buildPolicySelector,
+  formatPolicySelector,
+  PolicySelectorFields,
+} from "@/components/app/policy-selector-fields";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -103,6 +109,13 @@ function NetworkPoliciesPanel() {
   const columns = useMemo<ColumnDef<Policy>[]>(
     () => [
       {
+        id: "slug",
+        header: "Slug",
+        cell: ({ row }) => (
+          <span className="font-mono text-xs">{row.original.slug ?? "—"}</span>
+        ),
+      },
+      {
         id: "action",
         header: "Action",
         cell: ({ row }) => (
@@ -114,7 +127,7 @@ function NetworkPoliciesPanel() {
         header: "Source",
         cell: ({ row }) => (
           <span className="font-mono text-xs">
-            {formatSelector(row.original.srcSelector)}
+            {formatPolicySelector(row.original.srcSelector)}
           </span>
         ),
       },
@@ -123,9 +136,20 @@ function NetworkPoliciesPanel() {
         header: "Destination",
         cell: ({ row }) => (
           <span className="font-mono text-xs">
-            {formatSelector(row.original.dstSelector)}
+            {formatPolicySelector(row.original.dstSelector)}
           </span>
         ),
+      },
+      {
+        id: "srcPosture",
+        header: "Src posture",
+        cell: ({ row }) => {
+          const posture = row.original.srcPosture;
+          if (!posture?.length) return "—";
+          return (
+            <span className="font-mono text-xs">{posture.join(", ")}</span>
+          );
+        },
       },
       {
         id: "protocol",
@@ -296,7 +320,7 @@ function SshRulesPanel() {
         header: "Source",
         cell: ({ row }) => (
           <span className="font-mono text-xs">
-            {formatSelector(row.original.srcSelector)}
+            {formatPolicySelector(row.original.srcSelector)}
           </span>
         ),
       },
@@ -305,7 +329,7 @@ function SshRulesPanel() {
         header: "Destination",
         cell: ({ row }) => (
           <span className="font-mono text-xs">
-            {formatSelector(row.original.dstSelector)}
+            {formatPolicySelector(row.original.dstSelector)}
           </span>
         ),
       },
@@ -426,11 +450,6 @@ function SshRulesPanel() {
   );
 }
 
-function formatSelector(selector: { kind: string; value?: string }) {
-  if (selector.kind === "any") return "any";
-  return `${selector.kind}:${selector.value ?? ""}`;
-}
-
 function CreatePolicyDialog({
   open,
   onOpenChange,
@@ -448,27 +467,43 @@ function CreatePolicyDialog({
   const [srcValue, setSrcValue] = useState("");
   const [dstValue, setDstValue] = useState("");
   const [protocol, setProtocol] = useState<string>("any");
+  const [slug, setSlug] = useState("");
+  const [srcPosture, setSrcPosture] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    await onSubmit({
-      action,
-      srcSelector: buildSelector(srcKind, srcValue),
-      dstSelector: buildSelector(dstKind, dstValue),
-      protocol: protocol as "tcp" | "udp" | "icmp" | "any",
-      ports: [],
-      priority: 0,
-    });
+    await onSubmit(
+      applyPolicyExtraFields(
+        {
+          action,
+          srcSelector: buildPolicySelector(srcKind, srcValue),
+          dstSelector: buildPolicySelector(dstKind, dstValue),
+          protocol: protocol as "tcp" | "udp" | "icmp" | "any",
+          ports: [],
+          priority: 0,
+        },
+        { slug, srcPosture },
+      ),
+    );
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-lg">
         <form onSubmit={(e) => void handleSubmit(e)}>
           <DialogHeader>
             <DialogTitle>Add policy</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="policy-slug">Slug</Label>
+              <Input
+                id="policy-slug"
+                value={slug}
+                onChange={(e) => setSlug(e.target.value)}
+                placeholder="allow-eng-prod"
+              />
+            </div>
             <div className="space-y-2">
               <Label>Action</Label>
               <Select
@@ -484,20 +519,32 @@ function CreatePolicyDialog({
                 </SelectContent>
               </Select>
             </div>
-            <SelectorFields
+            <PolicySelectorFields
               label="Source"
               kind={srcKind}
               value={srcValue}
               onKindChange={setSrcKind}
               onValueChange={setSrcValue}
             />
-            <SelectorFields
+            <PolicySelectorFields
               label="Destination"
               kind={dstKind}
               value={dstValue}
               onKindChange={setDstKind}
               onValueChange={setDstValue}
             />
+            <div className="space-y-2">
+              <Label htmlFor="policy-src-posture">Src posture</Label>
+              <Input
+                id="policy-src-posture"
+                value={srcPosture}
+                onChange={(e) => setSrcPosture(e.target.value)}
+                placeholder="compliant, mdm-enrolled"
+              />
+              <p className="text-muted-foreground text-xs">
+                Comma-separated posture definition names (OR).
+              </p>
+            </div>
             <div className="space-y-2">
               <Label>Protocol</Label>
               <Select
@@ -565,8 +612,8 @@ function CreateSshRuleDialog({
     await onSubmit({
       action,
       users: userList,
-      srcSelector: buildSelector(srcKind, srcValue),
-      dstSelector: buildSelector(dstKind, dstValue),
+      srcSelector: buildPolicySelector(srcKind, srcValue),
+      dstSelector: buildPolicySelector(dstKind, dstValue),
       record,
       enforceRecorder,
       checkPeriodSecs: action === "check" ? Number(checkPeriod) || 28800 : null,
@@ -612,14 +659,14 @@ function CreateSshRuleDialog({
                 required
               />
             </div>
-            <SelectorFields
+            <PolicySelectorFields
               label="Source"
               kind={srcKind}
               value={srcValue}
               onKindChange={setSrcKind}
               onValueChange={setSrcValue}
             />
-            <SelectorFields
+            <PolicySelectorFields
               label="Destination"
               kind={dstKind}
               value={dstValue}
@@ -681,48 +728,4 @@ function CreateSshRuleDialog({
       </DialogContent>
     </Dialog>
   );
-}
-
-function SelectorFields({
-  label,
-  kind,
-  value,
-  onKindChange,
-  onValueChange,
-}: {
-  label: string;
-  kind: string;
-  value: string;
-  onKindChange: (v: string) => void;
-  onValueChange: (v: string) => void;
-}) {
-  return (
-    <div className="space-y-2">
-      <Label>{label}</Label>
-      <Select value={kind} onValueChange={onKindChange}>
-        <SelectTrigger>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="any">Any</SelectItem>
-          <SelectItem value="endpoint">Endpoint</SelectItem>
-          <SelectItem value="tag">Tag</SelectItem>
-          <SelectItem value="cidr">CIDR</SelectItem>
-        </SelectContent>
-      </Select>
-      {kind !== "any" ? (
-        <Input
-          value={value}
-          onChange={(e) => onValueChange(e.target.value)}
-          placeholder={`${kind} value`}
-          required
-        />
-      ) : null}
-    </div>
-  );
-}
-
-function buildSelector(kind: string, value: string) {
-  if (kind === "any") return { kind: "any" as const };
-  return { kind: kind as "endpoint" | "tag" | "cidr", value };
 }

@@ -3,6 +3,7 @@ import {
   approveDeviceResponse,
   auditListResponse,
   type CreateApiKeyBody,
+  type CreateDeviceGroupBody,
   type CreateEnrollmentTokenBody,
   type CreateHostnameRouteBody,
   type CreateNetworkBody,
@@ -11,10 +12,13 @@ import {
   type CreateServeBody,
   type CreateSshPolicyBody,
   type CreateSubnetRouteBody,
+  type CreateTagDefinitionBody,
   type CreateTunnelBody,
   type CreateTunnelRoutingRuleBody,
+  type CreateUserGroupBody,
   createApiKeyBody,
   createApiKeyResponse,
+  createDeviceGroupBody,
   createEnrollmentTokenBody,
   createEnrollmentTokenResponse,
   createHostnameRouteBody,
@@ -26,15 +30,18 @@ import {
   createServeResponse,
   createSshPolicyBody,
   createSubnetRouteBody,
+  createTagDefinitionBody,
   createTunnelBody,
   createTunnelResponse,
   createTunnelRoutingRuleBody,
+  createUserGroupBody,
   type DeleteDeviceItem,
   deleteDevicesBody,
   deleteDevicesResponse,
   deviceAddressesResponse,
   deviceDetailSchema,
   deviceEffectiveConfigResponse,
+  deviceGroupListResponse,
   deviceListResponse,
   deviceSshAuthSchema,
   endpointSendSettingsSchema,
@@ -52,6 +59,7 @@ import {
   organizationSsoProviderSchema,
   organizationTunnelSettingsSchema,
   type PatchDeviceBody,
+  type PatchDeviceGroupBody,
   type PatchDeviceLabelsBody,
   type PatchDeviceMembershipBody,
   type PatchHostnameRouteBody,
@@ -63,9 +71,13 @@ import {
   type PatchServeBody,
   type PatchSshPolicyBody,
   type PatchSubnetRouteBody,
+  type PatchTagDefinitionBody,
   type PatchTunnelBody,
   type PatchTunnelRoutingRuleBody,
+  type PatchUserGroupBody,
+  type PolicyDriftRequest,
   patchDeviceBody,
+  patchDeviceGroupBody,
   patchDeviceLabelsBody,
   patchDeviceMembershipBody,
   patchHostnameRouteBody,
@@ -77,8 +89,14 @@ import {
   patchServeBody,
   patchSshPolicyBody,
   patchSubnetRouteBody,
+  patchTagDefinitionBody,
   patchTunnelBody,
   patchTunnelRoutingRuleBody,
+  patchUserGroupBody,
+  policyDocumentFormatSchema,
+  policyDriftRequest,
+  policyDriftResponse,
+  policyHistoryResponse,
   policyListResponse,
   policySchema,
   rejectDeviceResponse,
@@ -94,6 +112,7 @@ import {
   sshRecordingCastResponse,
   subnetRouteListResponse,
   subnetRouteSchema,
+  tagDefinitionListResponse,
   topologyResponse,
   tunnelListResponse,
   tunnelRoutingRuleListResponse,
@@ -104,6 +123,7 @@ import {
   type UpsertOrganizationSsoProviderBody,
   updateSendSettingsBody,
   upsertOrganizationSsoProviderBody,
+  userGroupListResponse,
 } from "@tunnet/api/management";
 import type { z } from "zod";
 import { z as zod } from "zod";
@@ -397,6 +417,104 @@ export function createManagementClient(orgId: string) {
       request<{ ok: boolean }>(orgId, org(`/policies/${policyId}`), {
         method: "DELETE",
       }),
+
+    listUserGroups: () =>
+      request(orgId, org("/user-groups"), {}, userGroupListResponse),
+
+    createUserGroup: (body: CreateUserGroupBody) =>
+      request(orgId, org("/user-groups"), {
+        method: "POST",
+        body: JSON.stringify(createUserGroupBody.parse(body)),
+      }),
+
+    patchUserGroup: (id: string, body: PatchUserGroupBody) =>
+      request(orgId, org(`/user-groups/${id}`), {
+        method: "PATCH",
+        body: JSON.stringify(patchUserGroupBody.parse(body)),
+      }),
+
+    deleteUserGroup: (id: string) =>
+      request<{ deleted: boolean }>(orgId, org(`/user-groups/${id}`), {
+        method: "DELETE",
+      }),
+
+    listDeviceGroups: () =>
+      request(orgId, org("/device-groups"), {}, deviceGroupListResponse),
+
+    createDeviceGroup: (body: CreateDeviceGroupBody) =>
+      request(orgId, org("/device-groups"), {
+        method: "POST",
+        body: JSON.stringify(createDeviceGroupBody.parse(body)),
+      }),
+
+    patchDeviceGroup: (id: string, body: PatchDeviceGroupBody) =>
+      request(orgId, org(`/device-groups/${id}`), {
+        method: "PATCH",
+        body: JSON.stringify(patchDeviceGroupBody.parse(body)),
+      }),
+
+    deleteDeviceGroup: (id: string) =>
+      request<{ deleted: boolean }>(orgId, org(`/device-groups/${id}`), {
+        method: "DELETE",
+      }),
+
+    listTagDefinitions: () =>
+      request(orgId, org("/tag-definitions"), {}, tagDefinitionListResponse),
+
+    createTagDefinition: (body: CreateTagDefinitionBody) =>
+      request(orgId, org("/tag-definitions"), {
+        method: "POST",
+        body: JSON.stringify(createTagDefinitionBody.parse(body)),
+      }),
+
+    patchTagDefinition: (id: string, body: PatchTagDefinitionBody) =>
+      request(orgId, org(`/tag-definitions/${id}`), {
+        method: "PATCH",
+        body: JSON.stringify(patchTagDefinitionBody.parse(body)),
+      }),
+
+    deleteTagDefinition: (id: string) =>
+      request<{ deleted: boolean }>(orgId, org(`/tag-definitions/${id}`), {
+        method: "DELETE",
+      }),
+
+    listPolicyHistory: () =>
+      request(orgId, org("/policy/history"), {}, policyHistoryResponse),
+
+    getPolicyExport: async (
+      format: "json" | "hcl" | "yaml" = "json",
+    ): Promise<string> => {
+      const parsedFormat = policyDocumentFormatSchema.parse(format);
+      const headers = new Headers();
+      headers.set("X-Organization-Id", orgId);
+      const response = await fetch(
+        `${getManagementApiUrl()}/api/v1${org(
+          `/policy/export?format=${encodeURIComponent(parsedFormat)}`,
+        )}`,
+        { credentials: "include", headers },
+      );
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new ManagementApiError(
+          body?.error ?? response.statusText,
+          response.status,
+        );
+      }
+      return response.text();
+    },
+
+    checkPolicyDrift: (body: PolicyDriftRequest) =>
+      request(
+        orgId,
+        org("/policy/drift"),
+        {
+          method: "POST",
+          body: JSON.stringify(policyDriftRequest.parse(body)),
+        },
+        policyDriftResponse,
+      ),
 
     listSshPolicies: (networkId: string) =>
       request(

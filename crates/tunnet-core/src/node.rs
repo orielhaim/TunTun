@@ -296,6 +296,8 @@ impl CoreNode {
         };
         apply_membership(
             &membership,
+            &snapshot.org_policy,
+            snapshot.policy_verifying_key.as_deref(),
             &routes,
             &acl,
             &version,

@@ -26,7 +26,8 @@ You also get more than a VPN. Instead of stitching Tailscale + ngrok + scp + a b
 | **Device posture** | MDM / EDR policy gates | [Posture](https://docs.tunnet.io/products/posture/) |
 | **Self-hosted relay** | Vendor edge networks | [Relay](https://docs.tunnet.io/products/relay/) |
 | **Kubernetes operator** | Custom VPN + Ingress glue | [Kubernetes](https://docs.tunnet.io/integrations/kubernetes/) |
-| **Node / Rust SDKs** | Embedding tunnels in apps | [SDK](https://docs.tunnet.io/sdk/) |
+| **Policy as Code** | HuJSON ACLs + ad-hoc GitOps | [Policy as Code](https://docs.tunnet.io/guide/policy-as-code) |
+| **Node / Rust / Go SDKs** | Embedding tunnels + management API | [SDK](https://docs.tunnet.io/sdk/) |
 
 ### Mesh that feels like a LAN
 
@@ -47,12 +48,20 @@ Ship a mesh node inside the process. No separate agent required for app-to-app t
 
 Open streams to peers, accept inbound connections, transfer files, and compose with your existing HTTP stack.
 
+For management automation (policy, groups, ACLs) see the [Go management SDK](https://docs.tunnet.io/sdk/#go-management-sdk).
+
 ### Two modes, one product
 
-- **Managed** - control plane, dashboard, SSO/OIDC, centralized policies, audit, tunnels, SSH recording. Built for teams.
+- **Managed** - control plane, dashboard, SSO/OIDC, centralized policies, Policy as Code (HCL/JSON/YAML, Terraform, GitOps), audit, tunnels, SSH recording. Built for teams.
 - **Direct** - zero-server P2P mesh for individuals and small groups.
 
-[Managed](https://docs.tunnet.io/modes/managed/) · [Direct](https://docs.tunnet.io/modes/direct/)
+[Managed](https://docs.tunnet.io/modes/managed/) · [Direct](https://docs.tunnet.io/modes/direct/) · [Policy as Code](https://docs.tunnet.io/guide/policy-as-code)
+
+### Policy as Code
+
+Author ACLs, groups, tags, SSH, and posture in Git. Validate and simulate offline, post semantic diffs on PRs, apply with drift detection, export to Terraform, and roll back revisions - without giving up the dashboard.
+
+[Policy as Code guide](https://docs.tunnet.io/guide/policy-as-code)
 
 ## How Tunnet compares
 
@@ -69,6 +78,7 @@ Open streams to peers, accept inbound connections, transfer files, and compose w
 | Serverless P2P mode | **Direct** | No | No | No |
 | Kubernetes operator | Yes | Yes | Yes | Community¹ |
 | Embeddable SDKs | JS, Rust | Go, C | Go, Rust, Python, JS, Java | No² |
+| Policy as Code | **Yes** | Limited | No | Limited |
 | License | AGPL-3.0 | Proprietary | Proprietary | Proprietary |
 
 > ¹ Cloudflare has official K8s deployment guides for Tunnel but the operators are community-maintained.

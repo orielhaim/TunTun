@@ -8,9 +8,11 @@ members = [
   "crates/tunnet-agent",
   "crates/tunnet-relay",
   "crates/tunnet-node-napi",
+  "crates/tunnet-policy-napi",
   "crates/tunnet-kube-node",
   "crates/tunnet-operator",
   "crates/tunnet-posture",
+  "crates/tunnet-policy-engine",
 ]
 
 [workspace.package]
@@ -128,6 +130,9 @@ tunnet-common = { version = "0.7.0", path = "crates/tunnet-common" }
 tunnet-core = { version = "0.7.0", path = "crates/tunnet-core" }
 tunnet = { version = "0.2.0", path = "crates/tunnet" }
 tunnet-posture = { version = "0.7.0", path = "crates/tunnet-posture" }
+tunnet-policy-engine = { version = "0.7.0", path = "crates/tunnet-policy-engine" }
+yaml_serde = "0.10.4"
+hcl-rs = "0.19"
 
 # Kubernetes operator
 kube = { version = "4.0.0", default-features = false, features = [

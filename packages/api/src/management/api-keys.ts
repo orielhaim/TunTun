@@ -1,11 +1,20 @@
 import { z } from "zod";
 
-export const API_KEY_SCOPE_VALUES = ["sdk:enroll", "sdk:manage"] as const;
+export const API_KEY_SCOPE_VALUES = [
+  "sdk:enroll",
+  "sdk:manage",
+  "policy:read",
+  "policy:write",
+  "policy:apply",
+] as const;
 
 export type ApiKeyScope = (typeof API_KEY_SCOPE_VALUES)[number];
 
 export const SDK_ENROLL_SCOPE: ApiKeyScope = "sdk:enroll";
 export const SDK_MANAGE_SCOPE: ApiKeyScope = "sdk:manage";
+export const POLICY_READ_SCOPE: ApiKeyScope = "policy:read";
+export const POLICY_WRITE_SCOPE: ApiKeyScope = "policy:write";
+export const POLICY_APPLY_SCOPE: ApiKeyScope = "policy:apply";
 
 export const API_KEY_SCOPES: ReadonlyArray<{
   id: ApiKeyScope;
@@ -23,6 +32,24 @@ export const API_KEY_SCOPES: ReadonlyArray<{
     label: "Manage SDK / K8s nodes",
     description:
       "Enroll and delete operator-managed or SDK nodes in allowed networks.",
+  },
+  {
+    id: POLICY_READ_SCOPE,
+    label: "Read policies",
+    description:
+      "Export, diff, simulate, history, and list policy entities via API.",
+  },
+  {
+    id: POLICY_WRITE_SCOPE,
+    label: "Write policy entities",
+    description:
+      "Create and update granular policy entities (groups, rules, tags).",
+  },
+  {
+    id: POLICY_APPLY_SCOPE,
+    label: "Apply policy documents",
+    description:
+      "Apply, force-apply, and rollback policy documents (GitOps / Terraform).",
   },
 ];
 

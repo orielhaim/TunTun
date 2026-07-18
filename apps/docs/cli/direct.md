@@ -100,15 +100,17 @@ tunnet firewall accept
 tunnet firewall reject-suggestion
 ```
 
-## tunnet policy
+## tunnet coordinator-policy
 
-Coordinator firewall policy published to peers.
+Coordinator firewall policy published to peers (Direct mode only).
 
 ```bash
-tunnet policy show
-tunnet policy set <file.toml>
-tunnet policy clear
+tunnet coordinator-policy show
+tunnet coordinator-policy set <file.toml>
+tunnet coordinator-policy clear
 ```
+
+For Managed access policy as code (HCL/JSON/YAML, apply, GitOps), see [tunnet policy](/cli/policy).
 
 ## tunnet keep-alive
 

@@ -5,6 +5,7 @@ mod cmds;
 mod cmds_device;
 mod cmds_direct;
 mod cmds_login;
+mod cmds_policy;
 mod cmds_posture;
 mod cmds_send;
 mod cmds_ssh;
@@ -18,6 +19,7 @@ mod metrics;
 #[cfg(target_os = "linux")]
 mod offload;
 mod output;
+mod policy_api;
 mod posture;
 mod recorder;
 mod runtime;
@@ -180,7 +182,8 @@ async fn async_main() -> anyhow::Result<()> {
         crate::cli::Command::Firewall(a) => {
             crate::cmds_direct::run_firewall(a, cli.state_dir.as_deref()).await
         }
-        crate::cli::Command::Policy(a) => {
+        crate::cli::Command::Policy(a) => crate::cmds_policy::run(a).await,
+        crate::cli::Command::CoordinatorPolicy(a) => {
             crate::cmds_direct::run_policy(a, cli.state_dir.as_deref()).await
         }
         crate::cli::Command::KeepAlive(a) => {

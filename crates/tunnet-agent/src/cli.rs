@@ -119,9 +119,12 @@ pub enum Command {
     /// Manage the local Direct firewall
     #[command(subcommand)]
     Firewall(crate::cmds_direct::FirewallCommand),
-    /// Coordinator firewall policy
+    /// Policy-as-Code document operations
     #[command(subcommand)]
-    Policy(crate::cmds_direct::PolicyCommand),
+    Policy(crate::cmds_policy::PolicyCommand),
+    /// Coordinator firewall policy (Direct mode)
+    #[command(subcommand, name = "coordinator-policy")]
+    CoordinatorPolicy(crate::cmds_direct::PolicyCommand),
     /// Keep a Direct peer connection always open
     KeepAlive(crate::cmds_direct::KeepAliveArgs),
     /// Upgrade a Direct network to Managed mode

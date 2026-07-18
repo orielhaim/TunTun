@@ -1,0 +1,22 @@
+[package]
+name = "tunnet-policy-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Policy-as-Code parser, validator, simulator, and exporter for Tunnet"
+publish = false
+
+[dependencies]
+tunnet-common.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+yaml_serde.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+hcl-rs.workspace = true
+blake3.workspace = true
+hex.workspace = true
+ipnet.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

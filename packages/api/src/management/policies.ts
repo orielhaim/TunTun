@@ -12,6 +12,9 @@ export const selectorSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("tag"), value: z.string() }),
   z.object({ kind: z.literal("network"), value: z.string() }),
   cidrSelector,
+  z.object({ kind: z.literal("user_group"), value: z.string().min(1) }),
+  z.object({ kind: z.literal("device_group"), value: z.string().min(1) }),
+  z.object({ kind: z.literal("user"), value: z.string().min(1) }),
 ]);
 
 export const portRangeSchema = z.object({
@@ -26,6 +29,8 @@ export const policySchema = z.object({
   organizationId: z.string(),
   networkId: z.string().uuid().nullable(),
   scope: policyScopeSchema,
+  /** Stable slug for GitOps / Terraform (`allow-eng-prod`). */
+  slug: z.string().nullable().optional(),
   srcSelector: selectorSchema,
   dstSelector: selectorSchema,
   action: z.enum(["allow", "deny"]),
@@ -38,6 +43,12 @@ export const policySchema = z.object({
 });
 
 export const createPolicyBody = z.object({
+  slug: z
+    .string()
+    .min(1)
+    .max(128)
+    .regex(/^[a-z0-9][a-z0-9-]*$/)
+    .optional(),
   srcSelector: selectorSchema,
   dstSelector: selectorSchema,
   action: z.enum(["allow", "deny"]),

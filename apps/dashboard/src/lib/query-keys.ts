@@ -10,6 +10,14 @@ export const queryKeys = {
     [...queryKeys.network(orgId, networkId), "policies"] as const,
   organizationPolicies: (orgId: string) =>
     [...queryKeys.org(orgId), "policies"] as const,
+  userGroups: (orgId: string) =>
+    [...queryKeys.org(orgId), "user-groups"] as const,
+  deviceGroups: (orgId: string) =>
+    [...queryKeys.org(orgId), "device-groups"] as const,
+  tagDefinitions: (orgId: string) =>
+    [...queryKeys.org(orgId), "tag-definitions"] as const,
+  policyHistory: (orgId: string) =>
+    [...queryKeys.org(orgId), "policy-history"] as const,
   sshPolicies: (orgId: string, networkId: string) =>
     [...queryKeys.network(orgId, networkId), "ssh-policies"] as const,
   deviceSshAuth: (orgId: string, endpointId: string) =>

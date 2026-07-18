@@ -117,6 +117,10 @@ export default defineConfig({
               text: "Access Policies & ACLs",
               link: "/guide/concepts/access-policies",
             },
+            {
+              text: "Policy as Code",
+              link: "/guide/policy-as-code",
+            },
             { text: "PeerDNS", link: "/guide/concepts/peerdns" },
             { text: "Routing", link: "/guide/concepts/routing" },
             {
@@ -255,6 +259,7 @@ export default defineConfig({
             { text: "tunnet route", link: "/cli/route" },
             { text: "tunnet dns", link: "/cli/dns" },
             { text: "tunnet login / logout", link: "/cli/login" },
+            { text: "tunnet policy", link: "/cli/policy" },
             { text: "tunnet validate", link: "/cli/validate" },
             { text: "tunnet reload", link: "/cli/reload" },
             { text: "Direct Mode Commands", link: "/cli/direct" },
@@ -268,7 +273,10 @@ export default defineConfig({
       "/sdk/": [
         {
           text: "SDK",
-          items: [{ text: "Overview", link: "/sdk/" }],
+          items: [
+            { text: "Overview", link: "/sdk/" },
+            { text: "Go management SDK", link: "/sdk/#go-management-sdk" },
+          ],
         },
         {
           text: "Node.js / Bun",

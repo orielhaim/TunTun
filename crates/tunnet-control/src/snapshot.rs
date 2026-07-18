@@ -155,6 +155,7 @@ pub async fn build_endpoint_snapshot(
         memberships,
         ipv6_peers,
         org_policy,
+        policy_verifying_key: Some(hex::encode(policy_key.verifying_key().to_bytes())),
         agent_policy: org_agent_policy,
         org_ca_pem,
         labels,

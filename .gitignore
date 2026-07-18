@@ -20,3 +20,4 @@ license.json
 .secrets/
 scripts/sign-license.ts
 hack
+.cursor/

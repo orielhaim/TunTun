@@ -50,6 +50,20 @@
       "when": 1784404211024,
       "tag": "0006_milky_jean_grey",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1784411564472,
+      "tag": "0007_remarkable_magma",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1784412076639,
+      "tag": "0008_material_the_fury",
+      "breakpoints": true
     }
   ]
 }

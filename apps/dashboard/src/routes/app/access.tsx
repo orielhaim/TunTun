@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { CreatePolicyBody, Policy } from "@tunnet/api/management";
+import { formatDistanceToNow } from "date-fns";
 import { ChevronRightIcon, PlusIcon, TrashIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -9,6 +10,13 @@ import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { DataTable } from "@/components/app/data-table";
 import { EmptyState } from "@/components/app/empty-state";
 import { PageHeader } from "@/components/app/page-header";
+import {
+  applyPolicyExtraFields,
+  buildPolicySelector,
+  formatPolicySelector,
+  PolicySelectorFields,
+} from "@/components/app/policy-selector-fields";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -35,6 +43,7 @@ import {
   useMachines,
   useNetworks,
   useOrganizationPolicies,
+  usePolicyHistory,
 } from "@/lib/queries/management";
 import { queryKeys } from "@/lib/query-keys";
 
@@ -56,6 +65,10 @@ function AccessPage() {
       />
 
       <OrganizationPoliciesPanel />
+
+      <div className="mt-8">
+        <PolicyRevisionsPanel />
+      </div>
 
       <div className="mt-8 space-y-3">
         <h2 className="text-sm font-medium">Networks</h2>
@@ -134,6 +147,13 @@ function OrganizationPoliciesPanel() {
   const columns = useMemo<ColumnDef<Policy>[]>(
     () => [
       {
+        id: "slug",
+        header: "Slug",
+        cell: ({ row }) => (
+          <span className="font-mono text-xs">{row.original.slug ?? "—"}</span>
+        ),
+      },
+      {
         id: "action",
         header: "Action",
         cell: ({ row }) => (
@@ -145,7 +165,7 @@ function OrganizationPoliciesPanel() {
         header: "Source",
         cell: ({ row }) => (
           <span className="font-mono text-xs">
-            {formatSelector(row.original.srcSelector)}
+            {formatPolicySelector(row.original.srcSelector)}
           </span>
         ),
       },
@@ -154,9 +174,20 @@ function OrganizationPoliciesPanel() {
         header: "Destination",
         cell: ({ row }) => (
           <span className="font-mono text-xs">
-            {formatSelector(row.original.dstSelector)}
+            {formatPolicySelector(row.original.dstSelector)}
           </span>
         ),
+      },
+      {
+        id: "srcPosture",
+        header: "Src posture",
+        cell: ({ row }) => {
+          const posture = row.original.srcPosture;
+          if (!posture?.length) return "—";
+          return (
+            <span className="font-mono text-xs">{posture.join(", ")}</span>
+          );
+        },
       },
       {
         id: "protocol",
@@ -272,6 +303,55 @@ function OrganizationPoliciesPanel() {
   );
 }
 
+function PolicyRevisionsPanel() {
+  const { data: activeOrg } = useActiveOrganization();
+  const orgId = activeOrg?.id;
+  const { data: revisions, isPending } = usePolicyHistory(orgId);
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <h2 className="text-sm font-medium">Policy revisions</h2>
+        <p className="text-muted-foreground text-sm">
+          Recent applies from the dashboard, API, GitOps, or Terraform.
+        </p>
+      </div>
+
+      {isPending ? (
+        <Skeleton className="h-24 w-full" />
+      ) : (revisions?.length ?? 0) === 0 ? (
+        <p className="text-muted-foreground text-sm">
+          No revisions yet. GitOps apply writes a revision on success; use drift
+          checks and --force when reconciling conflicts.
+        </p>
+      ) : (
+        <ul className="divide-border divide-y rounded-md border">
+          {(revisions ?? []).slice(0, 10).map((rev) => (
+            <li
+              key={rev.id}
+              className="flex flex-wrap items-center gap-3 px-3 py-2.5 text-sm"
+            >
+              <Badge variant="secondary" className="capitalize">
+                {rev.source}
+              </Badge>
+              <span className="text-muted-foreground">v{rev.version}</span>
+              <span className="font-mono text-xs">
+                {rev.contentHash.slice(0, 12)}
+                {rev.contentHash.length > 12 ? "…" : ""}
+              </span>
+              <span className="text-muted-foreground ml-auto text-xs">
+                {formatDistanceToNow(new Date(rev.createdAt), {
+                  addSuffix: true,
+                })}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function CreateOrgPolicyDialog({
   open,
   onOpenChange,
@@ -286,6 +366,8 @@ function CreateOrgPolicyDialog({
   const [action, setAction] = useState<"allow" | "deny">("deny");
   const [protocol, setProtocol] = useState("any");
   const [priority, setPriority] = useState("100");
+  const [slug, setSlug] = useState("");
+  const [srcPosture, setSrcPosture] = useState("");
   const [srcKind, setSrcKind] = useState("any");
   const [dstKind, setDstKind] = useState("any");
   const [srcValue, setSrcValue] = useState("");
@@ -293,15 +375,20 @@ function CreateOrgPolicyDialog({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    await onSubmit({
-      action,
-      srcSelector: buildSelector(srcKind, srcValue),
-      dstSelector: buildSelector(dstKind, dstValue),
-      ports: [],
-      protocol:
-        protocol === "any" ? null : (protocol as "tcp" | "udp" | "icmp"),
-      priority: Number(priority) || 0,
-    });
+    await onSubmit(
+      applyPolicyExtraFields(
+        {
+          action,
+          srcSelector: buildPolicySelector(srcKind, srcValue),
+          dstSelector: buildPolicySelector(dstKind, dstValue),
+          ports: [],
+          protocol:
+            protocol === "any" ? null : (protocol as "tcp" | "udp" | "icmp"),
+          priority: Number(priority) || 0,
+        },
+        { slug, srcPosture },
+      ),
+    );
   }
 
   return (
@@ -312,6 +399,15 @@ function CreateOrgPolicyDialog({
             <DialogTitle>Add organization policy</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="org-slug">Slug</Label>
+              <Input
+                id="org-slug"
+                value={slug}
+                onChange={(e) => setSlug(e.target.value)}
+                placeholder="deny-untrusted"
+              />
+            </div>
             <div className="space-y-2">
               <Label>Action</Label>
               <Select
@@ -327,24 +423,39 @@ function CreateOrgPolicyDialog({
                 </SelectContent>
               </Select>
             </div>
-            <SelectorFields
+            <PolicySelectorFields
               label="Source"
               kind={srcKind}
               value={srcValue}
               onKindChange={setSrcKind}
               onValueChange={setSrcValue}
             />
-            <SelectorFields
+            <PolicySelectorFields
               label="Destination"
               kind={dstKind}
               value={dstValue}
               onKindChange={setDstKind}
               onValueChange={setDstValue}
             />
+            <div className="space-y-2">
+              <Label htmlFor="org-src-posture">Src posture</Label>
+              <Input
+                id="org-src-posture"
+                value={srcPosture}
+                onChange={(e) => setSrcPosture(e.target.value)}
+                placeholder="compliant, mdm-enrolled"
+              />
+              <p className="text-muted-foreground text-xs">
+                Comma-separated posture definition names (OR).
+              </p>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Protocol</Label>
-                <Select value={protocol} onValueChange={setProtocol}>
+                <Select
+                  value={protocol}
+                  onValueChange={(v) => setProtocol(v ?? "any")}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -383,63 +494,4 @@ function CreateOrgPolicyDialog({
       </DialogContent>
     </Dialog>
   );
-}
-
-function SelectorFields({
-  label,
-  kind,
-  value,
-  onKindChange,
-  onValueChange,
-}: {
-  label: string;
-  kind: string;
-  value: string;
-  onKindChange: (kind: string) => void;
-  onValueChange: (value: string) => void;
-}) {
-  return (
-    <div className="space-y-2">
-      <Label>{label}</Label>
-      <div className="flex gap-2">
-        <Select value={kind} onValueChange={onKindChange}>
-          <SelectTrigger className="w-32">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="any">Any</SelectItem>
-            <SelectItem value="tag">Tag</SelectItem>
-            <SelectItem value="endpoint">Endpoint</SelectItem>
-            <SelectItem value="cidr">CIDR</SelectItem>
-          </SelectContent>
-        </Select>
-        {kind !== "any" ? (
-          <Input
-            value={value}
-            onChange={(e) => onValueChange(e.target.value)}
-            placeholder={
-              kind === "cidr"
-                ? "10.0.0.0/8"
-                : kind === "tag"
-                  ? "prod"
-                  : "endpoint id"
-            }
-            required
-          />
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function buildSelector(kind: string, value: string) {
-  if (kind === "any") return { kind: "any" as const };
-  if (kind === "tag") return { kind: "tag" as const, value };
-  if (kind === "endpoint") return { kind: "endpoint" as const, value };
-  return { kind: "cidr" as const, value };
-}
-
-function formatSelector(selector: Policy["srcSelector"]): string {
-  if (selector.kind === "any") return "any";
-  return `${selector.kind}:${selector.value}`;
 }

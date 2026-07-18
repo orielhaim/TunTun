@@ -328,6 +328,9 @@ pub struct EndpointSnapshot {
     pub memberships: Vec<NetworkMembershipSnapshot>,
     pub ipv6_peers: Vec<Ipv6PeerEntry>,
     pub org_policy: policy::PolicyBundle,
+    /// Hex-encoded Ed25519 verifying key for `PolicyBundle.signature`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub policy_verifying_key: Option<String>,
     /// Org-level remote agent policy defaults (before network inheritance).
     #[serde(default)]
     pub agent_policy: agent_policy::RemoteAgentPolicy,

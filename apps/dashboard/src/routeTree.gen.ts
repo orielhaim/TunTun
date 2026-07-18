@@ -16,6 +16,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AcceptInvitationInvitationIdRouteImport } from './routes/accept-invitation.$invitationId'
 import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as AppAccessRouteImport } from './routes/app/access'
+import { Route as AppGroupsRouteImport } from './routes/app/groups'
 import { Route as AppLogsRouteImport } from './routes/app/logs'
 import { Route as AppOnboardingRouteImport } from './routes/app/onboarding'
 import { Route as AppOrganizationRouteImport } from './routes/app/organization'
@@ -85,6 +86,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
 const AppAccessRoute = AppAccessRouteImport.update({
   id: '/access',
   path: '/access',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppGroupsRoute = AppGroupsRouteImport.update({
+  id: '/groups',
+  path: '/groups',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppLogsRoute = AppLogsRouteImport.update({
@@ -274,6 +280,7 @@ export interface FileRoutesByFullPath {
   '/app/settings': typeof AppSettingsRouteRouteWithChildren
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
   '/app/access': typeof AppAccessRoute
+  '/app/groups': typeof AppGroupsRoute
   '/app/logs': typeof AppLogsRoute
   '/app/onboarding': typeof AppOnboardingRoute
   '/app/organization': typeof AppOrganizationRoute
@@ -315,6 +322,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
   '/app/access': typeof AppAccessRoute
+  '/app/groups': typeof AppGroupsRoute
   '/app/logs': typeof AppLogsRoute
   '/app/onboarding': typeof AppOnboardingRoute
   '/app/organization': typeof AppOrganizationRoute
@@ -358,6 +366,7 @@ export interface FileRoutesById {
   '/app/settings': typeof AppSettingsRouteRouteWithChildren
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
   '/app/access': typeof AppAccessRoute
+  '/app/groups': typeof AppGroupsRoute
   '/app/logs': typeof AppLogsRoute
   '/app/onboarding': typeof AppOnboardingRoute
   '/app/organization': typeof AppOrganizationRoute
@@ -403,6 +412,7 @@ export interface FileRouteTypes {
     | '/app/settings'
     | '/accept-invitation/$invitationId'
     | '/app/access'
+    | '/app/groups'
     | '/app/logs'
     | '/app/onboarding'
     | '/app/organization'
@@ -444,6 +454,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/accept-invitation/$invitationId'
     | '/app/access'
+    | '/app/groups'
     | '/app/logs'
     | '/app/onboarding'
     | '/app/organization'
@@ -486,6 +497,7 @@ export interface FileRouteTypes {
     | '/app/settings'
     | '/accept-invitation/$invitationId'
     | '/app/access'
+    | '/app/groups'
     | '/app/logs'
     | '/app/onboarding'
     | '/app/organization'
@@ -582,6 +594,13 @@ declare module '@tanstack/react-router' {
       path: '/access'
       fullPath: '/app/access'
       preLoaderRoute: typeof AppAccessRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/app/groups': {
+      id: '/app/groups'
+      path: '/groups'
+      fullPath: '/app/groups'
+      preLoaderRoute: typeof AppGroupsRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/app/logs': {
@@ -865,6 +884,7 @@ const AppNetworksNetworkIdRouteRouteWithChildren =
 interface AppRouteRouteChildren {
   AppSettingsRouteRoute: typeof AppSettingsRouteRouteWithChildren
   AppAccessRoute: typeof AppAccessRoute
+  AppGroupsRoute: typeof AppGroupsRoute
   AppLogsRoute: typeof AppLogsRoute
   AppOnboardingRoute: typeof AppOnboardingRoute
   AppOrganizationRoute: typeof AppOrganizationRoute
@@ -893,6 +913,7 @@ interface AppRouteRouteChildren {
 const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppSettingsRouteRoute: AppSettingsRouteRouteWithChildren,
   AppAccessRoute: AppAccessRoute,
+  AppGroupsRoute: AppGroupsRoute,
   AppLogsRoute: AppLogsRoute,
   AppOnboardingRoute: AppOnboardingRoute,
   AppOrganizationRoute: AppOrganizationRoute,

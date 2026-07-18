@@ -2,6 +2,8 @@ import { Elysia } from "elysia";
 
 import { apiKeysRoutes } from "./api-keys";
 import { auditRoutes } from "./audit";
+import { authOauthRoutes } from "./auth-oauth";
+import { authOidcRoutes } from "./auth-oidc";
 import { deviceProfilesRoutes } from "./device-profiles";
 import { devicesRoutes } from "./devices";
 import { enrollmentTokensRoutes } from "./enrollment-tokens";
@@ -14,6 +16,8 @@ import { nodeGroupsRoutes } from "./node-groups";
 import { orgSettingsRoutes } from "./org-settings";
 import { orgUsersRoutes } from "./org-users";
 import { policiesRoutes } from "./policies";
+import { policyDocumentRoutes } from "./policy-document";
+import { policyEntitiesRoutes } from "./policy-entities";
 import { postureRoutes } from "./posture";
 import { presenceRoutes } from "./presence";
 import { relaysRoutes } from "./relays";
@@ -29,6 +33,10 @@ import { tunnelSettingsRoutes } from "./tunnel-settings";
 import { tunnelsRoutes } from "./tunnels";
 
 export const apiV1 = new Elysia({ prefix: "/api/v1" })
+  .use(authOidcRoutes)
+  .use(authOauthRoutes)
+  .use(policyDocumentRoutes)
+  .use(policyEntitiesRoutes)
   .use(entitlementsRoutes)
   .use(networksRoutes)
   .use(devicesRoutes)

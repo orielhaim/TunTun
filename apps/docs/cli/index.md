@@ -46,7 +46,8 @@ The `tunnet` CLI is the primary interface for interacting with Tunnet from the c
 | `tunnet deny` | Deny a join request |
 | `tunnet kick` | Remove a peer from a Direct network |
 | `tunnet firewall` | Manage the local Direct firewall |
-| `tunnet policy` | Coordinator firewall policy |
+| `tunnet policy` | [Managed Policy as Code](/cli/policy) - validate, apply, export, rollback |
+| `tunnet coordinator-policy` | Direct-mode coordinator firewall (see [Direct commands](/cli/direct#tunnet-coordinator-policy)) |
 | `tunnet keep-alive` | Keep a Direct peer connection always open |
 | `tunnet upgrade-to-managed` | Migrate from Direct to Managed |
 | `tunnet update` | Upgrade the agent from GitHub Releases |
