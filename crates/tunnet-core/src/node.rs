@@ -1,16 +1,28 @@
+#[cfg(feature = "direct")]
 use std::collections::HashMap;
 use std::sync::Arc;
+#[cfg(any(feature = "managed", feature = "direct"))]
 use std::time::Duration;
 
+#[cfg(any(feature = "managed", feature = "direct"))]
 use anyhow::Context;
 use arc_swap::ArcSwap;
-use iroh::{Endpoint, SecretKey, endpoint::presets};
-use tunnet_common::{SEND_ALPN, TUNNEL_ALPN};
+use iroh::Endpoint;
+#[cfg(any(feature = "managed", feature = "direct"))]
+use iroh::{SecretKey, endpoint::presets};
+#[cfg(any(feature = "managed", feature = "direct"))]
+use tunnet_common::TUNNEL_ALPN;
+#[cfg(feature = "direct")]
 use uuid::Uuid;
 
-use crate::acl::{AclEngine, SelfIdentity};
+use crate::acl::AclEngine;
+#[cfg(any(feature = "managed", feature = "direct"))]
+use crate::acl::SelfIdentity;
+#[cfg(feature = "managed")]
 use crate::acl_hook::AclHook;
+#[cfg(feature = "managed")]
 use crate::control::{SignedClient, basic_metadata};
+#[cfg(feature = "direct")]
 use crate::direct::{
     AUTH_ALPN, AuthCache, DirectAuthHook, DocsBootstrap, DocsMembership, MembershipEntry,
     derive_ipv4, firewall_to_policy, spawn_discovery,
@@ -18,21 +30,29 @@ use crate::direct::{
 use crate::identity::AgentIdentity;
 use crate::iroh_pool::ConnPool;
 use crate::routing::RoutingTable;
+#[cfg(feature = "send")]
 use crate::send::SendManager;
+#[cfg(feature = "serve")]
 use crate::serve::ServeManager;
-use crate::state::{
-    DirectState, ManagedState, PersistedState, StatePaths, load_snapshot_cache, save_snapshot_cache,
-};
+#[cfg(feature = "direct")]
+use crate::state::DirectState;
+#[cfg(feature = "managed")]
+use crate::state::{ManagedState, load_snapshot_cache, save_snapshot_cache};
+use crate::state::{PersistedState, StatePaths};
+#[cfg(any(feature = "managed", feature = "direct"))]
 use crate::stream::TUNNEL_STREAM_ALPN;
+#[cfg(feature = "managed")]
 use crate::sync::{
     apply_membership, membership_for_network, spawn_poll_fallback, spawn_ws_processor,
 };
+#[cfg(feature = "tunnel")]
 use crate::tunnel::TunnelManager;
 
 /// Callback when CP requests killing an SSH session (`session_id`).
 pub type KillSshHook = Arc<dyn Fn(&str) + Send + Sync>;
 
 /// Per-Direct-network runtime (docs + firewall + state).
+#[cfg(feature = "direct")]
 #[derive(Clone)]
 pub struct DirectNetworkRuntime {
     pub docs: DocsMembership,
@@ -88,14 +108,20 @@ pub struct CoreNode {
     pub version: Arc<ArcSwap<u64>>,
     pub self_ipv4: std::net::Ipv4Addr,
     pub paths: StatePaths,
+    #[cfg(feature = "serve")]
     pub serves: ServeManager,
+    #[cfg(feature = "tunnel")]
     pub tunnels: TunnelManager,
+    #[cfg(feature = "send")]
     pub send: SendManager,
     /// Present only in Managed mode.
+    #[cfg(feature = "managed")]
     pub signed: Option<SignedClient>,
     /// Direct-mode auth cache (None in Managed).
+    #[cfg(feature = "direct")]
     pub direct_auth: Option<AuthCache>,
     /// Per-network Direct runtime (empty in Managed).
+    #[cfg(feature = "direct")]
     pub direct: HashMap<Uuid, DirectNetworkRuntime>,
     /// Shared agent Gossip (Managed). Direct uses [`DocsMembership::gossip`] instead.
     pub gossip: Option<iroh_gossip::net::Gossip>,
@@ -103,27 +129,33 @@ pub struct CoreNode {
 
 impl CoreNode {
     /// First Direct network docs (compat helper).
+    #[cfg(feature = "direct")]
     pub fn docs(&self) -> Option<&DocsMembership> {
         self.direct.values().next().map(|r| &r.docs)
     }
 
     /// First Direct network firewall (compat helper).
+    #[cfg(feature = "direct")]
     pub fn firewall(&self) -> Option<&crate::direct::FirewallEngine> {
         self.direct.values().next().map(|r| &r.firewall)
     }
 
+    #[cfg(feature = "direct")]
     pub fn firewall_for(&self, network_id: Uuid) -> Option<&crate::direct::FirewallEngine> {
         self.direct.get(&network_id).map(|r| &r.firewall)
     }
 
+    #[cfg(feature = "direct")]
     pub fn docs_for(&self, network_id: Uuid) -> Option<&DocsMembership> {
         self.direct.get(&network_id).map(|r| &r.docs)
     }
 
+    #[cfg(feature = "direct")]
     pub fn spoof_tracker(&self) -> Option<&crate::direct::SpoofTracker> {
         self.direct.values().next().map(|r| &r.spoof_tracker)
     }
 
+    #[cfg(feature = "direct")]
     pub fn spoof_for(&self, network_id: Uuid) -> Option<&crate::direct::SpoofTracker> {
         self.direct.get(&network_id).map(|r| &r.spoof_tracker)
     }
@@ -137,17 +169,36 @@ impl CoreNode {
     ) -> anyhow::Result<Self> {
         match &persisted {
             PersistedState::Managed(m) => {
-                Self::bootstrap_managed(identity, persisted.clone(), m.clone(), paths, cfg).await
+                #[cfg(feature = "managed")]
+                {
+                    Self::bootstrap_managed(identity, persisted.clone(), m.clone(), paths, cfg)
+                        .await
+                }
+                #[cfg(not(feature = "managed"))]
+                {
+                    let _ = (&identity, &paths, &cfg, m);
+                    anyhow::bail!("managed mode requires the `managed` feature");
+                }
             }
             PersistedState::Direct { networks } => {
                 if networks.is_empty() {
                     anyhow::bail!("no Direct networks joined");
                 }
-                Self::bootstrap_direct(identity, persisted.clone(), paths, cfg).await
+                #[cfg(feature = "direct")]
+                {
+                    Self::bootstrap_direct(identity, persisted.clone(), paths, cfg).await
+                }
+                #[cfg(not(feature = "direct"))]
+                {
+                    let _ = (identity, paths, cfg);
+                    let _ = networks.len();
+                    anyhow::bail!("direct mode requires the `direct` feature");
+                }
             }
         }
     }
 
+    #[cfg(feature = "managed")]
     async fn bootstrap_managed(
         identity: AgentIdentity,
         persisted: PersistedState,
@@ -219,9 +270,12 @@ impl CoreNode {
             Err(_) => tracing::warn!("timed out waiting for relay; continuing"),
         }
 
+        #[cfg(feature = "serve")]
         let serves = ServeManager::new(membership.assigned_ipv4, routes.clone());
         let pool = ConnPool::new(endpoint.clone(), TUNNEL_STREAM_ALPN);
+        #[cfg(feature = "tunnel")]
         let tunnels = TunnelManager::new(pool.clone());
+        #[cfg(feature = "send")]
         let send = SendManager::open(
             paths.dir.join("blobs"),
             pool.clone(),
@@ -237,7 +291,9 @@ impl CoreNode {
             my_id_hex.clone(),
             identity.signing_key.clone(),
         );
+        #[cfg(feature = "serve")]
         serves.set_client_tx(ws.tx.clone());
+        #[cfg(feature = "send")]
         send.set_client_tx(ws.tx.clone());
         spawn_ws_processor(
             ws,
@@ -250,8 +306,11 @@ impl CoreNode {
             cfg.hostname.clone(),
             cfg.agent_version,
             Some(signed.clone()),
+            #[cfg(feature = "serve")]
             Some(serves.clone()),
+            #[cfg(feature = "tunnel")]
             Some(tunnels.clone()),
+            #[cfg(feature = "send")]
             Some(send.clone()),
             cfg.on_kill_ssh.clone(),
         );
@@ -287,16 +346,22 @@ impl CoreNode {
             version,
             self_ipv4: membership.assigned_ipv4,
             paths,
+            #[cfg(feature = "serve")]
             serves,
+            #[cfg(feature = "tunnel")]
             tunnels,
+            #[cfg(feature = "send")]
             send,
             signed: Some(signed),
+            #[cfg(feature = "direct")]
             direct_auth: None,
+            #[cfg(feature = "direct")]
             direct: HashMap::new(),
             gossip,
         })
     }
 
+    #[cfg(feature = "direct")]
     async fn bootstrap_direct(
         identity: AgentIdentity,
         persisted: PersistedState,
@@ -354,9 +419,11 @@ impl CoreNode {
             Err(_) => tracing::warn!("timed out waiting for relay; continuing"),
         }
 
+        #[cfg(feature = "serve")]
         let serves = ServeManager::new(self_ipv4, routes.clone());
         let pool = ConnPool::new(endpoint.clone(), TUNNEL_STREAM_ALPN);
         pool.set_keep_alive(cfg.keep_alive);
+        #[cfg(feature = "tunnel")]
         let tunnels = TunnelManager::new(pool.clone());
 
         let blobs_dir = paths.dir.join("blobs");
@@ -365,6 +432,7 @@ impl CoreNode {
             .await
             .map_err(|e| anyhow::anyhow!("open shared FsStore: {e}"))?;
 
+        #[cfg(feature = "send")]
         let send = SendManager::from_store(
             blobs.clone(),
             pool.clone(),
@@ -488,9 +556,13 @@ impl CoreNode {
             version,
             self_ipv4,
             paths,
+            #[cfg(feature = "serve")]
             serves,
+            #[cfg(feature = "tunnel")]
             tunnels,
+            #[cfg(feature = "send")]
             send,
+            #[cfg(feature = "managed")]
             signed: None,
             direct_auth: Some(auth),
             direct: direct_runtimes,
@@ -505,13 +577,21 @@ impl CoreNode {
         if let Some(g) = &self.gossip {
             return Some(g.clone());
         }
-        self.docs().map(|d| d.gossip())
+        #[cfg(feature = "direct")]
+        {
+            self.docs().map(|d| d.gossip())
+        }
+        #[cfg(not(feature = "direct"))]
+        {
+            None
+        }
     }
 
     pub fn endpoint_id_hex(&self) -> String {
         self.identity.endpoint_id_hex()
     }
 
+    #[cfg(feature = "managed")]
     pub fn require_signed(&self) -> anyhow::Result<&SignedClient> {
         self.signed.as_ref().context(
             "this operation requires Managed mode (control plane client unavailable in Direct)",
@@ -523,20 +603,30 @@ impl CoreNode {
     }
 }
 
+#[cfg(any(feature = "managed", feature = "direct"))]
 fn build_alpns(cfg: &CoreNodeConfig, direct: bool, enable_gossip: bool) -> Vec<Vec<u8>> {
     let mut alpns: Vec<Vec<u8>> = vec![TUNNEL_STREAM_ALPN.to_vec()];
     if cfg.advertise_datagram_alpn {
         alpns.push(TUNNEL_ALPN.to_vec());
     }
     if cfg.advertise_recording_alpn {
+        #[cfg(feature = "recording")]
         alpns.push(tunnet_common::RECORDING_ALPN.to_vec());
+        #[cfg(not(feature = "recording"))]
+        tracing::warn!("advertise_recording_alpn set but `recording` feature disabled");
     }
-    alpns.push(SEND_ALPN.to_vec());
-    alpns.push(iroh_blobs::ALPN.to_vec());
+    #[cfg(feature = "send")]
+    {
+        alpns.push(tunnet_common::SEND_ALPN.to_vec());
+        alpns.push(iroh_blobs::ALPN.to_vec());
+    }
     if direct {
-        alpns.push(AUTH_ALPN.to_vec());
-        alpns.push(iroh_gossip::ALPN.to_vec());
-        alpns.push(iroh_docs::ALPN.to_vec());
+        #[cfg(feature = "direct")]
+        {
+            alpns.push(AUTH_ALPN.to_vec());
+            alpns.push(iroh_gossip::ALPN.to_vec());
+            alpns.push(iroh_docs::ALPN.to_vec());
+        }
     } else if enable_gossip {
         alpns.push(iroh_gossip::ALPN.to_vec());
     }

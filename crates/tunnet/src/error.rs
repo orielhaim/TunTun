@@ -77,6 +77,7 @@ impl Error {
         Self::Internal(e.to_string())
     }
 
+    #[cfg(feature = "managed")]
     pub(crate) fn enrollment(e: impl fmt::Display) -> Self {
         Self::EnrollmentFailed(e.to_string())
     }

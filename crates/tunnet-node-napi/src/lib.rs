@@ -14,7 +14,7 @@ use tunnet_core::{
     AgentIdentity, CoreNode, CoreNodeConfig, PersistedState, StatePaths, stream::dial_stream,
 };
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use tunnet_core::coordinator::{self, Role, spawn_coord_server};
 
 #[napi(object)]
@@ -182,7 +182,7 @@ enum NodeInner {
         node: Arc<CoreNode>,
         _sock_path: PathBuf,
     },
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     Client {
         sock_path: PathBuf,
         _network_id: uuid::Uuid,
@@ -274,27 +274,23 @@ impl TunnetNode {
             });
         }
 
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         {
             let network_id = persisted
                 .primary_network_id()
                 .ok_or_else(|| Error::from_reason("no network id in persisted state"))?;
             match coordinator::acquire(network_id).await.map_err(err)? {
-                Role::Client {
-                    conn: _drop_conn,
-                    sock_path,
-                } => {
-                    // We just needed the connect to prove the coordinator is alive.
-                    // Real request/response cycles happen per-openStream.
-                    Ok(Self {
-                        inner: Arc::new(NodeInner::Client {
-                            sock_path,
-                            _network_id: network_id,
-                        }),
-                    })
-                }
+                Role::Client { sock_path } => Ok(Self {
+                    inner: Arc::new(NodeInner::Client {
+                        sock_path,
+                        _network_id: network_id,
+                    }),
+                }),
                 Role::Coordinator {
+                    #[cfg(unix)]
                     listener,
+                    #[cfg(windows)]
+                    pipe_name,
                     _lock,
                     sock_path,
                 } => {
@@ -318,7 +314,10 @@ impl TunnetNode {
                     // Keep lock alive alongside the node.
                     let lock_holder: Arc<coordinator::LockFile> = Arc::new(_lock);
                     std::mem::forget(lock_holder); // held for process lifetime
+                    #[cfg(unix)]
                     spawn_coord_server(listener, node.clone());
+                    #[cfg(windows)]
+                    spawn_coord_server(pipe_name, node.clone());
                     Ok(Self {
                         inner: Arc::new(NodeInner::Coordinator {
                             node,
@@ -328,9 +327,8 @@ impl TunnetNode {
                 }
             }
         }
-        #[cfg(not(unix))]
+        #[cfg(not(any(unix, windows)))]
         {
-            // TODO: named-pipe coordinator on Windows. For now, always solo.
             let node = CoreNode::bootstrap(
                 identity,
                 persisted,
@@ -362,7 +360,7 @@ impl TunnetNode {
     pub fn endpoint_id(&self) -> String {
         match &*self.inner {
             NodeInner::Coordinator { node, .. } => node.endpoint_id_hex(),
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             NodeInner::Client { .. } => String::new(),
         }
     }
@@ -388,12 +386,10 @@ impl TunnetNode {
                     tags: p.tags.clone(),
                 })
                 .collect()),
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             NodeInner::Client { sock_path, .. } => {
                 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-                let mut conn = tokio::net::UnixStream::connect(sock_path)
-                    .await
-                    .map_err(err_io)?;
+                let mut conn = coordinator::connect_client(sock_path).await.map_err(err)?;
                 let req = coordinator::ClientReq::ListPeers;
                 let mut buf = serde_json::to_vec(&req).map_err(err_json)?;
                 buf.push(b'\n');
@@ -433,12 +429,10 @@ impl TunnetNode {
                     .map_err(err)?;
                 Ok(TunnetStream::from_iroh(send, recv))
             }
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             NodeInner::Client { sock_path, .. } => {
                 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-                let mut conn = tokio::net::UnixStream::connect(sock_path)
-                    .await
-                    .map_err(err_io)?;
+                let mut conn = coordinator::connect_client(sock_path).await.map_err(err)?;
                 let req = coordinator::ClientReq::OpenStream { host, port };
                 let mut buf = serde_json::to_vec(&req).map_err(err_json)?;
                 buf.push(b'\n');
@@ -455,7 +449,7 @@ impl TunnetNode {
                         // drain into a leftover buffer.
                         let leftover = br.buffer().to_vec();
                         drop(br);
-                        Ok(TunnetStream::from_uds(conn, leftover))
+                        Ok(TunnetStream::from_local(conn, leftover))
                     }
                     coordinator::CoordResp::Error { message } => Err(Error::from_reason(message)),
                     _ => Err(Error::from_reason("unexpected coord response")),
@@ -471,7 +465,7 @@ impl TunnetNode {
             NodeInner::Coordinator { node, .. } => {
                 node.shutdown().await;
             }
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             NodeInner::Client { .. } => {}
         }
         Ok(())
@@ -541,7 +535,7 @@ impl TunnetNode {
     fn require_coordinator(&self) -> Result<&CoreNode> {
         match &*self.inner {
             NodeInner::Coordinator { node, .. } => Ok(node),
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             NodeInner::Client { .. } => Err(Error::from_reason(
                 "send APIs require the coordinator process (standalone or primary SDK node)",
             )),
@@ -659,10 +653,14 @@ impl TunnetStream {
         }
     }
 
-    #[cfg(unix)]
-    pub(crate) fn from_uds(sock: tokio::net::UnixStream, leftover: Vec<u8>) -> Self {
+    #[cfg(any(unix, windows))]
+    pub(crate) fn from_local(
+        #[cfg(unix)] sock: tokio::net::UnixStream,
+        #[cfg(windows)] sock: tokio::net::windows::named_pipe::NamedPipeClient,
+        leftover: Vec<u8>,
+    ) -> Self {
         Self {
-            inner: Arc::new(Mutex::new(duplex::Duplex::Uds { sock, leftover })),
+            inner: Arc::new(Mutex::new(duplex::Duplex::Local { sock, leftover })),
         }
     }
 
@@ -696,12 +694,12 @@ fn err(e: anyhow::Error) -> Error {
     Error::from_reason(format!("{e:#}"))
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn err_io(e: std::io::Error) -> Error {
     err(e.into())
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn err_json(e: serde_json::Error) -> Error {
     err(e.into())
 }

@@ -1,6 +1,6 @@
 [package]
 name = "tunnet"
-version = "0.1.0"
+version = "0.2.0"
 edition.workspace = true
 rust-version.workspace = true
 license = "Apache-2.0"
@@ -14,14 +14,14 @@ readme = "README.md"
 
 [features]
 default = ["managed"]
-managed = []
-direct = []
-send = []
-serve = []
+managed = ["tunnet-core/managed"]
+direct = ["tunnet-core/direct"]
+send = ["tunnet-core/send", "dep:iroh-blobs"]
+serve = ["tunnet-core/serve"]
 
 [dependencies]
-tunnet-common = { version = "0.6.0", path = "../tunnet-common" }
-tunnet-core = { version = "0.6.0", path = "../tunnet-core" }
+tunnet-common = { version = "0.7.0", path = "../tunnet-common" }
+tunnet-core = { version = "0.7.0", path = "../tunnet-core", default-features = false }
 
 tokio.workspace = true
 thiserror.workspace = true
@@ -31,8 +31,8 @@ serde_json.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 iroh.workspace = true
-iroh-blobs.workspace = true
 bytes.workspace = true
+iroh-blobs = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full", "macros", "rt-multi-thread"] }

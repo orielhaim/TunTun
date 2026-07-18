@@ -1,10 +1,12 @@
 //! One-shot enrollment into a Tunnet network.
 
+#[cfg(feature = "managed")]
 use tunnet_core::{AgentIdentity, ManagedState, PersistedState, StatePaths};
 
+#[cfg(feature = "managed")]
 use crate::error::{Error, Result};
 
-/// Configuration for [`enroll`].
+/// Configuration for enrollment ([`enroll`] when the `managed` feature is enabled).
 #[derive(Debug, Clone, Default)]
 pub struct EnrollConfig {
     /// Control plane base URL (required for token enrollment; also used when persisting managed state).

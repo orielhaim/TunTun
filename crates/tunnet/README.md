@@ -8,7 +8,7 @@ Embed a Tunnet mesh node inside any Rust application.
 
 ```toml
 [dependencies]
-tunnet = "0.1"
+tunnet = "0.2"
 tokio = { version = "1", features = ["full"] }
 ```
 

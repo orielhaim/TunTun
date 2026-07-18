@@ -23,7 +23,6 @@ impl Peer {
         }
     }
 
-    #[cfg(unix)]
     pub(crate) fn from_peer_lite(p: tunnet_core::coordinator::PeerLite) -> Self {
         Self {
             ip: p.ip,

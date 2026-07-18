@@ -9,9 +9,10 @@ use tunnet_core::{
     AgentIdentity, CoreNode, CoreNodeConfig, PersistedState, StatePaths, stream::dial_stream,
 };
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use tunnet_core::coordinator::{self, Role, spawn_coord_server};
 
+#[cfg(feature = "managed")]
 use crate::enroll::{EnrollConfig, enroll};
 use crate::error::{Error, Result};
 use crate::listener::{InboundConnection, StreamListener};
@@ -78,7 +79,7 @@ impl TunnetNodeBuilder {
         self
     }
 
-    /// When true, skip the Unix coordinator dance and always create a private endpoint.
+    /// When true, skip the coordinator dance and always create a private endpoint.
     pub fn standalone(mut self, standalone: bool) -> Self {
         self.standalone = standalone;
         self
@@ -111,7 +112,7 @@ impl TunnetNodeBuilder {
 /// A handle to the local overlay.
 ///
 /// Depending on whether this process won the coordinator race, this is either a full
-/// coordinator (owning the iroh endpoint) or a lightweight Unix client relaying via UDS.
+/// coordinator (owning the iroh endpoint) or a lightweight client relaying via UDS / named pipe.
 pub struct TunnetNode {
     inner: Arc<NodeInner>,
 }
@@ -122,7 +123,7 @@ enum NodeInner {
         listener_rx: Mutex<Option<mpsc::Receiver<InboundConnection>>>,
         _sock_path: PathBuf,
     },
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     Client {
         sock_path: PathBuf,
         _network_id: uuid::Uuid,
@@ -216,7 +217,7 @@ impl TunnetNode {
             .await;
         }
 
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         {
             let network_id = persisted
                 .primary_network_id()
@@ -225,11 +226,8 @@ impl TunnetNode {
                 .await
                 .map_err(Error::from_anyhow)?
             {
-                Role::Client {
-                    conn: _drop_conn,
-                    sock_path,
-                } => {
-                    // Coordinator owns the endpoint; this process is a thin UDS client.
+                Role::Client { sock_path } => {
+                    // Coordinator owns the endpoint; this process is a thin IPC client.
                     drop((identity, persisted, paths, core_cfg));
                     Ok(Self {
                         inner: Arc::new(NodeInner::Client {
@@ -239,7 +237,10 @@ impl TunnetNode {
                     })
                 }
                 Role::Coordinator {
+                    #[cfg(unix)]
                     listener,
+                    #[cfg(windows)]
+                    pipe_name,
                     _lock,
                     sock_path,
                 } => {
@@ -254,15 +255,17 @@ impl TunnetNode {
                     if let NodeInner::Coordinator { node: core, .. } = &*node.inner {
                         let lock_holder: Arc<coordinator::LockFile> = Arc::new(_lock);
                         std::mem::forget(lock_holder);
+                        #[cfg(unix)]
                         spawn_coord_server(listener, core.clone());
+                        #[cfg(windows)]
+                        spawn_coord_server(pipe_name, core.clone());
                     }
                     Ok(node)
                 }
             }
         }
-        #[cfg(not(unix))]
+        #[cfg(not(any(unix, windows)))]
         {
-            // TODO: named-pipe coordinator on Windows. For now, always solo.
             Self::bootstrap_coordinator(identity, persisted, paths, core_cfg, PathBuf::new()).await
         }
     }
@@ -289,11 +292,11 @@ impl TunnetNode {
         })
     }
 
-    /// Our own endpoint id (hex). Empty string in Unix client mode.
+    /// Our own endpoint id (hex). Empty string in client mode.
     pub fn endpoint_id(&self) -> String {
         match &*self.inner {
             NodeInner::Coordinator { node, .. } => node.endpoint_id_hex(),
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             NodeInner::Client { .. } => String::new(),
         }
     }
@@ -302,7 +305,7 @@ impl TunnetNode {
     pub fn self_ip(&self) -> Option<Ipv4Addr> {
         match &*self.inner {
             NodeInner::Coordinator { node, .. } => Some(node.self_ipv4),
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             NodeInner::Client { .. } => None,
         }
     }
@@ -321,10 +324,12 @@ impl TunnetNode {
                 .into_iter()
                 .map(|p| Peer::from_peer_info(p.as_ref()))
                 .collect()),
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             NodeInner::Client { sock_path, .. } => {
                 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-                let mut conn = tokio::net::UnixStream::connect(sock_path).await?;
+                let mut conn = coordinator::connect_client(sock_path)
+                    .await
+                    .map_err(Error::from_anyhow)?;
                 let req = coordinator::ClientReq::ListPeers;
                 let mut buf = serde_json::to_vec(&req).map_err(Error::from_anyhow)?;
                 buf.push(b'\n');
@@ -358,10 +363,12 @@ impl TunnetNode {
                     .map_err(Error::stream)?;
                 Ok(TunnetStream::from_iroh(send, recv))
             }
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             NodeInner::Client { sock_path, .. } => {
                 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-                let mut conn = tokio::net::UnixStream::connect(sock_path).await?;
+                let mut conn = coordinator::connect_client(sock_path)
+                    .await
+                    .map_err(Error::from_anyhow)?;
                 let req = coordinator::ClientReq::OpenStream {
                     host: host.to_string(),
                     port,
@@ -379,7 +386,7 @@ impl TunnetNode {
                     coordinator::CoordResp::Ready => {
                         let leftover = br.buffer().to_vec();
                         drop(br);
-                        Ok(TunnetStream::from_uds(conn, leftover))
+                        Ok(TunnetStream::from_local(conn, leftover))
                     }
                     coordinator::CoordResp::Error { message } => Err(Error::stream(message)),
                     _ => Err(Error::Internal("unexpected coord response".into())),
@@ -390,7 +397,7 @@ impl TunnetNode {
 
     /// Take the inbound stream listener (once).
     ///
-    /// Returns [`Error::ListenerUnavailable`] in Unix client mode and
+    /// Returns [`Error::ListenerUnavailable`] in client mode and
     /// [`Error::ListenerTaken`] if already taken.
     pub async fn stream_listener(&self) -> Result<StreamListener> {
         match &*self.inner {
@@ -399,7 +406,7 @@ impl TunnetNode {
                 let rx = guard.take().ok_or(Error::ListenerTaken)?;
                 Ok(StreamListener::new(rx))
             }
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             NodeInner::Client { .. } => Err(Error::ListenerUnavailable),
         }
     }
@@ -410,7 +417,7 @@ impl TunnetNode {
             NodeInner::Coordinator { node, .. } => {
                 node.shutdown().await;
             }
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             NodeInner::Client { .. } => {}
         }
     }
@@ -419,7 +426,7 @@ impl TunnetNode {
     pub(crate) fn require_coordinator(&self) -> Result<&CoreNode> {
         match &*self.inner {
             NodeInner::Coordinator { node, .. } => Ok(node),
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             NodeInner::Client { .. } => Err(Error::CoordinatorRequired("send APIs")),
         }
     }
@@ -428,7 +435,7 @@ impl TunnetNode {
     pub(crate) fn require_coordinator_serve(&self) -> Result<&CoreNode> {
         match &*self.inner {
             NodeInner::Coordinator { node, .. } => Ok(node),
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             NodeInner::Client { .. } => Err(Error::CoordinatorRequired("serve APIs")),
         }
     }
@@ -500,6 +507,7 @@ impl TunnetNode {
 
     /// Start a TCP or TLS reverse proxy on the mesh IP.
     #[cfg(feature = "serve")]
+    #[allow(clippy::too_many_arguments)]
     pub async fn serve(
         &self,
         id: impl Into<String>,
@@ -561,6 +569,7 @@ fn resolve_peer(node: &CoreNode, host: &str) -> Option<Arc<tunnet_core::PeerInfo
 
 fn spawn_stream_acceptor(node: Arc<CoreNode>, inbound_tx: mpsc::Sender<InboundConnection>) {
     let ep = node.endpoint.clone();
+    #[cfg(feature = "send")]
     let send_mgr = node.send.clone();
     let routes = node.routes.clone();
     let handler: tunnet_core::stream::StreamHandler = Arc::new(move |accepted| {
@@ -586,6 +595,7 @@ fn spawn_stream_acceptor(node: Arc<CoreNode>, inbound_tx: mpsc::Sender<InboundCo
         tracing::info!("SDK unified ALPN acceptor started");
         while let Some(incoming) = ep.accept().await {
             let handler = handler.clone();
+            #[cfg(feature = "send")]
             let send_mgr = send_mgr.clone();
             tokio::spawn(async move {
                 let conn = match incoming.await {
@@ -598,10 +608,15 @@ fn spawn_stream_acceptor(node: Arc<CoreNode>, inbound_tx: mpsc::Sender<InboundCo
                 let alpn = conn.alpn();
                 if alpn == tunnet_core::TUNNEL_STREAM_ALPN {
                     tunnet_core::serve_stream_connection(conn, handler).await;
-                } else if alpn == tunnet_common::SEND_ALPN {
-                    send_mgr.handle_offer_connection(conn).await;
-                } else if alpn == iroh_blobs::ALPN {
-                    send_mgr.handle_blobs_connection(conn).await;
+                } else {
+                    #[cfg(feature = "send")]
+                    {
+                        if alpn == tunnet_common::SEND_ALPN {
+                            send_mgr.handle_offer_connection(conn).await;
+                        } else if alpn == iroh_blobs::ALPN {
+                            send_mgr.handle_blobs_connection(conn).await;
+                        }
+                    }
                 }
             });
         }

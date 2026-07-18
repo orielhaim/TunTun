@@ -13,7 +13,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.6.0"
+version = "0.7.0"
 edition = "2024"
 rust-version = "1.96"
 license = "Apache-2.0"
@@ -118,9 +118,9 @@ napi-derive = "3"
 napi-build = "2"
 
 # Local
-tunnet-common = { version = "0.6.0", path = "crates/tunnet-common" }
-tunnet-core = { version = "0.6.0", path = "crates/tunnet-core" }
-tunnet = { version = "0.1.0", path = "crates/tunnet" }
+tunnet-common = { version = "0.7.0", path = "crates/tunnet-common" }
+tunnet-core = { version = "0.7.0", path = "crates/tunnet-core" }
+tunnet = { version = "0.2.0", path = "crates/tunnet" }
 
 # Kubernetes operator
 kube = { version = "4.0.0", default-features = false, features = [

@@ -12,12 +12,23 @@ keywords = ["tunnet", "mesh", "vpn", "p2p", "iroh"]
 categories = ["network-programming"]
 readme = "README.md"
 
+[features]
+default = ["managed", "direct", "send", "serve", "tunnel", "dns", "recording", "ipc"]
+managed = ["dep:tokio-tungstenite"]
+direct = ["dep:iroh-docs", "dep:iroh-blobs", "dep:mainline", "dep:iroh-mdns-address-lookup", "dep:mdns-sd", "dep:bs58"]
+send = ["dep:iroh-blobs"]
+serve = ["dep:rustls", "dep:tokio-rustls", "dep:rustls-pemfile"]
+tunnel = []
+dns = ["dep:hickory-proto"]
+recording = []
+ipc = []
+
 [dependencies]
 tunnet-common.workspace = true
 
 tokio.workspace = true
 tokio-util.workspace = true
-tokio-tungstenite.workspace = true
+tokio-tungstenite = { workspace = true, optional = true }
 futures-util.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
@@ -37,27 +48,27 @@ uuid.workspace = true
 rand.workspace = true
 ed25519-dalek.workspace = true
 ipnet.workspace = true
-hickory-proto.workspace = true
+hickory-proto = { workspace = true, optional = true }
 
 iroh.workspace = true
 iroh-gossip.workspace = true
-iroh-blobs.workspace = true
-iroh-docs.workspace = true
+iroh-blobs = { workspace = true, optional = true }
+iroh-docs = { workspace = true, optional = true }
 
 hmac.workspace = true
 sha2.workspace = true
 blake3.workspace = true
 toml.workspace = true
-bs58.workspace = true
-iroh-mdns-address-lookup.workspace = true
-mainline = "7"
+bs58 = { workspace = true, optional = true }
+iroh-mdns-address-lookup = { workspace = true, optional = true }
+mainline = { version = "7", optional = true }
 
-rustls.workspace = true
-tokio-rustls.workspace = true
-rustls-pemfile.workspace = true
+rustls = { workspace = true, optional = true }
+tokio-rustls = { workspace = true, optional = true }
+rustls-pemfile = { workspace = true, optional = true }
 aes-gcm = "0.10"
 zeroize = { version = "1.9.0", features = ["std", "derive"] }
-mdns-sd = "0.20.1"
+mdns-sd = { version = "0.20.1", optional = true }
 
 [dev-dependencies]
 tempfile = "3"
@@ -72,4 +83,5 @@ security-framework = "3"
 windows = { version = "0.61", features = [
   "Win32_Foundation",
   "Win32_Security_Cryptography",
+  "Win32_System_Threading",
 ] }

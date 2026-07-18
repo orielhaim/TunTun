@@ -92,9 +92,9 @@ pub fn spawn_ws_processor(
     self_hostname: String,
     agent_version: &'static str,
     poll_client: Option<SignedClient>,
-    serves: Option<crate::serve::ServeManager>,
-    tunnels: Option<crate::tunnel::TunnelManager>,
-    send: Option<crate::send::SendManager>,
+    #[cfg(feature = "serve")] serves: Option<crate::serve::ServeManager>,
+    #[cfg(feature = "tunnel")] tunnels: Option<crate::tunnel::TunnelManager>,
+    #[cfg(feature = "send")] send: Option<crate::send::SendManager>,
     on_kill_ssh: Option<crate::node::KillSshHook>,
 ) {
     tokio::spawn(async move {
@@ -176,6 +176,7 @@ pub fn spawn_ws_processor(
                                 }
                             }
                         }
+                        #[cfg(feature = "serve")]
                         ServerMsg::StartServe {
                             serve_id,
                             port,
@@ -229,6 +230,18 @@ pub fn spawn_ws_processor(
                                 }
                             }
                         }
+                        #[cfg(not(feature = "serve"))]
+                        ServerMsg::StartServe { serve_id, .. } => {
+                            tracing::warn!(%serve_id, "StartServe ignored (`serve` feature disabled)");
+                            let _ = ws
+                                .tx
+                                .send(ClientMsg::ServeFailed {
+                                    serve_id,
+                                    error: "serve feature disabled".into(),
+                                })
+                                .await;
+                        }
+                        #[cfg(feature = "serve")]
                         ServerMsg::StopServe { serve_id } => {
                             if let Some(mgr) = &serves {
                                 let port = mgr
@@ -242,6 +255,12 @@ pub fn spawn_ws_processor(
                             }
                             let _ = ws.tx.send(ClientMsg::ServeStopped { serve_id }).await;
                         }
+                        #[cfg(not(feature = "serve"))]
+                        ServerMsg::StopServe { serve_id } => {
+                            tracing::warn!(%serve_id, "StopServe ignored (`serve` feature disabled)");
+                            let _ = ws.tx.send(ClientMsg::ServeStopped { serve_id }).await;
+                        }
+                        #[cfg(feature = "tunnel")]
                         ServerMsg::OpenTunnel {
                             tunnel_id,
                             relay_addr,
@@ -292,10 +311,27 @@ pub fn spawn_ws_processor(
                                 }
                             }
                         }
+                        #[cfg(not(feature = "tunnel"))]
+                        ServerMsg::OpenTunnel { tunnel_id, .. } => {
+                            tracing::warn!(%tunnel_id, "OpenTunnel ignored (`tunnel` feature disabled)");
+                            let _ = ws
+                                .tx
+                                .send(ClientMsg::TunnelFailed {
+                                    tunnel_id,
+                                    error: "tunnel feature disabled".into(),
+                                })
+                                .await;
+                        }
+                        #[cfg(feature = "tunnel")]
                         ServerMsg::StopTunnel { tunnel_id } => {
                             if let Some(mgr) = &tunnels {
                                 let _ = mgr.stop(&tunnel_id);
                             }
+                            let _ = ws.tx.send(ClientMsg::TunnelStopped { tunnel_id }).await;
+                        }
+                        #[cfg(not(feature = "tunnel"))]
+                        ServerMsg::StopTunnel { tunnel_id } => {
+                            tracing::warn!(%tunnel_id, "StopTunnel ignored (`tunnel` feature disabled)");
                             let _ = ws.tx.send(ClientMsg::TunnelStopped { tunnel_id }).await;
                         }
                         ServerMsg::KillSshSession { session_id } => {
@@ -306,6 +342,7 @@ pub fn spawn_ws_processor(
                                 tracing::warn!(%session_id, "KillSshSession ignored (no hook)");
                             }
                         }
+                        #[cfg(feature = "send")]
                         ServerMsg::SendFile {
                             transfer_id,
                             path,
@@ -340,6 +377,19 @@ pub fn spawn_ws_processor(
                                 }
                             }
                         }
+                        #[cfg(not(feature = "send"))]
+                        ServerMsg::SendFile { transfer_id, .. } => {
+                            tracing::warn!(%transfer_id, "SendFile ignored (`send` feature disabled)");
+                            let _ = ws
+                                .tx
+                                .send(ClientMsg::TransferFailed {
+                                    transfer_id,
+                                    error: "send feature disabled".into(),
+                                    rejected: false,
+                                })
+                                .await;
+                        }
+                        #[cfg(feature = "send")]
                         ServerMsg::AcceptTransfer { transfer_id } => {
                             if let Some(mgr) = &send
                                 && let Err(e) = mgr.accept_pending(&transfer_id).await
@@ -347,6 +397,11 @@ pub fn spawn_ws_processor(
                                 tracing::warn!(?e, %transfer_id, "AcceptTransfer failed");
                             }
                         }
+                        #[cfg(not(feature = "send"))]
+                        ServerMsg::AcceptTransfer { transfer_id } => {
+                            tracing::warn!(%transfer_id, "AcceptTransfer ignored (`send` feature disabled)");
+                        }
+                        #[cfg(feature = "send")]
                         ServerMsg::RejectTransfer {
                             transfer_id,
                             reason,
@@ -357,6 +412,11 @@ pub fn spawn_ws_processor(
                                 tracing::warn!(?e, %transfer_id, "RejectTransfer failed");
                             }
                         }
+                        #[cfg(not(feature = "send"))]
+                        ServerMsg::RejectTransfer { transfer_id, .. } => {
+                            tracing::warn!(%transfer_id, "RejectTransfer ignored (`send` feature disabled)");
+                        }
+                        #[cfg(feature = "send")]
                         ServerMsg::SetSendConsent {
                             mode,
                             inbox_path,
@@ -376,6 +436,10 @@ pub fn spawn_ws_processor(
                                 mgr.set_config(cfg);
                                 tracing::info!(%mode, "SetSendConsent applied");
                             }
+                        }
+                        #[cfg(not(feature = "send"))]
+                        ServerMsg::SetSendConsent { mode, .. } => {
+                            tracing::warn!(%mode, "SetSendConsent ignored (`send` feature disabled)");
                         }
                     }
                 }
