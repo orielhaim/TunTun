@@ -4,186 +4,97 @@
 [![badge](https://shieldcn.dev/badge/Read%20the%20Docs-abcde3.svg?variant=ghost&logo=readthedocs)](https://docs.tunnet.io)
 [![badge](https://shieldcn.dev/badge/Join%20Discord.svg?brand=discord)](https://discord.gg/y5bNc3MYKz)
 
-Tunnet connects your machines into a private network. Install an agent on each device and it gets an internal IP address. After that, ordinary tools just work: SSH, ping, curl, a browser pointed at an internal service. You do not need to teach every application about tunnels or VPNs. The network is the network.
+**Open-source private mesh networking.** Connect machines into one encrypted network - then SSH, serve internal apps, publish public tunnels, transfer files, and wire Kubernetes into the same fabric. One identity. One policy engine. One stack you can fully self-host.
 
-Everything is open source. Not just the agent - the control plane, the management API, the dashboard, the relay infrastructure. You can read every line, self-host the entire stack, and know exactly what your network is doing.
+[Documentation](https://docs.tunnet.io) · [Discord](https://discord.gg/y5bNc3MYKz) · [GitHub](https://github.com/tunnetio/Tunnet)
 
-## What Tunnet does
+## Why Tunnet
 
-Tunnet is not a single tool. It is a collection of networking primitives under one identity system and one access policy engine.
+Commercial mesh products are excellent but most of them keep the coordination server closed. Tunnet ships the **agent, control plane, management API, dashboard, and relays** in this repository. You can read every line, self-host everything, and never depend on a proprietary coordination service or a lagging third-party reimplementation.
 
-**Mesh network** - Encrypted peer-to-peer connectivity over QUIC (iroh). Machines get mesh IPs, resolve each other by hostname via PeerDNS, and communicate directly. Subnet routes expose devices without agents. Exit nodes route internet traffic through a chosen peer. This is the Tailscale / NetBird / Cloudflare WARP competitor.
+You also get more than a VPN. Instead of stitching Tailscale + ngrok + scp + a bastion, Tunnet puts mesh, public tunnels, internal services, file transfer, identity SSH, and Kubernetes under **one identity and one ACL system**.
 
-**Serve** - Expose a local port to other machines on your mesh with an internal hostname and TLS from your org's CA. ACLs restrict who can reach it. This competes with Cloudflare Access and Tailscale Serve.
+## What you get
 
-**Tunnel** - Give a local port a public HTTPS URL through a self-hosted relay. Webhooks, demos, permanent services - no inbound firewall rules. Path-based redirects and TCP port mappings included. This is the ngrok and Cloudflare Tunnel competitor.
+| Capability | What it replaces | Docs |
+| --- | --- | --- |
+| **Mesh network** | Tailscale, NetBird, Cloudflare WARP | [Mesh](https://docs.tunnet.io/products/mesh/) |
+| **Serve** | Cloudflare Access / Tailscale Serve | [Serve](https://docs.tunnet.io/products/serve/) |
+| **Tunnel** | ngrok, Cloudflare Tunnel | [Tunnel](https://docs.tunnet.io/products/tunnel/) |
+| **Send** | Taildrop / ad-hoc file hops | [Send](https://docs.tunnet.io/products/send/) |
+| **SSH** | Key distribution + bastions | [SSH](https://docs.tunnet.io/products/ssh/) |
+| **Self-hosted relay** | Vendor edge networks | [Relay](https://docs.tunnet.io/products/relay/) |
+| **Kubernetes operator** | Custom VPN + Ingress glue | [Kubernetes](https://docs.tunnet.io/integrations/kubernetes/) |
+| **Node / Rust SDKs** | Embedding tunnels in apps | [SDK](https://docs.tunnet.io/sdk/) |
 
-**Send** - Transfer files and directories peer-to-peer over the mesh. BLAKE3-verified via iroh-blobs, consent-based, with multicast to tagged machines.
+### Mesh that feels like a LAN
 
-**SSH** - Identity-based SSH to peers with no keys to distribute. Auth tied to Tunnet identity and organization policies. Session recording, re-auth enforcement, and full audit trails.
+Each enrolled machine gets an overlay IP and a hostname. Ordinary tools (`ping`, `curl`, `ssh`, browsers) just work. PeerDNS, subnet routes, exit nodes, and HA gateways are built in.
 
-**Relay** - Self-hosted edge servers for public tunnels. ACME support, bring your own certs, full control over your tunnel infrastructure.
+### Kubernetes on the mesh
 
-## Two modes
+The Tunnet Operator connects a cluster to your network with CRDs: advertise cluster CIDRs, publish Services to peers (`TunnetIngress`), expose public HTTPS (`TunnetTunnel`), reach mesh hosts from inside the cluster (`TunnetEgress`), and optionally inject sidecars. Same Serve/Tunnel products you already use - native to Kubernetes.
 
-Tunnet operates in two modes for fundamentally different audiences.
+[Kubernetes integration](https://docs.tunnet.io/integrations/kubernetes/)
 
-**Managed mode** is for organizations. It includes a control plane, management API, web dashboard, SSO/OIDC, centralized access policies, audit logs, tunnel and relay infrastructure, SSH session recording, and a REST API with API key support.
+### Embed Tunnet in your apps
 
-**Direct mode** is for individuals and small groups who want zero infrastructure. It creates a P2P mesh where membership is stored in an iroh-docs CRDT, peer discovery uses the Mainline DHT, and transport auth proves knowledge of a pre-shared key. No server needed.
+Ship a mesh node inside the process. No separate agent required for app-to-app traffic:
 
-When you outgrow Direct mode, `tunnet upgrade-to-managed` migrates your network to the full control plane without losing connectivity.
+- **Node.js / Bun** - [`@tunnet/sdk`](https://docs.tunnet.io/sdk/js/)
+- **Rust** - [`tunnet` on crates.io](https://docs.tunnet.io/sdk/rust/)
 
-## Quick start
+Open streams to peers, accept inbound connections, transfer files, and compose with your existing HTTP stack.
 
-### Install the agent
+### Two modes, one product
 
-**Linux / macOS**
+- **Managed** - control plane, dashboard, SSO/OIDC, centralized policies, audit, tunnels, SSH recording. Built for teams.
+- **Direct** - zero-server P2P mesh for individuals and small groups.
+
+[Managed](https://docs.tunnet.io/modes/managed/) · [Direct](https://docs.tunnet.io/modes/direct/)
+
+## How Tunnet compares
+
+| | Tunnet | Tailscale | ngrok | Cloudflare |
+| --- | --- | --- | --- | --- |
+| Mesh VPN | Yes | Yes | No | Yes (Mesh) |
+| Open control plane | **Yes** | No | No | No |
+| Public tunnels | Yes | Funnel | Yes | Yes (Tunnel) |
+| Internal services (Serve) | Yes | Serve | No | Access |
+| P2P file transfer | Yes | Taildrop | No | No |
+| Identity SSH + recording | Yes | Yes | No | Yes (browser) |
+| Self-hosted relay | Yes | DERP (self-hostable) | No | No |
+| Serverless P2P mode | **Direct** | No | No | No |
+| Kubernetes operator | Yes | Yes | Yes | Community¹ |
+| Embeddable SDKs | JS, Rust | Go, C | Go, Rust, Python, JS, Java | No² |
+| License | AGPL-3.0 | Proprietary | Proprietary | Proprietary |
+
+> ¹ Cloudflare has official K8s deployment guides for Tunnel but the operators are community-maintained.
+> ² Cloudflare offers API SDKs (Go, TS, Python) but no embeddable tunnel SDK.
+
+Honest caveat: Tailscale and Cloudflare are more mature in enterprise polish and battle-tested scale. Tunnet’s bet is **full openness + one integrated stack**. Details: [Comparison guide](https://docs.tunnet.io/guide/comparison).
+
+## Get started
+
+| Path | Link |
+| --- | --- |
+| Install the agent | [Installation](https://docs.tunnet.io/guide/installation) |
+| Managed quick start | [Quick start (Managed)](https://docs.tunnet.io/guide/quickstart-managed) |
+| Direct quick start | [Quick start (Direct)](https://docs.tunnet.io/guide/quickstart-direct) |
+| Self-host the stack | [Self-hosting](https://docs.tunnet.io/self-hosting/) |
+| CLI reference | [CLI](https://docs.tunnet.io/cli/) |
+| Full docs | [docs.tunnet.io](https://docs.tunnet.io) |
 
 ```bash
+# Linux / macOS
 curl -fsSL https://github.com/tunnetio/Tunnet/releases/latest/download/install.sh | sh
 ```
 
-**Windows** (PowerShell as Administrator)
-
 ```powershell
+# Windows (PowerShell as Administrator)
 irm https://github.com/tunnetio/Tunnet/releases/latest/download/install.ps1 | iex
 ```
 
-Verify with `tunnet --version`. Later upgrades: `tunnet update`.
-
-### Managed mode
-
-```bash
-# Start the stack (from a Tunnet checkout)
-docker compose up -d
-
-# Or run manually:
-#   ./target/release/tunnet-control
-#   bun run management:start
-#   bun run dash:build
-#   bun run dash:preview
-```
-
-Open the dashboard at `http://localhost:5173`. Create an account and organization. Generate an enrollment token.
-
-```bash
-# On each machine
-sudo tunnet enroll --control-url http://your-host:8080 --token TOKEN
-sudo tunnet service start
-```
-
-### Direct mode
-
-```bash
-# Machine A - create a network
-sudo tunnet create --name my-net --secret "a-strong-passphrase"
-sudo tunnet service start
-
-# Generate an invite
-tunnet invite --name my-net
-
-# Machine B - join
-sudo tunnet join <INVITE_CODE>
-sudo tunnet service start
-```
-
-### Verify
-
-```bash
-tunnet status --peers
-tunnet ping other-machine
-```
-
-## Features at a glance
-
-```bash
-# Mesh
-tunnet status --peers          # Network overview
-tunnet ping <peer>             # Mesh RTT
-tunnet dns status              # PeerDNS resolver state
-tunnet route list              # Subnet / hostname / exit routes
-tunnet route add 192.168.1.0/24  # Advertise a LAN
-tunnet diag                    # Full diagnostics
-tunnet netcheck                # Quick connectivity check
-tunnet update                  # Upgrade from GitHub Releases
-tunnet update --check          # Check for a newer release
-
-# Serve - internal services
-tunnet serve 3000              # Expose to mesh with TLS
-tunnet serve status
-tunnet serve off 3000
-
-# Tunnel - public endpoints
-tunnet tunnel 3000             # Public HTTPS via relay
-tunnet tunnel status
-tunnet tunnel off 3000
-
-# Send - file transfer
-tunnet send ./data.tar.gz db-server
-tunnet send ./build tag:ci     # Multicast to tagged machines
-tunnet send list               # Pending offers
-tunnet send accept <id>
-tunnet send config --consent auto_accept
-
-# SSH - identity-based
-tunnet ssh db-server
-tunnet ssh db-server -u root
-tunnet ssh db-server -- uname -a
-tunnet ssh sessions
-tunnet ssh recordings
-tunnet ssh play <session_id>
-
-# Direct mode
-tunnet create --name net --secret "pass"
-tunnet join <INVITE_CODE>
-tunnet invite --name net
-tunnet connect --name session --secret "shared"
-tunnet requests / accept / deny / kick
-tunnet firewall list / add / remove
-tunnet upgrade-to-managed
-
-# Service management
-tunnet service install / start / stop / restart / status
-
-# Auth
-tunnet login --management-url http://localhost:3000
-tunnet logout
-```
-
-## Node SDK
-
-```bash
-bun add @tunnet/sdk
-```
-
-```ts
-import { TunnetNode } from "@tunnet/sdk";
-
-const node = await TunnetNode.create({ controlUrl: "http://control:8080" });
-
-const peers = await node.listPeers();
-const stream = await node.openStream("api-server", 8080);
-const response = await node.fetch("http://api-server:3000/health");
-await node.sendFile("./data.csv", "db-server", "daily export");
-await node.close();
-```
-
-## Relays
-
-Self-host your own public tunnel edge:
-
-```bash
-tunnet-relay register --control-url http://control:8080 --token TOKEN
-tunnet-relay run
-```
-
-Point DNS at the relay, configure ACME or bring your own certificates, and create tunnels with `tunnet tunnel` or from the dashboard. See `tunnet-relay --help` for all options.
-
-## Requirements
-
-Rust 1.96+, Bun, and PostgreSQL. The agent needs root/admin privileges to create a TUN interface (Linux and macOS require root; Windows requires Administrator with the Wintun driver installed).
-
 ## License
 
-AGPL-3.0. See [LICENSE](LICENSE) for details. Commercial licenses are available for use cases where the AGPL does not fit.
+AGPL-3.0. See [LICENSE](LICENSE). Commercial licenses are available when AGPL does not fit - see [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md).
