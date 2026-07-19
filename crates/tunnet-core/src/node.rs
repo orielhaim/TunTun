@@ -154,6 +154,9 @@ pub struct CoreNode {
     /// Present only in Managed mode.
     #[cfg(feature = "managed")]
     pub signed: Option<SignedClient>,
+    /// Live control-plane WebSocket status (Managed only).
+    #[cfg(feature = "managed")]
+    pub control_link: Option<crate::ws_client::ControlPlaneLink>,
     /// Direct-mode auth cache (None in Managed).
     #[cfg(feature = "direct")]
     pub direct_auth: Option<AuthCache>,
@@ -344,6 +347,7 @@ impl CoreNode {
             my_id_hex.clone(),
             identity.signing_key.clone(),
         );
+        let control_link = Some(ws.link.clone());
         #[cfg(feature = "serve")]
         serves.set_client_tx(ws.tx.clone());
         #[cfg(feature = "send")]
@@ -408,6 +412,7 @@ impl CoreNode {
             #[cfg(feature = "send")]
             send,
             signed: Some(signed),
+            control_link,
             #[cfg(feature = "direct")]
             direct_auth: None,
             #[cfg(feature = "direct")]
@@ -619,6 +624,8 @@ impl CoreNode {
             send,
             #[cfg(feature = "managed")]
             signed: None,
+            #[cfg(feature = "managed")]
+            control_link: None,
             direct_auth: Some(auth),
             direct: direct_runtimes,
             // Direct features use DocsMembership::gossip() (primary network).

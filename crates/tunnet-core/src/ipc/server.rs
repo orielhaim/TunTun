@@ -905,6 +905,26 @@ fn build_status(state: &AgentIpcState, include_peers: bool) -> StatusInfo {
             .persisted
             .as_managed()
             .map(|m| m.control_url.clone()),
+        control: {
+            #[cfg(feature = "managed")]
+            {
+                state.node.control_link.as_ref().map(|link| {
+                    let s = link.snapshot();
+                    super::protocol::ControlPlaneStatusInfo {
+                        url: s.url,
+                        connected: s.connected,
+                        connected_for_secs: s.connected_for_secs,
+                        last_change_secs_ago: s.last_change_secs_ago,
+                        reconnects: s.reconnects,
+                        last_error: s.last_error,
+                    }
+                })
+            }
+            #[cfg(not(feature = "managed"))]
+            {
+                None
+            }
+        },
     }
 }
 

@@ -1,9 +1,12 @@
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, SystemTime};
 
 use anyhow::Context;
 use chrono::Utc;
 use ed25519_dalek::SigningKey;
 use futures_util::{SinkExt, StreamExt};
+use parking_lot::Mutex;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tunnet_common::{
@@ -22,22 +25,134 @@ const KEEP_ALIVE_SECS: u64 = 5;
 /// Wall-clock gap while connected that forces a reconnect (VM suspend/resume).
 const CONNECTED_RESUME_GAP: Duration = Duration::from_secs(15);
 
+fn now_unix_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// Live WebSocket link to the control plane (Managed mode).
+#[derive(Clone)]
+pub struct ControlPlaneLink {
+    inner: Arc<ControlPlaneLinkInner>,
+}
+
+struct ControlPlaneLinkInner {
+    url: String,
+    connected: AtomicBool,
+    /// Unix ms when the current session started; 0 if disconnected.
+    connected_since_ms: AtomicU64,
+    /// Unix ms of last connect/disconnect/error.
+    last_change_ms: AtomicU64,
+    reconnects: AtomicU64,
+    last_error: Mutex<Option<String>>,
+}
+
+/// Snapshot for IPC / CLI status.
+#[derive(Debug, Clone)]
+pub struct ControlPlaneLinkSnapshot {
+    pub url: String,
+    pub connected: bool,
+    /// Seconds the current WS session has been up (None if disconnected).
+    pub connected_for_secs: Option<u64>,
+    /// Seconds since last connect/disconnect/error event.
+    pub last_change_secs_ago: Option<u64>,
+    pub reconnects: u64,
+    pub last_error: Option<String>,
+}
+
+impl ControlPlaneLink {
+    pub fn new(url: impl Into<String>) -> Self {
+        Self {
+            inner: Arc::new(ControlPlaneLinkInner {
+                url: url.into(),
+                connected: AtomicBool::new(false),
+                connected_since_ms: AtomicU64::new(0),
+                last_change_ms: AtomicU64::new(0),
+                reconnects: AtomicU64::new(0),
+                last_error: Mutex::new(None),
+            }),
+        }
+    }
+
+    pub fn url(&self) -> &str {
+        &self.inner.url
+    }
+
+    pub fn mark_connected(&self) {
+        let now = now_unix_ms();
+        let had_prior = self.inner.last_change_ms.swap(now, Ordering::SeqCst) != 0;
+        self.inner.connected.store(true, Ordering::SeqCst);
+        self.inner.connected_since_ms.store(now, Ordering::SeqCst);
+        *self.inner.last_error.lock() = None;
+        if had_prior {
+            self.inner.reconnects.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    pub fn mark_disconnected(&self, error: Option<String>) {
+        let now = now_unix_ms();
+        self.inner.connected.store(false, Ordering::SeqCst);
+        self.inner.connected_since_ms.store(0, Ordering::SeqCst);
+        self.inner.last_change_ms.store(now, Ordering::SeqCst);
+        if let Some(e) = error {
+            *self.inner.last_error.lock() = Some(e);
+        }
+    }
+
+    pub fn snapshot(&self) -> ControlPlaneLinkSnapshot {
+        let now = now_unix_ms();
+        let connected = self.inner.connected.load(Ordering::SeqCst);
+        let since = self.inner.connected_since_ms.load(Ordering::SeqCst);
+        let change = self.inner.last_change_ms.load(Ordering::SeqCst);
+        ControlPlaneLinkSnapshot {
+            url: self.inner.url.clone(),
+            connected,
+            connected_for_secs: if connected && since > 0 && now >= since {
+                Some((now - since) / 1000)
+            } else {
+                None
+            },
+            last_change_secs_ago: if change > 0 && now >= change {
+                Some((now - change) / 1000)
+            } else {
+                None
+            },
+            reconnects: self.inner.reconnects.load(Ordering::SeqCst),
+            last_error: self.inner.last_error.lock().clone(),
+        }
+    }
+}
+
 pub struct WsChannel {
     pub rx: tokio::sync::mpsc::Receiver<ServerMsg>,
     pub tx: tokio::sync::mpsc::Sender<ClientMsg>,
+    pub link: ControlPlaneLink,
 }
 
 pub fn spawn(control_url: String, endpoint_id: String, signing_key: SigningKey) -> WsChannel {
+    let link = ControlPlaneLink::new(control_url.clone());
     let (server_tx, server_rx) = tokio::sync::mpsc::channel::<ServerMsg>(64);
     let (client_tx, client_rx) = tokio::sync::mpsc::channel::<ClientMsg>(64);
 
+    let link_task = link.clone();
     tokio::spawn(async move {
-        run(control_url, endpoint_id, signing_key, server_tx, client_rx).await;
+        run(
+            control_url,
+            endpoint_id,
+            signing_key,
+            server_tx,
+            client_rx,
+            link_task,
+        )
+        .await;
     });
 
     WsChannel {
         rx: server_rx,
         tx: client_tx,
+        link,
     }
 }
 
@@ -89,6 +204,7 @@ async fn run(
     signing_key: SigningKey,
     server_tx: tokio::sync::mpsc::Sender<ServerMsg>,
     mut client_rx: tokio::sync::mpsc::Receiver<ClientMsg>,
+    link: ControlPlaneLink,
 ) {
     let mut backoff = MIN_BACKOFF;
     let mut outbound_closed = false;
@@ -98,21 +214,22 @@ async fn run(
         match connect_once(&control_url, &endpoint_id, &signing_key).await {
             Ok(mut ws) => {
                 backoff = MIN_BACKOFF;
+                link.mark_connected();
                 tracing::info!(outbound_closed, "ws connected to control plane");
                 let mut keep_alive = tokio::time::interval(Duration::from_secs(KEEP_ALIVE_SECS));
                 keep_alive.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
                 keep_alive.tick().await;
                 let mut last_wall = SystemTime::now();
 
-                loop {
+                let disconnect_reason = loop {
                     tokio::select! {
                         maybe_msg = ws.next() => {
                             let Some(res) = maybe_msg else {
                                 tracing::warn!("ws stream ended");
-                                break;
+                                break Some("stream ended".to_string());
                             };
                             if !handle_server_frame(res, &mut ws, &server_tx).await {
-                                break;
+                                break Some("ws frame error or close".to_string());
                             }
                         }
                         maybe_out = async {
@@ -133,7 +250,7 @@ async fn run(
                                     if let Ok(t) = serde_json::to_string(&m)
                                         && ws.send(Message::text(t)).await.is_err()
                                     {
-                                        break;
+                                        break Some("send failed".to_string());
                                     }
                                 }
                             }
@@ -147,16 +264,17 @@ async fn run(
                                 tracing::warn!(
                                     "ws: wall clock jumped while connected (likely suspend/resume), reconnecting"
                                 );
-                                break;
+                                break Some("suspend/resume clock jump".to_string());
                             }
                             last_wall = now;
                             if ws.send(Message::Ping(Vec::new().into())).await.is_err() {
                                 tracing::warn!("ws ping failed");
-                                break;
+                                break Some("keepalive ping failed".to_string());
                             }
                         }
                     }
-                }
+                };
+                link.mark_disconnected(disconnect_reason);
             }
             Err(e) => {
                 connection_refused = is_connection_refused(&e);
@@ -165,6 +283,7 @@ async fn run(
                 } else {
                     backoff
                 };
+                link.mark_disconnected(Some(e.to_string()));
                 tracing::warn!(
                     ?e,
                     connection_refused,

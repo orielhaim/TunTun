@@ -339,7 +339,41 @@ fn print_status(
         "  endpoint   {}",
         out.dim(&output::short_endpoint(&info.endpoint_id))
     ));
-    if let Some(url) = &info.control_url {
+    if let Some(cp) = &info.control {
+        let loopback = cp.url.contains("127.0.0.1")
+            || cp.url.contains("localhost")
+            || cp.url.contains("[::1]");
+        let state = if cp.connected {
+            out.green("connected")
+        } else {
+            out.red("disconnected")
+        };
+        let mut line = format!("  control    {state}  {}", cp.url);
+        if let Some(secs) = cp.connected_for_secs {
+            line.push_str(&format!("  ·  up {}", output::format_uptime(secs)));
+        } else if let Some(secs) = cp.last_change_secs_ago {
+            line.push_str(&format!("  ·  {}", output::format_uptime(secs)));
+            line.push_str(" ago");
+        }
+        if cp.reconnects > 0 {
+            line.push_str(&format!("  ·  reconnects {}", cp.reconnects));
+        }
+        out.writeln(line);
+        if loopback {
+            out.writeln(format!(
+                "             {}",
+                out.yellow("loopback URL — remote VMs must enroll with the host LAN/public URL")
+            ));
+        }
+        if let Some(err) = &cp.last_error
+            && !cp.connected
+        {
+            out.writeln(format!(
+                "             {}",
+                out.dim(&format!("last error: {err}"))
+            ));
+        }
+    } else if let Some(url) = &info.control_url {
         let loopback =
             url.contains("127.0.0.1") || url.contains("localhost") || url.contains("[::1]");
         if loopback {

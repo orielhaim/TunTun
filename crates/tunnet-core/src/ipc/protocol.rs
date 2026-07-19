@@ -497,6 +497,23 @@ pub struct StatusInfo {
     /// Control plane base URL (Managed). Loopback here on a VM means enroll is broken.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub control_url: Option<String>,
+    /// Live WebSocket link to the control plane (Managed only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub control: Option<ControlPlaneStatusInfo>,
+}
+
+/// Control-plane WebSocket connectivity for Managed agents.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ControlPlaneStatusInfo {
+    pub url: String,
+    pub connected: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connected_for_secs: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_change_secs_ago: Option<u64>,
+    pub reconnects: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
