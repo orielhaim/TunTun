@@ -900,6 +900,11 @@ fn build_status(state: &AgentIpcState, include_peers: bool) -> StatusInfo {
         }),
         expires_at,
         expires_in_secs,
+        control_url: state
+            .node
+            .persisted
+            .as_managed()
+            .map(|m| m.control_url.clone()),
     }
 }
 
@@ -1063,6 +1068,16 @@ async fn handle_ping(
     let resolved = resolve_peer(&state.node, &peer).ok_or_else(|| {
         anyhow::anyhow!("no peer matches `{peer}` (try hostname, IP, or endpoint id)")
     })?;
+
+    let self_hex = state.node.endpoint_id_hex();
+    if resolved.endpoint_hex.eq_ignore_ascii_case(&self_hex) || resolved.ip == state.node.self_ipv4
+    {
+        anyhow::bail!(
+            "`{peer}` is this node ({} / {}). Ping the other machine's mesh IP instead",
+            state.node.self_ipv4,
+            resolved.hostname
+        );
+    }
 
     let count = count.clamp(1, 64);
     let mut latencies = Vec::new();

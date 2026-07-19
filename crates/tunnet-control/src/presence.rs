@@ -129,6 +129,10 @@ pub async fn mark_agent_connected(
     .await?;
 
     emit_presence_changed(pool, &device.organization_id, endpoint_id).await?;
+    // Refresh peer snapshots for everyone else (metadata / ssh keys / membership).
+    if let Err(e) = crate::pg_notify::emit_network_changed(pool, device.network_id).await {
+        tracing::warn!(?e, %endpoint_id, "network_changed notify on connect failed");
+    }
     tracing::info!(%endpoint_id, ?public_ip, "agent connected");
     Ok(())
 }
@@ -162,6 +166,9 @@ pub async fn mark_agent_disconnected(pool: &PgPool, endpoint_id: &str) -> anyhow
     .await?;
 
     emit_presence_changed(pool, &device.organization_id, endpoint_id).await?;
+    if let Err(e) = crate::pg_notify::emit_network_changed(pool, device.network_id).await {
+        tracing::warn!(?e, %endpoint_id, "network_changed notify on disconnect failed");
+    }
     tracing::info!(%endpoint_id, "agent disconnected");
     Ok(())
 }

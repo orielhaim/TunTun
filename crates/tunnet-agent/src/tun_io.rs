@@ -106,6 +106,12 @@ pub async fn run_outbound(deps: OutboundDeps) -> anyhow::Result<()> {
             continue;
         };
 
+        // Never mesh-forward to ourselves (PeerDNS injects self into the table).
+        if peer.ip == self_ip {
+            metrics.dropped_inc("self");
+            continue;
+        }
+
         // Connection-level ACL (Managed + Direct peer accept).
         if !acl.allow_packet(
             &peer.endpoint_hex,

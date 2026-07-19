@@ -590,9 +590,9 @@ pub fn spawn_poll_fallback(
             ticker.tick().await;
             match client.poll(**version.load()).await {
                 Ok(snap) => {
-                    if let Ok(m) = membership_for_network(&snap, network_id)
-                        && (snap.version != **version.load() || m.version != routes.version())
-                    {
+                    // Always re-apply: peer lists / keys can change without a
+                    // networks.version bump (presence used to gate peers).
+                    if let Ok(m) = membership_for_network(&snap, network_id) {
                         apply_membership(
                             m,
                             &snap.org_policy,

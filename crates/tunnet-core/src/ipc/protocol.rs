@@ -494,6 +494,9 @@ pub struct StatusInfo {
     /// Seconds until `expires_at`, when auto-expiry is enabled.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expires_in_secs: Option<u64>,
+    /// Control plane base URL (Managed). Loopback here on a VM means enroll is broken.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub control_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

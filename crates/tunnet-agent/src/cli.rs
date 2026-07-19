@@ -299,6 +299,20 @@ pub async fn run_enroll(args: EnrollArgs, state_dir: Option<&str>) -> anyhow::Re
     crate::service::ensure_service_state_aligned(state_dir, &paths)?;
     paths.ensure()?;
 
+    let control_loopback = args.control_url.contains("127.0.0.1")
+        || args.control_url.contains("localhost")
+        || args.control_url.contains("[::1]");
+    if control_loopback {
+        eprintln!(
+            "warning: control URL is loopback ({}).\n\
+             This machine can reach the control plane, but other hosts/VMs must enroll with\n\
+             the control plane's LAN or public URL, e.g.:\n\
+               tunnet enroll --control-url http://<this-host-lan-ip>:8080 --token …\n\
+             Otherwise they stay offline on the dashboard and never appear as peers.",
+            args.control_url
+        );
+    }
+
     if let Ok(existing) = PersistedState::load(&paths) {
         if existing.is_direct() {
             anyhow::bail!(

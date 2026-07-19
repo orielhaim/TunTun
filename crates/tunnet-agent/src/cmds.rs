@@ -339,6 +339,19 @@ fn print_status(
         "  endpoint   {}",
         out.dim(&output::short_endpoint(&info.endpoint_id))
     ));
+    if let Some(url) = &info.control_url {
+        let loopback =
+            url.contains("127.0.0.1") || url.contains("localhost") || url.contains("[::1]");
+        if loopback {
+            out.writeln(format!(
+                "  control    {} {}",
+                out.yellow(url),
+                out.yellow("(loopback — remote VMs cannot reach this)")
+            ));
+        } else {
+            out.writeln(format!("  control    {url}"));
+        }
+    }
     print_service_lines(out, service, agent_running);
     out.writeln(format!(
         "  peers      {} online / {} total",
