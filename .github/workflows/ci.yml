@@ -20,7 +20,7 @@ env:
 jobs:
   detect-changes:
     name: Detect Changes
-    runs-on: ubuntu-latest
+    runs-on: coolify-runner-Qh5434uhkiAva
     outputs:
       typescript: ${{ steps.filter.outputs.typescript }}
       rust: ${{ steps.filter.outputs.rust }}
@@ -43,7 +43,7 @@ jobs:
     name: Lint TypeScript
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.typescript == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: coolify-runner-Qh5434uhkiAva
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
@@ -56,7 +56,7 @@ jobs:
     name: Test TypeScript
     needs: [detect-changes, lint-ts]
     if: ${{ needs.detect-changes.outputs.typescript == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: coolify-runner-Qh5434uhkiAva
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
@@ -75,7 +75,7 @@ jobs:
     name: Lint Rust
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.rust == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: coolify-runner-Qh5434uhkiAva
     steps:
       - uses: actions/checkout@v7
 
@@ -93,7 +93,7 @@ jobs:
     name: Feature Matrix (tunnet-core)
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.rust == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: coolify-runner-Qh5434uhkiAva
     strategy:
       fail-fast: false
       matrix:
@@ -114,7 +114,7 @@ jobs:
     name: Test Rust
     needs: [detect-changes, lint-rs]
     if: ${{ needs.detect-changes.outputs.rust == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: coolify-runner-Qh5434uhkiAva
     steps:
       - uses: actions/checkout@v7
 

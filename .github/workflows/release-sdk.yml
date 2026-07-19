@@ -34,7 +34,7 @@ env:
 jobs:
   validate:
     name: Validate version
-    runs-on: ubuntu-latest
+    runs-on: coolify-runner-Qh5434uhkiAva
     outputs:
       tag: ${{ steps.meta.outputs.tag }}
       version: ${{ steps.meta.outputs.version }}
@@ -94,22 +94,25 @@ jobs:
         include:
           - host: macos-latest
             target: aarch64-apple-darwin
-            build: bun run build -- --target aarch64-apple-darwin
+            build: bun run build:native -- --target aarch64-apple-darwin && bun run build:ts
           - host: windows-latest
             target: x86_64-pc-windows-msvc
-            build: bun run build -- --target x86_64-pc-windows-msvc
+            build: bun run build:native -- --target x86_64-pc-windows-msvc && bun run build:ts
           - host: windows-latest
             target: aarch64-pc-windows-msvc
-            build: bun run build -- --target aarch64-pc-windows-msvc
-          - host: ubuntu-latest
+            build: bun run build:native -- --target aarch64-pc-windows-msvc && bun run build:ts
+          - host: coolify-runner-Qh5434uhkiAva
             target: x86_64-unknown-linux-gnu
-            build: TARGET_CC=clang TARGET_CXX=clang++ bun run build -- --target x86_64-unknown-linux-gnu --use-napi-cross
-          - host: ubuntu-latest
+            build: TARGET_CC=clang TARGET_CXX=clang++ bun run build:native -- --target x86_64-unknown-linux-gnu --use-napi-cross && bun run build:ts
+          - host: coolify-runner-Qh5434uhkiAva
             target: aarch64-unknown-linux-gnu
-            build: TARGET_CC=clang TARGET_CXX=clang++ bun run build -- --target aarch64-unknown-linux-gnu --use-napi-cross
-          - host: ubuntu-latest
+            build: TARGET_CC=clang TARGET_CXX=clang++ bun run build:native -- --target aarch64-unknown-linux-gnu --use-napi-cross && bun run build:ts
+          - host: coolify-runner-Qh5434uhkiAva
             target: x86_64-unknown-linux-musl
-            build: bun run build -- --target x86_64-unknown-linux-musl -x
+            build: bun run build:native -- --target x86_64-unknown-linux-musl -x && bun run build:ts
+          - host: coolify-runner-Qh5434uhkiAva
+            target: aarch64-unknown-linux-musl
+            build: bun run build:native -- --target aarch64-unknown-linux-musl -x && bun run build:ts
     steps:
       - uses: actions/checkout@v7
         with:
@@ -162,7 +165,7 @@ jobs:
     name: Publish SDK (npm)
     needs: [validate, build-sdk]
     if: needs.validate.outputs.dry-run != 'true'
-    runs-on: ubuntu-latest
+    runs-on: coolify-runner-Qh5434uhkiAva
     defaults:
       run:
         working-directory: crates/tunnet-node-napi
