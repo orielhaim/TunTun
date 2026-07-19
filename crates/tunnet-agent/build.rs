@@ -45,16 +45,29 @@ fn bundle_wintun_dll() {
         return;
     }
 
-    let profile = std::env::var("PROFILE").expect("PROFILE");
-    let target_dir = std::env::var("CARGO_TARGET_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| manifest_dir.join("..").join("..").join("target"));
-
-    let dest_dir = target_dir.join(&profile);
+    // OUT_DIR = <target>/<profile>/build/<crate>-<hash>/out → profile dir is ../../..
+    let out_dir = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR"));
+    let dest_dir = out_dir.join("../../..").canonicalize().unwrap_or_else(|_| {
+        let profile = std::env::var("PROFILE").unwrap_or_else(|_| "debug".into());
+        std::env::var("CARGO_TARGET_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| manifest_dir.join("..").join("..").join("target"))
+            .join(profile)
+    });
     std::fs::create_dir_all(&dest_dir).expect("create target profile dir");
 
     let dest = dest_dir.join("wintun.dll");
-    std::fs::copy(&src, &dest).unwrap_or_else(|e| {
-        panic!("failed to copy wintun.dll to {}: {e}", dest.display());
-    });
+    match std::fs::copy(&src, &dest) {
+        Ok(_) => {}
+        Err(e) if dest.exists() => {
+            // Running service often locks wintun.dll; keep the existing copy.
+            println!(
+                "cargo:warning=wintun.dll copy skipped ({} in use): {e}",
+                dest.display()
+            );
+        }
+        Err(e) => {
+            panic!("failed to copy wintun.dll to {}: {e}", dest.display());
+        }
+    }
 }

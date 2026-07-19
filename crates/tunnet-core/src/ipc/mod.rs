@@ -22,4 +22,4 @@ pub use protocol::*;
 #[cfg(feature = "ipc")]
 pub use server::{AgentIpcState, spawn as spawn_ipc_server};
 #[cfg(feature = "ipc")]
-pub use transport::default_ipc_path;
+pub use transport::{default_ipc_path, endpoint_reachable};

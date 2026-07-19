@@ -253,6 +253,7 @@ fn paths(cli_state_dir: Option<&str>) -> StatePaths {
 
 pub async fn run_enroll(args: EnrollArgs, state_dir: Option<&str>) -> anyhow::Result<()> {
     let paths = paths(state_dir);
+    crate::service::ensure_service_state_aligned(state_dir, &paths)?;
     paths.ensure()?;
 
     if let Ok(existing) = PersistedState::load(&paths) {
@@ -446,15 +447,17 @@ pub async fn run_reset(args: ResetArgs, state_dir: Option<&str>) -> anyhow::Resu
 }
 
 pub async fn run_agent(args: RunArgs, state_dir: Option<&str>) -> anyhow::Result<()> {
-    run_agent_with_shutdown(args, state_dir, None).await
+    run_agent_with_shutdown(args, state_dir, None, None).await
 }
 
 /// Same as [`run_agent`], but accepts an optional SCM / external shutdown token
-/// (used when running as a Windows service).
+/// (used when running as a Windows service) and an optional readiness signal
+/// (fired once local IPC is bound).
 pub async fn run_agent_with_shutdown(
     args: RunArgs,
     state_dir: Option<&str>,
     shutdown: Option<tokio_util::sync::CancellationToken>,
+    on_ready: Option<tokio::sync::oneshot::Sender<()>>,
 ) -> anyhow::Result<()> {
     let paths = paths(state_dir);
     paths.ensure()?;
@@ -499,7 +502,7 @@ pub async fn run_agent_with_shutdown(
             );
         }
     }
-    crate::runtime::run(identity, persisted, paths, args, shutdown).await
+    crate::runtime::run(identity, persisted, paths, args, shutdown, on_ready).await
 }
 
 async fn wait_for_network_state(

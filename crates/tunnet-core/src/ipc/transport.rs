@@ -15,16 +15,32 @@ pub fn default_ipc_path() -> PathBuf {
     }
     #[cfg(windows)]
     {
-        let base = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| ".".into());
-        PathBuf::from(base)
-            .join("tunnet")
-            .join("ipc")
-            .join("tunnet-agent.pipe")
+        // Machine-wide marker so a user CLI can see a Local System service.
+        // (Per-user %LOCALAPPDATA% put SYSTEM's marker under systemprofile.)
+        system_ipc_marker_path()
     }
     #[cfg(not(any(unix, windows)))]
     {
         PathBuf::from("tunnet-agent.ipc")
     }
+}
+
+#[cfg(windows)]
+fn system_ipc_marker_path() -> PathBuf {
+    let base = std::env::var("PROGRAMDATA").unwrap_or_else(|_| r"C:\ProgramData".into());
+    PathBuf::from(base)
+        .join("tunnet")
+        .join("ipc")
+        .join("tunnet-agent.pipe")
+}
+
+#[cfg(windows)]
+fn user_ipc_marker_path() -> PathBuf {
+    let base = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| ".".into());
+    PathBuf::from(base)
+        .join("tunnet")
+        .join("ipc")
+        .join("tunnet-agent.pipe")
 }
 
 #[cfg(windows)]
@@ -79,26 +95,23 @@ impl IpcListener {
         }
         #[cfg(windows)]
         {
-            use tokio::net::windows::named_pipe::ServerOptions;
-
-            if let Some(parent) = path.parent() {
+            let marker = resolve_bind_marker(&path)?;
+            if let Some(parent) = marker.parent() {
                 std::fs::create_dir_all(parent)?;
             }
             let name = pipe_name_for();
-            std::fs::write(&path, &name)?;
-            let first = ServerOptions::new()
-                .first_pipe_instance(true)
-                .create(&name)?;
-            tracing::info!(pipe = %name, marker = %path.display(), "IPC listening (windows)");
+            std::fs::write(&marker, &name)?;
+            let first = create_server_pipe(&name, true)?;
+            tracing::info!(pipe = %name, marker = %marker.display(), "IPC listening (windows)");
             Ok((
                 Self {
                     windows: WindowsListener {
                         pending: tokio::sync::Mutex::new(Some(first)),
-                        marker: path.clone(),
+                        marker: marker.clone(),
                     },
-                    path: path.clone(),
+                    path: marker.clone(),
                 },
-                path,
+                marker,
             ))
         }
         #[cfg(not(any(unix, windows)))]
@@ -119,15 +132,13 @@ impl IpcListener {
         }
         #[cfg(windows)]
         {
-            use tokio::net::windows::named_pipe::ServerOptions;
-
             let name = pipe_name_for();
             let mut guard = self.windows.pending.lock().await;
             let server = guard.take().ok_or_else(|| {
                 anyhow::anyhow!("IPC listener has no pending named pipe instance")
             })?;
             // Create the next instance before serving this one so clients never miss a window.
-            let next = ServerOptions::new().create(&name)?;
+            let next = create_server_pipe(&name, false)?;
             *guard = Some(next);
             drop(guard);
 
@@ -139,6 +150,74 @@ impl IpcListener {
             anyhow::bail!("IPC not supported on this platform");
         }
     }
+}
+
+#[cfg(windows)]
+fn resolve_bind_marker(preferred: &Path) -> io::Result<PathBuf> {
+    if let Some(parent) = preferred.parent() {
+        match std::fs::create_dir_all(parent) {
+            Ok(()) => return Ok(preferred.to_path_buf()),
+            Err(e) if e.kind() == io::ErrorKind::PermissionDenied => {
+                // Non-elevated `tunnet run`: fall back to the user profile.
+                let fallback = user_ipc_marker_path();
+                if let Some(p) = fallback.parent() {
+                    std::fs::create_dir_all(p)?;
+                }
+                return Ok(fallback);
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(preferred.to_path_buf())
+}
+
+/// Create a named-pipe server instance that Authenticated Users can open.
+///
+/// Default SECURITY_ATTRIBUTES under Local System only allow SYSTEM, so a
+/// normal user CLI (`tunnet status`) gets Access Denied even when the service
+/// is healthy.
+#[cfg(windows)]
+fn create_server_pipe(
+    name: &str,
+    first_instance: bool,
+) -> io::Result<tokio::net::windows::named_pipe::NamedPipeServer> {
+    use tokio::net::windows::named_pipe::ServerOptions;
+    use windows::Win32::Foundation::{HLOCAL, LocalFree};
+    use windows::Win32::Security::Authorization::{
+        ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
+    };
+    use windows::Win32::Security::{PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES};
+    use windows::core::w;
+
+    // SYSTEM + Administrators + Authenticated Users: full access.
+    // GRGW alone is not enough for CreateFile(GENERIC_READ|GENERIC_WRITE) on
+    // named pipes under Local System — user CLIs get Access Denied.
+    let sddl = w!("D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;AU)");
+    let mut sd = PSECURITY_DESCRIPTOR::default();
+    unsafe {
+        ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl, SDDL_REVISION_1, &mut sd, None)
+            .map_err(|e| io::Error::other(format!("pipe SDDL: {e}")))?;
+    }
+
+    let mut attrs = SECURITY_ATTRIBUTES {
+        nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+        lpSecurityDescriptor: sd.0,
+        bInheritHandle: false.into(),
+    };
+
+    let result = unsafe {
+        let mut opts = ServerOptions::new();
+        if first_instance {
+            opts.first_pipe_instance(true);
+        }
+        opts.create_with_security_attributes_raw(name, (&raw mut attrs).cast())
+    };
+
+    unsafe {
+        let _ = LocalFree(Some(HLOCAL(sd.0 as _)));
+    }
+
+    result
 }
 
 impl Drop for IpcListener {
@@ -188,9 +267,7 @@ pub async fn connect(path: &Path) -> io::Result<ClientStream> {
         use std::time::Duration;
         use tokio::net::windows::named_pipe::ClientOptions;
 
-        let pipe_name = std::fs::read_to_string(path)
-            .map(|s| s.trim().to_string())
-            .unwrap_or_else(|_| path.display().to_string());
+        let pipe_name = resolve_windows_pipe_name(path);
 
         let mut last = None;
         for _ in 0..40 {
@@ -211,6 +288,44 @@ pub async fn connect(path: &Path) -> io::Result<ClientStream> {
             io::ErrorKind::Unsupported,
             "IPC not supported on this platform",
         ))
+    }
+}
+
+#[cfg(windows)]
+fn resolve_windows_pipe_name(path: &Path) -> String {
+    let candidates = [
+        path.to_path_buf(),
+        system_ipc_marker_path(),
+        user_ipc_marker_path(),
+    ];
+    for candidate in &candidates {
+        if let Ok(s) = std::fs::read_to_string(candidate) {
+            let trimmed = s.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+    }
+    // Named pipe is machine-global even when no marker is visible to this user.
+    pipe_name_for()
+}
+
+/// Returns true when a live agent IPC endpoint is reachable.
+pub async fn endpoint_reachable(path: &Path) -> bool {
+    #[cfg(windows)]
+    {
+        use tokio::net::windows::named_pipe::ClientOptions;
+        let pipe_name = resolve_windows_pipe_name(path);
+        ClientOptions::new().open(&pipe_name).is_ok()
+    }
+    #[cfg(unix)]
+    {
+        path.exists() && tokio::net::UnixStream::connect(path).await.is_ok()
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = path;
+        false
     }
 }
 

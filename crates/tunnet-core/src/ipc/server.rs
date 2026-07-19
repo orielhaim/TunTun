@@ -39,33 +39,31 @@ impl AgentIpcState {
 }
 
 /// Spawn the IPC listener for this agent on the fixed path.
-pub fn spawn(state: Arc<AgentIpcState>) -> tokio::task::JoinHandle<()> {
-    tokio::spawn(async move {
-        match IpcListener::bind().await {
-            Ok((listener, path)) => {
-                tracing::info!(path = %path.display(), "agent IPC ready");
-                loop {
-                    match listener.accept().await {
-                        Ok(stream) => {
-                            let state = state.clone();
-                            tokio::spawn(async move {
-                                if let Err(e) = handle_connection(stream, state).await {
-                                    tracing::debug!(?e, "IPC client session ended");
-                                }
-                            });
+///
+/// Binds before returning so callers can treat IPC as ready.
+pub async fn spawn(state: Arc<AgentIpcState>) -> anyhow::Result<tokio::task::JoinHandle<()>> {
+    let (listener, path) = IpcListener::bind()
+        .await
+        .context("bind agent IPC listener")?;
+    tracing::info!(path = %path.display(), "agent IPC ready");
+    Ok(tokio::spawn(async move {
+        loop {
+            match listener.accept().await {
+                Ok(stream) => {
+                    let state = state.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) = handle_connection(stream, state).await {
+                            tracing::debug!(?e, "IPC client session ended");
                         }
-                        Err(e) => {
-                            tracing::warn!(?e, "IPC accept failed");
-                            tokio::time::sleep(Duration::from_millis(200)).await;
-                        }
-                    }
+                    });
+                }
+                Err(e) => {
+                    tracing::warn!(?e, "IPC accept failed");
+                    tokio::time::sleep(Duration::from_millis(200)).await;
                 }
             }
-            Err(e) => {
-                tracing::error!(?e, "failed to bind agent IPC - CLI commands will not work");
-            }
         }
-    })
+    }))
 }
 
 async fn handle_connection(stream: IpcStream, state: Arc<AgentIpcState>) -> anyhow::Result<()> {

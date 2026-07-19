@@ -2,13 +2,15 @@
 
 #[cfg(target_os = "linux")]
 use std::path::Path;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use std::process::Command;
 
 use anyhow::Context;
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 use std::path::PathBuf;
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 const SERVICE_NAME: &str = "tunnet";
 #[cfg(target_os = "macos")]
 const LAUNCHD_LABEL: &str = "com.tunnet.agent";
@@ -64,7 +66,16 @@ fn install_inner(state_dir: Option<&str>, announce: bool) -> anyhow::Result<()> 
         let dir = state_dir
             .map(str::to_string)
             .unwrap_or_else(|| tunnet_core::StatePaths::system_dir().display().to_string());
-        println!("Service installed (state dir {dir}). Start with `sudo tunnet service start`.");
+        #[cfg(windows)]
+        {
+            println!("Service installed (state dir {dir}). Start with `tunnet service start`.");
+        }
+        #[cfg(not(windows))]
+        {
+            println!(
+                "Service installed (state dir {dir}). Start with `sudo tunnet service start`."
+            );
+        }
     }
     Ok(())
 }
@@ -152,22 +163,31 @@ pub fn start(state_dir: Option<&str>) -> anyhow::Result<()> {
     }
     #[cfg(windows)]
     {
-        let _ = state_dir;
-        println!("Starting tunnet service…");
-        if let Err(e) = run_cmd("sc", &["start", SERVICE_NAME]) {
-            anyhow::bail!("{e}\nIf the service is missing, run elevated: tunnet service install");
-        }
-        // Give SCM a moment to receive SERVICE_RUNNING from the agent.
-        std::thread::sleep(std::time::Duration::from_millis(800));
-        let probe = probe();
-        if probe.active {
-            println!("Service is running.");
+        let initial = crate::win_service::probe();
+        if !initial.installed {
+            println!("Service not installed; installing…");
+            install_inner(state_dir, false).map_err(|e| {
+                anyhow::anyhow!(
+                    "{e:#}\nRun an elevated Command Prompt: tunnet service install && tunnet service start"
+                )
+            })?;
         } else {
-            println!(
-                "Service start issued (state: {}); check Services panel or `sc query tunnet`",
-                probe.state
-            );
+            // Heal enroll-then-install: copy user profile state into ProgramData.
+            let dir = state_dir
+                .map(PathBuf::from)
+                .unwrap_or_else(tunnet_core::StatePaths::system_dir);
+            let migrated = crate::win_service::migrate_user_state_into_system(dir)?;
+            if migrated && initial.active {
+                // Idle service was waiting on an empty ProgramData; restart to load state.
+                crate::win_service::stop_and_wait()?;
+            }
+            if state_dir.is_some() {
+                let _ = install_inner(state_dir, false);
+            }
         }
+        println!("Starting tunnet service…");
+        crate::win_service::start_and_wait()?;
+        println!("Service is running.");
     }
     Ok(())
 }
@@ -197,15 +217,28 @@ pub fn stop(_state_dir: Option<&str>) -> anyhow::Result<()> {
     }
     #[cfg(windows)]
     {
-        let _ = run_cmd("sc", &["stop", SERVICE_NAME]);
+        crate::win_service::stop_and_wait()?;
     }
     println!("Service stopped.");
     Ok(())
 }
 
 pub fn restart(state_dir: Option<&str>) -> anyhow::Result<()> {
-    let _ = stop(state_dir);
-    start(state_dir)
+    #[cfg(windows)]
+    {
+        // Stop+wait then start+wait — avoid sc's 1056 "already running" race.
+        let _ = state_dir;
+        println!("Restarting tunnet service…");
+        crate::win_service::stop_and_wait()?;
+        crate::win_service::start_and_wait()?;
+        println!("Service is running.");
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = stop(state_dir);
+        start(state_dir)
+    }
 }
 
 /// Snapshot of the OS-managed Tunnet service (systemd / launchd / SCM).
@@ -223,6 +256,63 @@ impl ServiceProbe {
             active: false,
             state: "not-installed".into(),
         }
+    }
+}
+
+/// When a system service is installed, create/enroll/join must write the same
+/// state dir the service reads - otherwise SCM looks healthy while the CLI sees
+/// a different (offline) network.
+pub fn ensure_service_state_aligned(
+    state_dir: Option<&str>,
+    paths: &tunnet_core::StatePaths,
+) -> anyhow::Result<()> {
+    let probe = probe();
+    if !probe.installed {
+        return Ok(());
+    }
+    let system = tunnet_core::StatePaths::system_dir();
+    if paths.dir == system {
+        return Ok(());
+    }
+    if state_dir.is_some() {
+        // Explicit --state-dir / env: allow, but warn.
+        eprintln!(
+            "warning: writing to {} while the system service uses {}",
+            paths.dir.display(),
+            system.display()
+        );
+        return Ok(());
+    }
+    #[cfg(windows)]
+    {
+        anyhow::bail!(
+            "a system service is installed and uses {}\n\
+             you are about to write to {} instead\n\n\
+             Re-run elevated so both use the same directory:\n\
+               tunnet enroll --control-url <URL> --token <TOKEN>\n\n\
+             Or point both at one directory:\n\
+               set TUNNET_STATE_DIR={}\n\
+               tunnet enroll ...\n\
+               tunnet service restart",
+            system.display(),
+            paths.dir.display(),
+            system.display()
+        );
+    }
+    #[cfg(not(windows))]
+    {
+        anyhow::bail!(
+            "a system service is installed and uses {}\n\
+             you are about to write to {} instead\n\n\
+             Re-run with sudo so both use the same directory:\n\
+               sudo tunnet create --name <name> [--secret <passphrase>]\n\n\
+             Or point both at one directory:\n\
+               sudo TUNNET_STATE_DIR={} tunnet create ...\n\
+               sudo tunnet service restart",
+            system.display(),
+            paths.dir.display(),
+            system.display()
+        );
     }
 }
 
@@ -282,30 +372,7 @@ pub fn probe() -> ServiceProbe {
     }
     #[cfg(windows)]
     {
-        let output = Command::new("sc").args(["query", SERVICE_NAME]).output();
-        match output {
-            Ok(o) if o.status.success() => {
-                let text = String::from_utf8_lossy(&o.stdout);
-                let active = text.contains("RUNNING");
-                let state = if active {
-                    "active"
-                } else if text.contains("STOPPED") {
-                    "inactive"
-                } else if text.contains("START_PENDING") {
-                    "starting"
-                } else if text.contains("STOP_PENDING") {
-                    "stopping"
-                } else {
-                    "unknown"
-                };
-                ServiceProbe {
-                    installed: true,
-                    active,
-                    state: state.into(),
-                }
-            }
-            _ => ServiceProbe::not_installed(),
-        }
+        crate::win_service::probe()
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
     {
@@ -382,12 +449,14 @@ pub fn reload_after_config(state_dir: Option<&str>) -> anyhow::Result<()> {
     {
         let _ = state_dir;
         if probe.installed {
-            let _ = run_cmd("sc", &["stop", SERVICE_NAME]);
-            let _ = run_cmd("sc", &["start", SERVICE_NAME]);
+            if let Err(e) = crate::win_service::stop_and_wait() {
+                eprintln!("warning: stop before reload: {e:#}");
+            }
+            crate::win_service::start_and_wait()?;
             println!("Agent reloading from {}…", paths.dir.display());
         } else {
             println!(
-                "State written to {}. Start with: tunnet service start (elevated)",
+                "State written to {}. Start with: tunnet service start",
                 paths.dir.display()
             );
         }
@@ -400,6 +469,7 @@ pub fn reload_after_config(state_dir: Option<&str>) -> anyhow::Result<()> {
     }
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn run_cmd(bin: &str, args: &[&str]) -> anyhow::Result<()> {
     let status = Command::new(bin).args(args).status()?;
     if !status.success() {

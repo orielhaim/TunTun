@@ -46,7 +46,9 @@ impl StatePaths {
         if system.join("state.json").is_file() {
             return Self { dir: system };
         }
-        if running_as_service_user() {
+        // Match Linux `sudo` / systemd: elevated or service identity uses the
+        // machine state dir so SCM / Local System see the same enrollment.
+        if running_as_service_user() || process_is_elevated() {
             return Self { dir: system };
         }
 
@@ -179,6 +181,50 @@ fn running_as_service_user() -> bool {
         }
     }
     false
+}
+
+/// True when this process holds an elevated admin token (Windows UAC) or is root (Unix).
+/// Used so elevated `tunnet enroll` writes to the same dir the OS service reads.
+fn process_is_elevated() -> bool {
+    #[cfg(unix)]
+    {
+        unsafe { libc::geteuid() == 0 }
+    }
+    #[cfg(windows)]
+    {
+        windows_process_elevated()
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        false
+    }
+}
+
+#[cfg(windows)]
+fn windows_process_elevated() -> bool {
+    use windows::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows::Win32::Security::{
+        GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation,
+    };
+    use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+
+    unsafe {
+        let mut token = HANDLE::default();
+        if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token).is_err() {
+            return false;
+        }
+        let mut elevation = TOKEN_ELEVATION::default();
+        let mut size = 0u32;
+        let ok = GetTokenInformation(
+            token,
+            TokenElevation,
+            Some((&raw mut elevation).cast()),
+            std::mem::size_of::<TOKEN_ELEVATION>() as u32,
+            &mut size,
+        );
+        let _ = CloseHandle(token);
+        ok.is_ok() && elevation.TokenIsElevated != 0
+    }
 }
 
 /// Operating mode of this agent for the persisted network.

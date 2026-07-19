@@ -272,7 +272,7 @@ pub async fn try_handle_post_auth(
 
 pub async fn run_create(args: CreateArgs, state_dir: Option<&str>) -> anyhow::Result<()> {
     let paths = paths(state_dir);
-    ensure_service_state_aligned(state_dir, &paths)?;
+    crate::service::ensure_service_state_aligned(state_dir, &paths)?;
     paths.ensure()?;
     let existing = PersistedState::try_load(&paths)?;
     if let Some(PersistedState::Managed(m)) = &existing {
@@ -372,41 +372,6 @@ pub async fn run_create(args: CreateArgs, state_dir: Option<&str>) -> anyhow::Re
     Ok(())
 }
 
-/// When a system service is installed, create/join must write the same state dir
-/// the service reads - otherwise `systemctl` looks healthy while the CLI sees a
-/// different (offline) network.
-fn ensure_service_state_aligned(state_dir: Option<&str>, paths: &StatePaths) -> anyhow::Result<()> {
-    let probe = crate::service::probe();
-    if !probe.installed {
-        return Ok(());
-    }
-    let system = StatePaths::system_dir();
-    if paths.dir == system {
-        return Ok(());
-    }
-    if state_dir.is_some() {
-        // Explicit --state-dir / env: allow, but warn.
-        eprintln!(
-            "warning: writing to {} while the system service uses {}",
-            paths.dir.display(),
-            system.display()
-        );
-        return Ok(());
-    }
-    anyhow::bail!(
-        "a system service is installed and uses {}\n\
-         you are about to write to {} instead\n\n\
-         Re-run with sudo so both use the same directory:\n\
-           sudo tunnet create --name <name> [--secret <passphrase>]\n\n\
-         Or point both at one directory:\n\
-           sudo TUNNET_STATE_DIR={} tunnet create ...\n\
-           sudo tunnet service restart",
-        system.display(),
-        paths.dir.display(),
-        system.display()
-    );
-}
-
 pub async fn run_invite(args: InviteArgs, state_dir: Option<&str>) -> anyhow::Result<()> {
     let ipc = crate::cmds::ipc_or_err(state_dir).await?;
     match ipc
@@ -428,7 +393,7 @@ pub async fn run_invite(args: InviteArgs, state_dir: Option<&str>) -> anyhow::Re
 
 pub async fn run_join(args: JoinArgs, state_dir: Option<&str>) -> anyhow::Result<()> {
     let paths = paths(state_dir);
-    ensure_service_state_aligned(state_dir, &paths)?;
+    crate::service::ensure_service_state_aligned(state_dir, &paths)?;
     paths.ensure()?;
 
     let invite = decode_invite(&args.invite_code)?;

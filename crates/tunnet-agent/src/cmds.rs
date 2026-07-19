@@ -297,15 +297,13 @@ fn print_offline_status(
     let system = StatePaths::system_dir();
     if service.installed && state_dir != system.as_path() {
         out.writeln(out.yellow(&format!(
-            "  note       service uses {} - CLI state is separate; recreate with sudo or set TUNNET_STATE_DIR",
+            "  note       service uses {} - CLI state is separate; re-enroll elevated or set TUNNET_STATE_DIR",
             system.display()
         )));
     } else if service.active {
-        out.writeln(
-            out.dim("  Service is up but IPC is down - try `sudo tunnet service restart`."),
-        );
+        out.writeln(out.dim("  Service is up but IPC is down - try `tunnet service restart`."));
     } else {
-        out.writeln(out.dim("  Start with `sudo tunnet service start` or `tunnet run`."));
+        out.writeln(out.dim("  Start with `tunnet service start` or `tunnet run`."));
     }
 }
 
@@ -1029,9 +1027,9 @@ pub async fn run_down(state_dir: Option<&str>) -> anyhow::Result<()> {
 
 pub async fn ipc_or_err(state_dir: Option<&str>) -> anyhow::Result<IpcClient> {
     let ipc = client(state_dir).await?;
-    if !ipc.path().exists() {
+    if !tunnet_core::ipc::endpoint_reachable(ipc.path()).await {
         anyhow::bail!(
-            "agent not running (no IPC at {}); start with `sudo tunnet service start` or `tunnet run`",
+            "agent not running (no IPC at {}); start with `tunnet service start` or `tunnet run`",
             ipc.path().display()
         );
     }
@@ -1051,7 +1049,7 @@ pub async fn wait_until_agent(state_dir: Option<&str>, secs: u64) -> anyhow::Res
     Err(last_err.unwrap_or_else(|| anyhow::anyhow!("agent did not become ready within {secs}s")))
         .with_context(|| {
             format!(
-                "agent not ready after {secs}s; check `systemctl status tunnet` / `tunnet status`"
+                "agent not ready after {secs}s; check `tunnet service status` / `tunnet status`"
             )
         })
 }

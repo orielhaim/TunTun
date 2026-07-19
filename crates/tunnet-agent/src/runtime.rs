@@ -26,6 +26,7 @@ pub async fn run(
     paths: tunnet_core::StatePaths,
     args: RunArgs,
     shutdown: Option<tokio_util::sync::CancellationToken>,
+    mut on_ready: Option<tokio::sync::oneshot::Sender<()>>,
 ) -> anyhow::Result<()> {
     let metrics = AgentMetrics::new().context("metrics")?;
     let started_at = Instant::now();
@@ -398,7 +399,12 @@ pub async fn run(
         send: node.send.clone(),
         data_plane,
     });
-    let _ipc_task = spawn_ipc_server(ipc_state);
+    let _ipc_task = spawn_ipc_server(ipc_state)
+        .await
+        .context("start agent IPC server")?;
+    if let Some(tx) = on_ready.take() {
+        let _ = tx.send(());
+    }
 
     #[cfg(unix)]
     crate::sd_notify::status("running");
