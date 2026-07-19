@@ -1,0 +1,112 @@
+name: Sync Go mirrors
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "go/sdk/**"
+      - "go/terraform-provider-tunnet/**"
+      - ".github/workflows/sync-go-mirrors.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: sync-go-mirrors
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync-sdk:
+    name: Sync tunnet-go
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Publish go/sdk → tunnetio/tunnet-go
+        env:
+          GH_TOKEN: ${{ secrets.GO_MIRROR_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::Missing GO_MIRROR_TOKEN secret (PAT with repo scope for tunnetio/tunnet-go and terraform-provider-tunnet)"
+            exit 1
+          fi
+
+          work=$(mktemp -d)
+          git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/tunnetio/tunnet-go.git" "$work/repo"
+          rsync -a --delete \
+            --exclude '.git' \
+            go/sdk/ "$work/repo/"
+
+          cd "$work/repo"
+          git config user.name "tunnet-bot"
+          git config user.email "noreply@tunnet.io"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No SDK changes to publish"
+            exit 0
+          fi
+          git commit -m "Sync from Tunnet@${GITHUB_SHA::7}"
+          git push origin HEAD:main
+
+  sync-provider:
+    name: Sync terraform-provider-tunnet
+    needs: sync-sdk
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.x"
+          cache-dependency-path: go/terraform-provider-tunnet/go.sum
+
+      - name: Publish go/terraform-provider-tunnet → tunnetio/terraform-provider-tunnet
+        env:
+          GH_TOKEN: ${{ secrets.GO_MIRROR_TOKEN }}
+          GOPROXY: direct
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::Missing GO_MIRROR_TOKEN secret"
+            exit 1
+          fi
+
+          work=$(mktemp -d)
+          git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/tunnetio/terraform-provider-tunnet.git" "$work/repo"
+          rsync -a --delete \
+            --exclude '.git' \
+            --exclude 'dist' \
+            --exclude 'bin' \
+            --exclude 'terraform-provider-tunnet' \
+            --exclude 'terraform-provider-tunnet.exe' \
+            go/terraform-provider-tunnet/ "$work/repo/"
+
+          cd "$work/repo"
+
+          # Standalone module must not use the monorepo replace directive.
+          if grep -q '^replace github.com/tunnetio/tunnet-go' go.mod; then
+            awk '!/^replace github.com\/tunnetio\/tunnet-go/' go.mod > go.mod.tmp
+            mv go.mod.tmp go.mod
+          fi
+
+          # Pin to the latest published SDK module version (tag or pseudo-version from main).
+          go get github.com/tunnetio/tunnet-go@main
+          go mod tidy
+          go test ./...
+          go build -o /dev/null .
+
+          git config user.name "tunnet-bot"
+          git config user.email "noreply@tunnet.io"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No provider changes to publish"
+            exit 0
+          fi
+          git commit -m "Sync from Tunnet@${GITHUB_SHA::7}"
+          git push origin HEAD:main
