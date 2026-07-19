@@ -33,7 +33,7 @@ env:
 jobs:
   validate:
     name: Validate version
-    runs-on: coolify-runner-Qh5434uhkiAva
+    runs-on: [self-host-linux]
     outputs:
       tag: ${{ steps.meta.outputs.tag }}
       version: ${{ steps.meta.outputs.version }}
@@ -88,15 +88,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - host: coolify-runner-Qh5434uhkiAva
+          - host: [self-host-linux]
             target: x86_64-unknown-linux-gnu
-          - host: coolify-runner-Qh5434uhkiAva
+          - host: [self-host-linux]
             target: aarch64-unknown-linux-gnu
             cross: true
-          - host: coolify-runner-Qh5434uhkiAva
+          - host: [self-host-linux]
             target: x86_64-unknown-linux-musl
             cross: true
-          - host: coolify-runner-Qh5434uhkiAva
+          - host: [self-host-linux]
             target: aarch64-unknown-linux-musl
             cross: true
           - host: macos-latest
@@ -187,7 +187,7 @@ jobs:
   package-installers:
     name: Package install scripts
     needs: [validate]
-    runs-on: coolify-runner-Qh5434uhkiAva
+    runs-on: [self-host-linux]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -214,7 +214,7 @@ jobs:
     name: GitHub Release (draft)
     needs: [validate, build-binaries, package-installers]
     if: needs.validate.outputs.dry-run != 'true'
-    runs-on: coolify-runner-Qh5434uhkiAva
+    runs-on: [self-host-linux]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -272,7 +272,7 @@ jobs:
     name: Attestation
     needs: [validate, build-binaries, github-release]
     if: needs.validate.outputs.dry-run != 'true'
-    runs-on: coolify-runner-Qh5434uhkiAva
+    runs-on: [self-host-linux]
     steps:
       - uses: actions/download-artifact@v8
         with:

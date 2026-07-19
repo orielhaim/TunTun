@@ -17,7 +17,7 @@ on:
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
-    runs-on: coolify-runner-Qh5434uhkiAva
+    runs-on: [self-host-linux]
     permissions:
       security-events: write
       packages: read

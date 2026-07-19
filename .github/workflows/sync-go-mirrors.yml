@@ -19,7 +19,7 @@ permissions:
 jobs:
   sync-sdk:
     name: Sync tunnet-go
-    runs-on: coolify-runner-Qh5434uhkiAva
+    runs-on: [self-host-linux]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -55,7 +55,7 @@ jobs:
   sync-provider:
     name: Sync terraform-provider-tunnet
     needs: sync-sdk
-    runs-on: coolify-runner-Qh5434uhkiAva
+    runs-on: [self-host-linux]
     steps:
       - uses: actions/checkout@v4
         with:
