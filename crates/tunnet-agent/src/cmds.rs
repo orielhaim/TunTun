@@ -372,6 +372,17 @@ fn print_status(
                 "             {}",
                 out.dim(&format!("last error: {err}"))
             ));
+            let skew = err.contains("stale")
+                || err.contains("401")
+                || err.to_ascii_lowercase().contains("unauthorized");
+            if skew {
+                out.writeln(format!(
+                    "             {}",
+                    out.yellow(
+                        "hint: sync this machine's clock (VM time drift breaks control auth)"
+                    )
+                ));
+            }
         }
     } else if let Some(url) = &info.control_url {
         let loopback =
