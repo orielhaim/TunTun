@@ -1,4 +1,4 @@
-FROM rust:1.96-bookworm AS planner
+FROM rust:1.97-bookworm AS planner
 
 WORKDIR /src
 RUN cargo install cargo-chef
@@ -6,7 +6,7 @@ COPY Cargo.toml Cargo.lock ./
 COPY crates/ crates/
 RUN cargo chef prepare --recipe-path recipe.json
 
-FROM rust:1.96-bookworm AS builder
+FROM rust:1.97-bookworm AS builder
 WORKDIR /src
 RUN cargo install cargo-chef
 COPY --from=planner /src/recipe.json recipe.json

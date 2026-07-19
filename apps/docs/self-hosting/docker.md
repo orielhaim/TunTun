@@ -89,7 +89,7 @@ All Dockerfiles live in `deploy/` and use multi-stage builds:
 
 ### Dockerfile.control
 
-Uses `rust:1.96-bookworm` with cargo-chef for layer caching. Builds the `tunnet-control` binary, strips symbols, and copies it into `debian:bookworm-slim` with just `ca-certificates`. Exposes ports 8080, 9090, and 9091.
+Uses `rust:1.97-bookworm` with cargo-chef for layer caching. Builds the `tunnet-control` binary, strips symbols, and copies it into `debian:bookworm-slim` with just `ca-certificates`. Exposes ports 8080, 9090, and 9091.
 
 ### Dockerfile.management
 
@@ -101,7 +101,7 @@ Uses `oven/bun:1` for building - installs dependencies with the full workspace g
 
 ### Dockerfile.relay
 
-Uses `rust:1.96-bookworm` for building. Simpler than the control plane Dockerfile (no cargo-chef). Builds and strips `tunnet-relay`, copies into `debian:bookworm-slim`. Exposes ports 80 and 443. Entry point is `tunnet-relay run`.
+Uses `rust:1.97-bookworm` for building. Simpler than the control plane Dockerfile (no cargo-chef). Builds and strips `tunnet-relay`, copies into `debian:bookworm-slim`. Exposes ports 80 and 443. Entry point is `tunnet-relay run`.
 
 ## Adding the relay
 
