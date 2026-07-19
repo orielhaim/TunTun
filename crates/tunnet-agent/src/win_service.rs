@@ -146,6 +146,10 @@ fn run_service() -> anyhow::Result<()> {
         agent.await
     });
 
+    if let Err(ref e) = exit {
+        append_service_log(&format!("FATAL: {e:#}"));
+    }
+
     let win32_exit = if exit.is_ok() { 0 } else { 1 };
     let _ = status_handle.set_service_status(ServiceStatus {
         service_type: SERVICE_TYPE,
@@ -165,10 +169,12 @@ async fn run_agent_service(
     on_ready: tokio::sync::oneshot::Sender<()>,
 ) -> anyhow::Result<()> {
     let _ = dotenvy::dotenv();
+    // SAFETY: service entry; no concurrent env readers yet.
+    unsafe { std::env::set_var("TUNNET_SERVICE_MODE", "1") };
     let cli = Cli::parse();
     crate::cli::init_logging(&cli);
 
-    match cli.command {
+    let result = match cli.command {
         crate::cli::Command::Run(args) => {
             crate::cli::run_agent_with_shutdown(
                 args,
@@ -179,6 +185,48 @@ async fn run_agent_service(
             .await
         }
         _ => anyhow::bail!("Windows service must be started as `tunnet run --service`"),
+    };
+    if let Err(ref e) = result {
+        tracing::error!(error = %e, "agent service exiting with error");
+        append_service_log(&format!("FATAL: {e:#}"));
+    }
+    result
+}
+
+pub(crate) fn service_log_path() -> PathBuf {
+    tunnet_core::StatePaths::system_dir().join("service.log")
+}
+
+/// Fail early with a clear message when wintun.dll is missing beside the service binary.
+pub fn ensure_wintun_present() -> anyhow::Result<()> {
+    let path = crate::wintun_path::resolve(None);
+    if path.is_file() {
+        return Ok(());
+    }
+    let beside = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join("wintun.dll")))
+        .unwrap_or_else(|| PathBuf::from("wintun.dll"));
+    anyhow::bail!(
+        "wintun.dll not found (looked for {}).\n\
+         Copy wintun.dll next to tunnet.exe before starting the service.\n\
+         Download: https://www.wintun.net/",
+        beside.display()
+    );
+}
+
+fn append_service_log(line: &str) {
+    use std::io::Write;
+    let path = service_log_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
+        let _ = writeln!(f, "{line}");
     }
 }
 
@@ -356,9 +404,49 @@ pub fn start_and_wait() -> anyhow::Result<()> {
             service.start::<&str>(&[]).context("start tunnet service")?;
         }
     }
-    wait_for_state(&service, ServiceState::Running, Duration::from_secs(90))
-        .context("wait for tunnet service to reach Running")?;
+    wait_for_running(&service, Duration::from_secs(90))?;
     Ok(())
+}
+
+fn wait_for_running(
+    service: &windows_service::service::Service,
+    timeout: Duration,
+) -> anyhow::Result<()> {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        let status = service.query_status().context("query service status")?;
+        match status.current_state {
+            ServiceState::Running => return Ok(()),
+            ServiceState::Stopped => {
+                let win32 = match status.exit_code {
+                    ServiceExitCode::Win32(c) => c,
+                    ServiceExitCode::ServiceSpecific(c) => c,
+                };
+                let log = service_log_path();
+                anyhow::bail!(
+                    "tunnet service exited during startup (win32={win32}).\n\
+                     Check {} or run interactively:\n\
+                       tunnet run\n\
+                     Common cause on a fresh Windows host: missing wintun.dll next to tunnet.exe.",
+                    log.display()
+                );
+            }
+            _ => {}
+        }
+        if std::time::Instant::now() >= deadline {
+            anyhow::bail!(
+                "timed out waiting for tunnet service to become Running (last state: {:?}).\n\
+                 Check {} for details.",
+                status.current_state,
+                service_log_path().display()
+            );
+        }
+        let sleep = status
+            .wait_hint
+            .min(Duration::from_secs(2))
+            .max(Duration::from_millis(200));
+        std::thread::sleep(sleep);
+    }
 }
 
 /// Stop the service and wait until it is Stopped (or timeout).

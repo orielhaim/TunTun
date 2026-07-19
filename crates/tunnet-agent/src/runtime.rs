@@ -186,6 +186,7 @@ pub async fn run(
         #[cfg(windows)]
         wintun_file.as_deref(),
     )?);
+    crate::system_firewall::configure(&args.ifname);
     let _ = crate::magic_dns::ensure_magic_dns_addr(&args.ifname, dns_cfg.magic_ip);
     let tun_slot: TunSlot = Arc::new(tokio::sync::RwLock::new(Some(tun.clone())));
 
@@ -216,6 +217,18 @@ pub async fn run(
         .iter()
         .map(|(id, rt)| (*id, rt.spoof_tracker.clone()))
         .collect();
+
+    crate::dgram_pump::install_dialer_datagram_pump(
+        &dgram_pool,
+        tun_slot.clone(),
+        node.routes.clone(),
+        node.acl.clone(),
+        firewalls.clone(),
+        spoofs.clone(),
+        metrics.clone(),
+        node.direct_auth.clone(),
+    );
+
     let docs_map: HashMap<_, _> = node
         .direct
         .iter()

@@ -122,6 +122,13 @@ pub struct OnDemandStats {
 
 type ExtraConnMap = DashMap<(EndpointId, Vec<u8>), Arc<AsyncMutex<Option<Connection>>>>;
 
+/// Invoked when this pool dials a live tunnel connection.
+///
+/// The dialer must read datagrams on that connection (the accept path only
+/// reads accepted sockets). Without this hook, reverse-path IP traffic on a
+/// keep-alive/dialed connection is never delivered to the local TUN.
+pub type TunnelConnHook = Arc<dyn Fn(EndpointId, Connection) + Send + Sync>;
+
 #[derive(Clone)]
 pub struct ConnPool {
     endpoint: Endpoint,
@@ -134,6 +141,7 @@ pub struct ConnPool {
     metrics: Arc<PoolMetrics>,
     bytes_in: Arc<DashMap<EndpointId, AtomicU64>>,
     bytes_out: Arc<DashMap<EndpointId, AtomicU64>>,
+    tunnel_hook: Arc<Mutex<Option<TunnelConnHook>>>,
 }
 
 struct PoolPolicy {
@@ -159,6 +167,7 @@ impl ConnPool {
             metrics: Arc::new(PoolMetrics::default()),
             bytes_in: Arc::new(DashMap::new()),
             bytes_out: Arc::new(DashMap::new()),
+            tunnel_hook: Arc::new(Mutex::new(None)),
         };
         pool.spawn_idle_sweeper();
         pool
@@ -175,9 +184,38 @@ impl ConnPool {
             metrics: other.metrics.clone(),
             bytes_in: other.bytes_in.clone(),
             bytes_out: other.bytes_out.clone(),
+            tunnel_hook: Arc::new(Mutex::new(None)),
         };
         pool.spawn_idle_sweeper();
         pool
+    }
+
+    /// Register a hook invoked whenever this pool dials a tunnel connection.
+    pub fn set_tunnel_hook(&self, hook: TunnelConnHook) {
+        *self.tunnel_hook.lock() = Some(hook);
+    }
+
+    fn fire_tunnel_hook(&self, peer: EndpointId, conn: Connection) {
+        let hook = self.tunnel_hook.lock().clone();
+        if let Some(hook) = hook {
+            hook(peer, conn);
+        }
+    }
+
+    /// Prefer an accepted connection for outbound sends when we have no live dial.
+    /// Does not start a datagram reader (accept path already reads).
+    pub async fn adopt(&self, peer: EndpointId, conn: Connection) {
+        let slot = self.slot(peer);
+        let mut guard = slot.lock().await;
+        if let Some(existing) = guard.conn.as_ref()
+            && existing.close_reason().is_none()
+        {
+            guard.touch();
+            return;
+        }
+        guard.conn = Some(conn);
+        guard.state = PeerConnState::Connected;
+        guard.touch();
     }
 
     pub fn endpoint(&self) -> &Endpoint {
@@ -378,6 +416,7 @@ impl ConnPool {
                 tracing::warn!(%peer, ?e, "flush buffered datagram failed");
             }
         }
+        self.fire_tunnel_hook(peer, conn.clone());
         Ok(conn)
     }
 

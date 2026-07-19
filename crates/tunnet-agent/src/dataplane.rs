@@ -181,6 +181,7 @@ async fn bring_up(
         #[cfg(windows)]
         cfg.wintun_file.as_deref(),
     )?);
+    crate::system_firewall::configure(&cfg.ifname);
     let _ = crate::magic_dns::ensure_magic_dns_addr(&cfg.ifname, cfg.dns_cfg.magic_ip);
     {
         let mut slot = tun_slot.write().await;
@@ -210,7 +211,22 @@ async fn bring_up(
         .iter()
         .map(|(id, rt)| (*id, rt.firewall.clone()))
         .collect();
+    let spoofs: std::collections::HashMap<_, _> = node
+        .direct
+        .iter()
+        .map(|(id, rt)| (*id, rt.spoof_tracker.clone()))
+        .collect();
     let dgram_pool = ConnPool::with_shared_policy(node.endpoint.clone(), TUNNEL_ALPN, &node.pool);
+    crate::dgram_pump::install_dialer_datagram_pump(
+        &dgram_pool,
+        tun_slot.clone(),
+        node.routes.clone(),
+        node.acl.clone(),
+        firewalls.clone(),
+        spoofs,
+        metrics.clone(),
+        node.direct_auth.clone(),
+    );
     let outbound = spawn_outbound(
         tun.clone(),
         node.routes.clone(),

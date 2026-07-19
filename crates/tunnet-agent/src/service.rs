@@ -186,6 +186,7 @@ pub fn start(state_dir: Option<&str>) -> anyhow::Result<()> {
             }
         }
         println!("Starting tunnet service…");
+        crate::win_service::ensure_wintun_present()?;
         crate::win_service::start_and_wait()?;
         println!("Service is running.");
     }

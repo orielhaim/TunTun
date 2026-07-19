@@ -171,6 +171,13 @@ pub async fn record_heartbeat(pool: &PgPool, endpoint_id: &str) -> anyhow::Resul
         .bind(endpoint_id)
         .execute(pool)
         .await?;
+
+    // Peer snapshots filter on membership last_seen; keep it sliding with heartbeats
+    // so online agents do not disappear from each other's ipv4_peers after 5 minutes.
+    sqlx::query("UPDATE network_memberships SET last_seen = now() WHERE endpoint_id = $1")
+        .bind(endpoint_id)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 

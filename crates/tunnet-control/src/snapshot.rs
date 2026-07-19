@@ -482,7 +482,12 @@ async fn load_ipv4_peers(
          FROM network_memberships nm \
          JOIN devices e ON e.endpoint_id = nm.endpoint_id \
          WHERE nm.network_id = $1 AND nm.status = 'active' AND nm.endpoint_id <> $2 \
-           AND nm.last_seen > now() - interval '5 minutes'",
+           AND e.expired_at IS NULL \
+           AND ( \
+             e.agent_connected \
+             OR e.last_heartbeat_at > now() - interval '5 minutes' \
+             OR nm.last_seen > now() - interval '5 minutes' \
+           )",
     )
     .bind(network_id)
     .bind(self_endpoint_id)

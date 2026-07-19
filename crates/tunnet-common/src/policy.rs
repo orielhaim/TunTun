@@ -352,6 +352,11 @@ pub fn policy_content_hash(canonical_ir_json: &[u8]) -> String {
 }
 
 pub fn evaluate(bundle: &PolicyBundle, ctx: &EvalCtx<'_>, direction: Direction) -> Action {
+    // Mesh ICMP (OS ping, PMTU) must work out of the box. TCP/UDP-only ACLs with
+    // implicit deny used to black-hole ping while `tunnet ping` (QUIC) still worked.
+    if ctx.protocol == Protocol::Icmp {
+        return Action::Allow;
+    }
     evaluate_rules(
         &bundle.rules,
         |r, dir| rule_matches_v4(r, ctx, dir),
@@ -482,6 +487,11 @@ fn proto_port_ok(r: &PolicyRule, protocol: Protocol, dst_port: Option<u16>) -> b
     {
         return false;
     }
+    // ICMP has no L4 port; port-restricted rules must not silently fail to match
+    // when the rule protocol is `any` / unset (caller may still exclude ICMP).
+    if protocol == Protocol::Icmp {
+        return true;
+    }
     if !r.ports.is_empty() {
         match dst_port {
             Some(p) if r.ports.iter().any(|pr| pr.contains(p)) => {}
@@ -521,6 +531,53 @@ mod tests {
             evaluate(&PolicyBundle::default(), &ctx, Direction::Outbound),
             Action::Allow
         );
+    }
+
+    #[test]
+    fn icmp_allowed_even_with_tcp_only_rules() {
+        let bundle = PolicyBundle {
+            version: 1,
+            signature: String::new(),
+            rules: vec![
+                PolicyRule {
+                    priority: 100,
+                    action: Action::Allow,
+                    src: Selector::Any,
+                    dst: Selector::Any,
+                    protocol: Some(Protocol::Tcp),
+                    ports: vec![PortRange { start: 80, end: 80 }],
+                    src_posture: vec![],
+                },
+                PolicyRule {
+                    priority: 1,
+                    action: Action::Deny,
+                    src: Selector::Any,
+                    dst: Selector::Any,
+                    protocol: None,
+                    ports: vec![],
+                    src_posture: vec![],
+                },
+            ],
+            ssh_rules: vec![],
+            postures: Default::default(),
+            default_src_posture: vec![],
+            posture_enforcement: None,
+        };
+        let ctx = EvalCtx {
+            self_endpoint_hex: "aa",
+            self_ip: Ipv4Addr::new(10, 7, 0, 1),
+            self_tags: &[],
+            self_network: "",
+            peer_endpoint_hex: "bb",
+            peer_ip: Some(Ipv4Addr::new(10, 7, 0, 2)),
+            peer_tags: &[],
+            peer_network: "",
+            dst_port: None,
+            protocol: Protocol::Icmp,
+            src_posture_ok: true,
+        };
+        assert_eq!(evaluate(&bundle, &ctx, Direction::Outbound), Action::Allow);
+        assert_eq!(evaluate(&bundle, &ctx, Direction::Inbound), Action::Allow);
     }
 
     #[test]

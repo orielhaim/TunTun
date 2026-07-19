@@ -94,8 +94,12 @@ function tagsForSelector(sel: ReturnType<typeof parseSelector>): string[] {
 function portMatches(
   ports: Array<{ start: number; end: number }>,
   port: number | undefined,
+  protocol?: string,
 ): boolean {
   if (ports.length === 0) {
+    return true;
+  }
+  if (protocol === "icmp") {
     return true;
   }
   if (port === undefined) {
@@ -113,8 +117,14 @@ function evaluateRules(
   port: number | undefined,
   protocol: string,
 ): SimulateResult {
-  const sorted = [...rules].sort((a, b) => b.priority - a.priority);
   const parsedProto = parseProtocol(protocol);
+
+  // Match agent behavior: mesh ICMP is always allowed.
+  if (parsedProto === "icmp") {
+    return { verdict: "allow", matchedRules: ["builtin:icmp"] };
+  }
+
+  const sorted = [...rules].sort((a, b) => b.priority - a.priority);
 
   for (const rule of sorted) {
     const srcMatch = rule.srcSelectors.some((sel) =>
@@ -129,7 +139,7 @@ function evaluateRules(
     if (rule.protocol !== "any" && rule.protocol !== parsedProto) {
       continue;
     }
-    if (!portMatches(rule.ports, port)) {
+    if (!portMatches(rule.ports, port, parsedProto)) {
       continue;
     }
     return {

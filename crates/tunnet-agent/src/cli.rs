@@ -239,11 +239,54 @@ pub fn init_logging(cli: &Cli) {
     let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         tracing_subscriber::EnvFilter::new("info,tunnet_agent=debug,tunnet_core=debug")
     });
+
+    #[cfg(windows)]
+    if std::env::var_os("TUNNET_SERVICE_MODE").is_some() {
+        use std::fs::OpenOptions;
+        use std::sync::{Arc, Mutex};
+
+        let path = tunnet_core::StatePaths::system_dir().join("service.log");
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Ok(file) = OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(&path)
+        {
+            #[derive(Clone)]
+            struct FileWriter(Arc<Mutex<std::fs::File>>);
+            impl std::io::Write for FileWriter {
+                fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                    self.0.lock().unwrap_or_else(|e| e.into_inner()).write(buf)
+                }
+                fn flush(&mut self) -> std::io::Result<()> {
+                    self.0.lock().unwrap_or_else(|e| e.into_inner()).flush()
+                }
+            }
+            impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for FileWriter {
+                type Writer = FileWriter;
+                fn make_writer(&'a self) -> Self::Writer {
+                    self.clone()
+                }
+            }
+
+            let writer = FileWriter(Arc::new(Mutex::new(file)));
+            let _ = tracing_subscriber::fmt()
+                .with_env_filter(filter)
+                .with_ansi(false)
+                .with_writer(writer)
+                .try_init();
+            return;
+        }
+    }
+
     let sub = tracing_subscriber::fmt().with_env_filter(filter);
     if cli.json_logs {
-        sub.json().init();
+        let _ = sub.json().try_init();
     } else {
-        sub.init();
+        let _ = sub.try_init();
     }
 }
 

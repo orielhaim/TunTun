@@ -35,7 +35,22 @@ pub fn build_tun(
             .wintun_file(path.display().to_string())
             .wintun_log(true)
     };
-    let dev = builder.build_async().context("build_async TUN device")?;
+    let dev = builder
+        .build_async()
+        .with_context(|| {
+            #[cfg(windows)]
+            {
+                let path = crate::wintun_path::resolve(wintun_file);
+                format!(
+                    "build_async TUN device (wintun={}). On Windows, ensure wintun.dll sits next to tunnet.exe",
+                    path.display()
+                )
+            }
+            #[cfg(not(windows))]
+            {
+                "build_async TUN device".to_string()
+            }
+        })?;
     tracing::info!(%ipv4, prefix, mtu, "TUN device up");
     Ok(dev)
 }
@@ -183,6 +198,7 @@ pub async fn serve_tunnel_connection(deps: InboundDeps) {
     metrics.active_conns_inc();
     if let Some(p) = &pool {
         p.touch_peer(remote_id);
+        p.adopt(remote_id, conn.clone()).await;
     }
     // Prefer network from auth cache; fall back to route table peer.
     let inbound_network = direct_auth
