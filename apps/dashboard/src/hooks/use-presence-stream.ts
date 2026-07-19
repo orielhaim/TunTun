@@ -129,6 +129,12 @@ export function usePresenceStream(orgId: string | undefined) {
               };
               if (payload.type === "presence" && payload.patch) {
                 applyPresencePatch(queryClient, activeOrgId, payload.patch);
+                void queryClient.invalidateQueries({
+                  queryKey: queryKeys.machines(activeOrgId),
+                });
+                void queryClient.invalidateQueries({
+                  queryKey: queryKeys.networks(activeOrgId),
+                });
               } else if (payload.type === "entity" && payload.kind) {
                 invalidateEntityQueries(
                   queryClient,
@@ -166,6 +172,28 @@ export function seedPresenceCache(
   devices: Array<Parameters<typeof pickPresenceFields>[0]>,
 ) {
   for (const device of devices) {
-    applyPresencePatch(queryClient, orgId, pickPresenceFields(device));
+    const key = queryKeys.devicePresence(orgId, device.endpointId);
+    const existing = queryClient.getQueryData<PresencePatch>(key);
+    const next = pickPresenceFields(device);
+    if (existing) {
+      const existingHb = existing.lastHeartbeatAt
+        ? new Date(existing.lastHeartbeatAt).getTime()
+        : 0;
+      const nextHb = next.lastHeartbeatAt
+        ? new Date(next.lastHeartbeatAt).getTime()
+        : 0;
+      // Do not clobber a fresher SSE patch with a stale REST snapshot.
+      if (existingHb > nextHb) {
+        continue;
+      }
+      if (
+        existingHb === nextHb &&
+        !existing.agentConnected &&
+        next.agentConnected
+      ) {
+        continue;
+      }
+    }
+    applyPresencePatch(queryClient, orgId, next);
   }
 }

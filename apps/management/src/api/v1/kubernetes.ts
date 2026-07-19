@@ -10,16 +10,10 @@ import {
   deviceKind,
   deviceNodeKind,
 } from "../../lib/device-metadata";
+import { isAgentOnline } from "../../lib/presence";
 import { toIso } from "../../lib/serialize";
 import { getAuth, requireAuth } from "./middleware/authz";
 import { sessionPlugin } from "./middleware/session";
-
-function isOnline(
-  agentConnected: boolean,
-  _lastHeartbeatAt: Date | null,
-): boolean {
-  return agentConnected;
-}
 
 function safeFormatCidr(value: string): string | null {
   try {
@@ -162,7 +156,7 @@ export const kubernetesRoutes = new Elysia()
         networkId: r.networkId,
         networkName: r.networkName,
         meshIp: safeFormatIp(r.assignedIp),
-        online: isOnline(r.agentConnected, r.lastHeartbeatAt),
+        online: isAgentOnline(r.agentConnected, r.lastHeartbeatAt),
         type: "k8s" as const,
         kind,
         labels: normalizeDeviceLabels(r.labels),

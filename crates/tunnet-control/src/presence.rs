@@ -227,19 +227,39 @@ pub async fn mark_agent_connected(
     Ok(())
 }
 
-pub async fn mark_agent_disconnected(pool: &PgPool, endpoint_id: &str) -> anyhow::Result<()> {
+/// Mark the agent disconnected. When `session_connected_at` is set, only clear
+/// presence if that WebSocket session is still the current one (avoids a
+/// reconnect race where an older session's cleanup flips a live agent offline).
+pub async fn mark_agent_disconnected(
+    pool: &PgPool,
+    endpoint_id: &str,
+    session_connected_at: Option<chrono::DateTime<chrono::Utc>>,
+) -> anyhow::Result<()> {
     let Some(device) = load_device(pool, endpoint_id).await? else {
         return Ok(());
     };
 
-    let updated = sqlx::query(
-        "UPDATE devices \
-         SET agent_connected = false, disconnected_at = now() \
-         WHERE endpoint_id = $1 AND agent_connected",
-    )
-    .bind(endpoint_id)
-    .execute(pool)
-    .await?;
+    let updated = if let Some(connected_at) = session_connected_at {
+        sqlx::query(
+            "UPDATE devices \
+             SET agent_connected = false, disconnected_at = now() \
+             WHERE endpoint_id = $1 AND agent_connected \
+               AND connected_at IS NOT DISTINCT FROM $2",
+        )
+        .bind(endpoint_id)
+        .bind(connected_at)
+        .execute(pool)
+        .await?
+    } else {
+        sqlx::query(
+            "UPDATE devices \
+             SET agent_connected = false, disconnected_at = now() \
+             WHERE endpoint_id = $1 AND agent_connected",
+        )
+        .bind(endpoint_id)
+        .execute(pool)
+        .await?
+    };
 
     if updated.rows_affected() == 0 {
         return Ok(());
@@ -297,11 +317,15 @@ pub async fn set_public_ip(
 }
 
 pub async fn sweep_stale_connections(pool: &PgPool) -> anyhow::Result<()> {
+    // NULL last_heartbeat_at never compares true in `<`, so include it explicitly.
     let rows: Vec<(String, String)> = sqlx::query_as(
         "UPDATE devices \
          SET agent_connected = false, disconnected_at = now() \
          WHERE agent_connected \
-           AND last_heartbeat_at < now() - make_interval(secs => $1) \
+           AND ( \
+             last_heartbeat_at IS NULL \
+             OR last_heartbeat_at < now() - make_interval(secs => $1) \
+           ) \
          RETURNING endpoint_id, organization_id",
     )
     .bind(HEARTBEAT_STALE_SECS as f64)

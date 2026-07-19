@@ -33,25 +33,32 @@ export type MachinePresence =
   | "pending"
   | "expired";
 
-/** Server clears `agentConnected` after ~90s without heartbeat; trust that flag. */
+/** Server clears `agentConnected` after ~90s without heartbeat. Also age client-side
+ *  so a stuck WS / stale REST cache cannot keep showing Online forever. */
 export const HEARTBEAT_ONLINE_MS = 90_000;
 
 export function getMachinePresence(
   device: Pick<Device, "status" | "agentConnected" | "lastHeartbeatAt">,
-  _now = Date.now(),
+  now = Date.now(),
 ): MachinePresence {
   if (device.status === "expired") return "expired";
   if (device.status === "suspended") return "suspended";
   if (device.status === "pending") return "pending";
 
-  // Active control-plane WebSocket session. Do not age into "stale" from a
-  // frozen lastHeartbeatAt in the browser - heartbeats used to update only
-  // the DB, so the UI falsely showed Stale ~45s after page load.
-  if (device.agentConnected) {
-    return "online";
+  if (!device.agentConnected) {
+    return "offline";
   }
 
-  return "offline";
+  if (!device.lastHeartbeatAt) {
+    return "offline";
+  }
+
+  const heartbeatAt = new Date(device.lastHeartbeatAt).getTime();
+  if (Number.isNaN(heartbeatAt) || now - heartbeatAt > HEARTBEAT_ONLINE_MS) {
+    return "offline";
+  }
+
+  return "online";
 }
 
 export function formatLastSeenLabel(

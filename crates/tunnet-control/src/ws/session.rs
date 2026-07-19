@@ -1,9 +1,12 @@
 //! Agent WebSocket session loop.
 
+use std::time::{Duration, Instant};
+
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::{SinkExt, StreamExt};
 use tunnet_common::ws::{ClientMsg, ServerMsg};
 
+use crate::presence::HEARTBEAT_STALE_SECS;
 use crate::state::SharedState;
 
 pub async fn run_ws(
@@ -26,6 +29,20 @@ pub async fn run_ws(
     {
         tracing::warn!(?e, %endpoint_id, "failed to mark agent connected");
     }
+
+    // Stamp this session so cleanup does not clear a newer reconnect.
+    let session_connected_at: Option<chrono::DateTime<chrono::Utc>> =
+        match sqlx::query_scalar("SELECT connected_at FROM devices WHERE endpoint_id = $1")
+            .bind(&endpoint_id)
+            .fetch_optional(&state.pool)
+            .await
+        {
+            Ok(at) => at,
+            Err(e) => {
+                tracing::warn!(?e, %endpoint_id, "failed to read session connected_at");
+                None
+            }
+        };
 
     let (mut ws_tx, mut ws_rx) = socket.split();
     let mut rx = state.ws_hub.register(
@@ -61,17 +78,28 @@ pub async fn run_ws(
         }
     });
 
-    // Ping loop + inbound reader.
+    // Inbound reader with idle timeout (half-open TCP otherwise keeps presence "Online").
     let pool = state.pool.clone();
     let ep = endpoint_id.clone();
     let posture_state = state.clone();
     let recv_task = tokio::spawn(async move {
-        while let Some(Ok(msg)) = ws_rx.next().await {
-            match msg {
+        let mut last_heartbeat = Instant::now();
+        let mut idle_tick = tokio::time::interval(Duration::from_secs(15));
+        idle_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        let idle_limit = Duration::from_secs(HEARTBEAT_STALE_SECS as u64);
+
+        loop {
+            tokio::select! {
+                msg = ws_rx.next() => {
+                    let Some(Ok(msg)) = msg else {
+                        break;
+                    };
+                    match msg {
                 Message::Text(txt) => {
                     if let Ok(cm) = serde_json::from_str::<ClientMsg>(txt.as_str()) {
                         match cm {
                             ClientMsg::Heartbeat { .. } => {
+                                last_heartbeat = Instant::now();
                                 if let Err(e) = crate::presence::record_heartbeat(&pool, &ep).await
                                 {
                                     tracing::warn!(?e, %ep, "heartbeat update failed");
@@ -492,6 +520,14 @@ pub async fn run_ws(
                 }
                 Message::Close(_) => break,
                 _ => {}
+                    }
+                }
+                _ = idle_tick.tick() => {
+                    if last_heartbeat.elapsed() > idle_limit {
+                        tracing::warn!(%ep, "ws idle timeout (no heartbeat)");
+                        break;
+                    }
+                }
             }
         }
     });
@@ -502,7 +538,10 @@ pub async fn run_ws(
     }
 
     hub.unregister(&ep_for_cleanup, &organization_id, &network_ids);
-    if let Err(e) = crate::presence::mark_agent_disconnected(&state.pool, &ep_for_cleanup).await {
+    if let Err(e) =
+        crate::presence::mark_agent_disconnected(&state.pool, &ep_for_cleanup, session_connected_at)
+            .await
+    {
         tracing::warn!(?e, %ep_for_cleanup, "failed to mark agent disconnected");
     }
     tracing::info!(%ep_for_cleanup, "ws disconnected");

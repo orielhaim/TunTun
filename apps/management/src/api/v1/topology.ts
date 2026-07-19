@@ -7,6 +7,7 @@ import {
   deviceKind,
   deviceNodeKind,
 } from "../../lib/device-metadata";
+import { isAgentOnline } from "../../lib/presence";
 import { toIso } from "../../lib/serialize";
 import { getAuth, requireAuth } from "./middleware/authz";
 import { notFound, sessionPlugin } from "./middleware/session";
@@ -18,14 +19,6 @@ async function getNetworkInOrg(networkId: string, organizationId: string) {
       eq(schema.networks.organizationId, organizationId),
     ),
   });
-}
-
-function isOnline(
-  agentConnected: boolean,
-  _lastHeartbeatAt: Date | null,
-): boolean {
-  // Trust control-plane WS session flag; heartbeats keep it alive server-side.
-  return agentConnected;
 }
 
 export const topologyRoutes = new Elysia()
@@ -175,7 +168,7 @@ export const topologyRoutes = new Elysia()
           label,
           secondary: m.assignedIp,
           endpointId: m.endpointId,
-          online: isOnline(m.agentConnected, m.lastHeartbeatAt),
+          online: isAgentOnline(m.agentConnected, m.lastHeartbeatAt),
           agentConnected: m.agentConnected,
           lastHeartbeatAt: toIso(m.lastHeartbeatAt),
           assignedIp: m.assignedIp,
@@ -190,7 +183,7 @@ export const topologyRoutes = new Elysia()
       const onlineAgents = activeMachines.filter(
         (m) =>
           (m.type === "agent" || m.type === "k8s") &&
-          isOnline(m.agentConnected, m.lastHeartbeatAt),
+          isAgentOnline(m.agentConnected, m.lastHeartbeatAt),
       );
       for (let i = 0; i < onlineAgents.length; i++) {
         for (let j = i + 1; j < onlineAgents.length; j++) {
