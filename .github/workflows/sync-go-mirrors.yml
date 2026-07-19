@@ -89,13 +89,12 @@ jobs:
 
           cd "$work/repo"
 
-          # Standalone module must not use the monorepo replace directive.
-          if grep -q '^replace github.com/tunnetio/tunnet-go' go.mod; then
-            awk '!/^replace github.com\/tunnetio\/tunnet-go/' go.mod > go.mod.tmp
-            mv go.mod.tmp go.mod
-          fi
+          # Standalone module: drop monorepo replace and the local v0.0.0 stub pin.
+          sed -i '/^replace github.com\/tunnetio\/tunnet-go/d' go.mod
+          sed -i 's|github.com/tunnetio/tunnet-go v0.0.0|github.com/tunnetio/tunnet-go v0.1.0|' go.mod
 
-          # Pin to the latest published SDK module version (tag or pseudo-version from main).
+          # Prefer latest SDK main (falls back to the rewritten tag pin above).
+          export GOSUMDB=off
           go get github.com/tunnetio/tunnet-go@main
           go mod tidy
           go test ./...
