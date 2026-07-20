@@ -1,9 +1,13 @@
-//! Local HTTP reverse-proxy with inspection (Direct mode / local-only).
+//! Mesh-IP HTTP reverse-proxy with inspection (Direct mode).
+//!
+//! Binds `{mesh_ip}:{port}` (same pattern as `tunnet serve`) and forwards to
+//! `127.0.0.1:{port}`, teeing HTTP for the local inspector. Peers keep dialing
+//! the real mesh port; the app should listen on localhost only.
 
 use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 
-use anyhow::Context;
+use anyhow::{Context, bail};
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 
@@ -11,7 +15,7 @@ use super::InspectorHub;
 use super::http_tee::inspect_bidirectional;
 use super::store::ExchangeStore;
 
-/// Accept connections on `listen`, tee HTTP through the inspector, forward to `upstream`.
+/// Accept connections on `listener`, tee HTTP through the inspector, forward to `upstream`.
 pub async fn run_local_proxy(
     listener: TcpListener,
     upstream: SocketAddr,
@@ -22,7 +26,7 @@ pub async fn run_local_proxy(
     loop {
         tokio::select! {
             _ = &mut stop => {
-                tracing::info!(%upstream, "local inspect proxy stopped");
+                tracing::info!(%upstream, "inspect proxy stopped");
                 break;
             }
             accepted = listener.accept() => {
@@ -32,7 +36,7 @@ pub async fn run_local_proxy(
                 let tid = tunnel_id.clone();
                 tokio::spawn(async move {
                     if let Err(e) = proxy_one(client, upstream, store, tid).await {
-                        tracing::debug!(?e, %peer, "local inspect connection ended");
+                        tracing::debug!(?e, %peer, "inspect connection ended");
                     }
                 });
             }
@@ -55,7 +59,6 @@ async fn proxy_one(
     let (client_read, client_write) = client.into_split();
     let (up_read, up_write) = upstream_tcp.into_split();
 
-    // Client → upstream is the "request" direction (like relay_recv).
     inspect_bidirectional(
         client_read,
         client_write,
@@ -68,35 +71,35 @@ async fn proxy_one(
     .await
 }
 
-/// Bind a listener for the local inspect forward URL.
-pub async fn bind_forward_listener(
-    listen: Option<&str>,
-) -> anyhow::Result<(TcpListener, SocketAddr)> {
-    let addr: SocketAddr = match listen {
-        Some(s) => s.parse().context("invalid local listen address")?,
-        None => SocketAddr::from((Ipv4Addr::LOCALHOST, 0)),
-    };
-    let listener = TcpListener::bind(addr)
-        .await
-        .with_context(|| format!("bind local inspect forward on {addr}"))?;
-    let local = listener.local_addr()?;
-    Ok((listener, local))
-}
-
-/// Start inspector UI + local forward proxy; returns (forward_url, inspector_url, stop_tx).
+/// Bind `{mesh_ip}:{port}` and start inspector + proxy.
+///
+/// Returns `(forward_url, inspector_url, stop_tx)`.
 pub async fn start_local_inspect_session(
     hub: &InspectorHub,
     tunnel_id: &str,
-    upstream: SocketAddr,
+    mesh_ip: Ipv4Addr,
+    port: u16,
     inspect_addr: Option<&str>,
-    listen: Option<&str>,
 ) -> anyhow::Result<(String, String, oneshot::Sender<()>)> {
+    if mesh_ip.is_unspecified() {
+        bail!("mesh IP not assigned; bring the data plane up (`tunnet up`) and retry");
+    }
+
+    let bind = SocketAddr::from((mesh_ip, port));
+    let upstream = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
+
     let inspector_url = hub
         .register_tunnel(tunnel_id, upstream, inspect_addr)
         .await?;
-    let (listener, bound) = bind_forward_listener(listen).await?;
-    let forward_url = format!("http://{bound}");
 
+    let listener = TcpListener::bind(bind).await.with_context(|| {
+        format!(
+            "bind inspect proxy on {bind}. \
+             Bind your app to 127.0.0.1:{port} only (not 0.0.0.0) so Tunnet can own the mesh port"
+        )
+    })?;
+
+    let forward_url = format!("http://{mesh_ip}:{port}");
     let (stop_tx, stop_rx) = oneshot::channel();
     let store = hub.store();
     let tid = tunnel_id.to_string();

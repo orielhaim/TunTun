@@ -1051,6 +1051,11 @@ async fn run_tunnel_start(
     if let Some(url) = &info.inspector_url {
         out.writeln(format!("  Inspector  {}", out.cyan(url)));
     }
+    if info.relay == "local" {
+        out.writeln(
+            out.dim("  Direct mode: owns the mesh port - bind your app to 127.0.0.1 only."),
+        );
+    }
     if !inspect {
         return Ok(());
     }

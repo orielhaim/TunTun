@@ -732,7 +732,7 @@ async fn start_tunnel(
         }
         return state
             .tunnels
-            .start_local_inspect(port, inspect_addr, None)
+            .start_local_inspect(port, inspect_addr, state.node.self_ipv4)
             .await;
     }
 

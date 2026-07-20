@@ -66,12 +66,12 @@ impl TunnelManager {
             .collect()
     }
 
-    /// Local HTTP inspect proxy (Direct mode / no relay). Forwards a local port → `127.0.0.1:local_port`.
+    /// Direct-mode inspect: bind `{mesh_ip}:{port}` → `127.0.0.1:{port}` with HTTP tee.
     pub async fn start_local_inspect(
         &self,
         local_port: u16,
         inspect_addr: Option<&str>,
-        listen: Option<&str>,
+        mesh_ip: Ipv4Addr,
     ) -> anyhow::Result<TunnelInfo> {
         {
             let guard = self.inner.lock();
@@ -82,13 +82,12 @@ impl TunnelManager {
         }
 
         let tunnel_id = uuid::Uuid::new_v4().to_string();
-        let upstream = SocketAddr::from((Ipv4Addr::LOCALHOST, local_port));
         let (forward_url, inspector_url, stop_tx) = start_local_inspect_session(
             &self.inspector,
             &tunnel_id,
-            upstream,
+            mesh_ip,
+            local_port,
             inspect_addr,
-            listen,
         )
         .await?;
 
@@ -112,7 +111,7 @@ impl TunnelManager {
             },
         );
 
-        tracing::info!(url = %info.public_url, local_port, "local inspect proxy active");
+        tracing::info!(url = %info.public_url, local_port, "mesh inspect proxy active");
         Ok(info)
     }
 

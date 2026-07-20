@@ -32,7 +32,7 @@ The CLI outputs a public URL like `https://abc123.your-relay.example.com` that a
 
 With `--inspect`, the agent captures plaintext HTTP (headers and bodies, up to 1 MiB each) on the machine and serves a local UI at `http://127.0.0.1:4040` by default. The CLI stays attached and streams each request to the console (Ctrl+C stops the tunnel). You can also open the UI to inspect details and **Replay** any captured request against your local upstream. Bodies never leave the machine.
 
-`--inspect` works in **Managed** mode (public HTTPS URL via relay) and **Direct** mode (local forward URL only - no public relay). In Direct mode, traffic is accepted on a local listen port and proxied to your app.
+`--inspect` works in **Managed** mode (public HTTPS URL via relay) and **Direct** mode. In Direct mode Tunnet binds your **mesh IP:port** (same idea as `tunnet serve`) and proxies to `127.0.0.1:port`, so peers keep curling `http://100.x.x.x:3000` and requests show up in the inspector. Bind the app to localhost only - not `0.0.0.0` - so Tunnet can own the mesh port.
 
 Without `--inspect`, public tunnels still require Managed mode.
 
