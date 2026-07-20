@@ -18,8 +18,6 @@ type Selector =
   | { kind: "tag"; value: string }
   | { kind: "network"; value: string }
   | { kind: "cidr"; value: string }
-  | { kind: "user_group"; value: string }
-  | { kind: "device_group"; value: string }
   | { kind: "user"; value: string };
 
 function parseSelectorString(raw: string): Selector {
@@ -27,11 +25,8 @@ function parseSelectorString(raw: string): Selector {
   if (s === "*") return { kind: "any" };
   if (s.startsWith("tag:")) return { kind: "tag", value: s.slice(4) };
   if (s.startsWith("user:")) return { kind: "user", value: s.slice(5) };
-  if (s.startsWith("group:user:")) {
-    return { kind: "user_group", value: s.slice(11) };
-  }
-  if (s.startsWith("group:device:")) {
-    return { kind: "device_group", value: s.slice(13) };
+  if (s.startsWith("group:user:") || s.startsWith("group:device:")) {
+    throw new Error(`unsupported group selector: ${s}`);
   }
   if (s.startsWith("network:")) {
     return { kind: "network", value: s.slice(8) };
@@ -78,8 +73,6 @@ export async function loadOrganizationPolicyDocument(
   organizationId: string,
 ): Promise<PolicyDocument> {
   const [
-    userGroupRows,
-    deviceGroupRows,
     tagRows,
     hostAliasRows,
     ipSetRows,
@@ -90,12 +83,6 @@ export async function loadOrganizationPolicyDocument(
     nodeAttributeRows,
     networks,
   ] = await Promise.all([
-    db.query.userGroups.findMany({
-      where: eq(schema.userGroups.organizationId, organizationId),
-    }),
-    db.query.deviceGroups.findMany({
-      where: eq(schema.deviceGroups.organizationId, organizationId),
-    }),
     db.query.tagDefinitions.findMany({
       where: eq(schema.tagDefinitions.organizationId, organizationId),
     }),
@@ -125,55 +112,16 @@ export async function loadOrganizationPolicyDocument(
     }),
   ]);
 
-  const userGroupIds = userGroupRows.map((g) => g.id);
-  const deviceGroupIds = deviceGroupRows.map((g) => g.id);
   const networkIds = networks.map((n) => n.id);
 
-  const [userGroupMemberRows, deviceGroupMemberRows, sshPolicyRows] =
-    await Promise.all([
-      userGroupIds.length > 0
-        ? db.query.userGroupMembers.findMany({
-            where: inArray(schema.userGroupMembers.groupId, userGroupIds),
-          })
-        : Promise.resolve([]),
-      deviceGroupIds.length > 0
-        ? db.query.deviceGroupMembers.findMany({
-            where: inArray(schema.deviceGroupMembers.groupId, deviceGroupIds),
-          })
-        : Promise.resolve([]),
-      networkIds.length > 0
-        ? db.query.sshPolicies.findMany({
-            where: inArray(schema.sshPolicies.networkId, networkIds),
-          })
-        : Promise.resolve([]),
-    ]);
-
-  const membersByUserGroup = new Map<
-    string,
-    Array<{ userId: string | null; email: string | null }>
-  >();
-  for (const member of userGroupMemberRows) {
-    const list = membersByUserGroup.get(member.groupId) ?? [];
-    list.push({ userId: member.userId, email: member.email });
-    membersByUserGroup.set(member.groupId, list);
-  }
-
-  const membersByDeviceGroup = new Map<string, Array<{ endpointId: string }>>();
-  for (const member of deviceGroupMemberRows) {
-    const list = membersByDeviceGroup.get(member.groupId) ?? [];
-    list.push({ endpointId: member.endpointId });
-    membersByDeviceGroup.set(member.groupId, list);
-  }
+  const sshPolicyRows =
+    networkIds.length > 0
+      ? await db.query.sshPolicies.findMany({
+          where: inArray(schema.sshPolicies.networkId, networkIds),
+        })
+      : [];
 
   const rows: PolicyRows = {
-    userGroups: userGroupRows.map((group) => ({
-      name: group.name,
-      members: membersByUserGroup.get(group.id) ?? [],
-    })),
-    deviceGroups: deviceGroupRows.map((group) => ({
-      name: group.name,
-      members: membersByDeviceGroup.get(group.id) ?? [],
-    })),
     tags: tagRows.map((tag) => ({
       name: tag.name,
       owners: tag.owners,
@@ -244,12 +192,6 @@ export async function applyPolicyDocument(input: {
 
   return db.transaction(async (tx) => {
     await tx
-      .delete(schema.userGroups)
-      .where(eq(schema.userGroups.organizationId, input.organizationId));
-    await tx
-      .delete(schema.deviceGroups)
-      .where(eq(schema.deviceGroups.organizationId, input.organizationId));
-    await tx
       .delete(schema.tagDefinitions)
       .where(eq(schema.tagDefinitions.organizationId, input.organizationId));
     await tx
@@ -280,45 +222,6 @@ export async function applyPolicyDocument(input: {
       await tx
         .delete(schema.sshPolicies)
         .where(inArray(schema.sshPolicies.networkId, networkIds));
-    }
-
-    for (const group of input.document.user_groups) {
-      const [created] = await tx
-        .insert(schema.userGroups)
-        .values({
-          organizationId: input.organizationId,
-          name: group.name,
-        })
-        .returning();
-      if (!created) continue;
-      if (group.members.length > 0) {
-        await tx
-          .insert(schema.userGroupMembers)
-          .values(
-            group.members.map((member) =>
-              member.includes("@")
-                ? { groupId: created.id, email: member }
-                : { groupId: created.id, userId: member },
-            ),
-          );
-      }
-    }
-
-    for (const group of input.document.device_groups) {
-      const [created] = await tx
-        .insert(schema.deviceGroups)
-        .values({
-          organizationId: input.organizationId,
-          name: group.name,
-        })
-        .returning();
-      if (!created || group.endpoints.length === 0) continue;
-      await tx.insert(schema.deviceGroupMembers).values(
-        group.endpoints.map((endpointId) => ({
-          groupId: created.id,
-          endpointId,
-        })),
-      );
     }
 
     for (const tag of input.document.tags) {

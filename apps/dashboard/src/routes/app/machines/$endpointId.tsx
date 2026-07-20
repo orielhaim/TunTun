@@ -24,6 +24,10 @@ import {
 } from "@/components/app/machine-labels";
 import { MachinePostureTab } from "@/components/app/machine-posture-tab";
 import { MachineRoutesPanel } from "@/components/app/machine-routes-panel";
+import {
+  MachineTagsEditor,
+  MachineTagsList,
+} from "@/components/app/machine-tags";
 import { PageHeader } from "@/components/app/page-header";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Badge } from "@/components/ui/badge";
@@ -343,6 +347,7 @@ function MachineDetailPage() {
   const [createTunnelOpen, setCreateTunnelOpen] = useState(false);
   const [createServeOpen, setCreateServeOpen] = useState(false);
   const [labelsOpen, setLabelsOpen] = useState(false);
+  const [tagsOpen, setTagsOpen] = useState(false);
   const [expiryOpen, setExpiryOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const queryClient = useQueryClient();
@@ -641,6 +646,13 @@ function MachineDetailPage() {
                     />
                   </DetailRow>
                 ) : null}
+                <DetailRow label="Tags">
+                  <MachineTagsList
+                    tags={device.tags ?? []}
+                    empty="—"
+                    className="justify-end"
+                  />
+                </DetailRow>
               </div>
             </section>
 
@@ -938,7 +950,7 @@ function MachineDetailPage() {
 
               <SettingsSection
                 title="Labels"
-                description="Key/value tags for search and grouping."
+                description="Key/value metadata for search and identification (not ACL)."
                 footer={
                   <Button
                     variant="outline"
@@ -954,6 +966,22 @@ function MachineDetailPage() {
                   max={20}
                   empty="No labels yet"
                 />
+              </SettingsSection>
+
+              <SettingsSection
+                title="Tags"
+                description="ACL identity used in access rules (`tag:prod`)."
+                footer={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setTagsOpen(true)}
+                  >
+                    Edit tags
+                  </Button>
+                }
+              >
+                <MachineTagsList tags={device.tags ?? []} empty="No tags yet" />
               </SettingsSection>
 
               <SettingsSection
@@ -1154,6 +1182,19 @@ function MachineDetailPage() {
           await deviceMutations.updateLabels.mutateAsync({
             endpointId,
             body: patch,
+          });
+        }}
+      />
+
+      <MachineTagsEditor
+        open={tagsOpen}
+        onOpenChange={setTagsOpen}
+        tags={device.tags ?? []}
+        loading={deviceMutations.putTags.isPending}
+        onSave={async (tags) => {
+          await deviceMutations.putTags.mutateAsync({
+            endpointId,
+            tags,
           });
         }}
       />

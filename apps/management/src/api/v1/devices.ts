@@ -1,4 +1,5 @@
 import {
+  bulkAssignDeviceTagsBody,
   DEFAULT_ORGANIZATION_SETTINGS,
   deleteDevicesBody,
   effectiveAgentConfigSchema,
@@ -8,6 +9,8 @@ import {
   patchDeviceBody,
   patchDeviceLabelsBody,
   patchDeviceMembershipBody,
+  patchDeviceTagsBody,
+  putDeviceTagsBody,
 } from "@tunnet/api/management";
 import { schema } from "@tunnet/db";
 import { and, eq } from "drizzle-orm";
@@ -26,8 +29,22 @@ import {
   removeDeviceMembershipsBulk,
 } from "../../lib/remove-device-membership";
 import { serializeDevice } from "../../lib/serialize-device";
+import {
+  applyDeviceTagChanges,
+  assertCanAssignTags,
+  ensureTagDefinitionsExist,
+  listDeviceTags,
+  listDeviceTagsForEndpoints,
+  replaceDeviceTags,
+} from "../../lib/tag-ownership";
 import { getAuth, requireAuth, requirePermission } from "./middleware/authz";
-import { badRequest, notFound, sessionPlugin } from "./middleware/session";
+import {
+  badRequest,
+  forbidden,
+  notFound,
+  sessionPlugin,
+} from "./middleware/session";
+import { getTagActor, requireTagAccess } from "./middleware/tag-auth";
 
 async function getNetworkInOrg(networkId: string, organizationId: string) {
   return db.query.networks.findFirst({
@@ -70,7 +87,16 @@ async function listDevicesOnNetwork(networkId: string) {
     )
     .where(eq(schema.networkMemberships.networkId, networkId));
 
-  return rows.map(serializeDevice);
+  const tagsByEndpoint = await listDeviceTagsForEndpoints(
+    rows.map((r) => r.endpointId),
+  );
+
+  return rows.map((row) =>
+    serializeDevice({
+      ...row,
+      tags: tagsByEndpoint.get(row.endpointId) ?? [],
+    }),
+  );
 }
 
 export const devicesRoutes = new Elysia()
@@ -182,6 +208,189 @@ export const devicesRoutes = new Elysia()
       if (!labels) return notFound("Device not found");
       return { labels };
     },
+  )
+  .get(
+    "/organizations/:orgId/devices/:endpointId/tags",
+    async ({ authContext, params }) => {
+      const auth = getAuth({ authContext });
+      const device = await db.query.devices.findFirst({
+        where: and(
+          eq(schema.devices.endpointId, params.endpointId),
+          eq(schema.devices.organizationId, auth.organizationId),
+        ),
+        columns: { endpointId: true },
+      });
+      if (!device) return notFound("Device not found");
+      return { tags: await listDeviceTags(params.endpointId) };
+    },
+  )
+  .group("", (app) =>
+    app
+      .use(requireTagAccess("assign"))
+      .patch(
+        "/organizations/:orgId/devices/:endpointId/tags",
+        async ({ authContext, params, body }) => {
+          const actor = getTagActor({ authContext, apiKeyAuth: null });
+          const parsed = patchDeviceTagsBody.parse(body);
+          const device = await db.query.devices.findFirst({
+            where: and(
+              eq(schema.devices.endpointId, params.endpointId),
+              eq(schema.devices.organizationId, actor.organizationId),
+            ),
+            columns: { endpointId: true },
+          });
+          if (!device) return notFound("Device not found");
+
+          const touched = [...parsed.add, ...parsed.remove];
+          const missing = await ensureTagDefinitionsExist(
+            actor.organizationId,
+            touched,
+          );
+          if (missing.length > 0) {
+            return badRequest(
+              `Unknown tag definition(s): ${missing.join(", ")}`,
+            );
+          }
+          const ownership = await assertCanAssignTags(
+            actor.organizationId,
+            touched,
+            actor,
+          );
+          if (!ownership.ok) {
+            return forbidden();
+          }
+
+          const tags = await db.transaction(async (tx) => {
+            const next = await applyDeviceTagChanges(
+              params.endpointId,
+              parsed.add,
+              parsed.remove,
+              tx,
+            );
+            await writeAudit(tx, {
+              organizationId: actor.organizationId,
+              actor: actor.userId ?? actor.apiKeyId ?? "system",
+              action: "device.tags_updated",
+              target: params.endpointId,
+              metadata: parsed,
+            });
+            await bumpOrgAndNotify(tx, actor.organizationId);
+            return next;
+          });
+          return { tags };
+        },
+      )
+      .put(
+        "/organizations/:orgId/devices/:endpointId/tags",
+        async ({ authContext, params, body }) => {
+          const actor = getTagActor({ authContext, apiKeyAuth: null });
+          const parsed = putDeviceTagsBody.parse(body);
+          const device = await db.query.devices.findFirst({
+            where: and(
+              eq(schema.devices.endpointId, params.endpointId),
+              eq(schema.devices.organizationId, actor.organizationId),
+            ),
+            columns: { endpointId: true },
+          });
+          if (!device) return notFound("Device not found");
+
+          const missing = await ensureTagDefinitionsExist(
+            actor.organizationId,
+            parsed.tags,
+          );
+          if (missing.length > 0) {
+            return badRequest(
+              `Unknown tag definition(s): ${missing.join(", ")}`,
+            );
+          }
+          const ownership = await assertCanAssignTags(
+            actor.organizationId,
+            parsed.tags,
+            actor,
+          );
+          if (!ownership.ok) {
+            return forbidden();
+          }
+
+          const tags = await db.transaction(async (tx) => {
+            const next = await replaceDeviceTags(
+              params.endpointId,
+              parsed.tags,
+              tx,
+            );
+            await writeAudit(tx, {
+              organizationId: actor.organizationId,
+              actor: actor.userId ?? actor.apiKeyId ?? "system",
+              action: "device.tags_replaced",
+              target: params.endpointId,
+              metadata: parsed,
+            });
+            await bumpOrgAndNotify(tx, actor.organizationId);
+            return next;
+          });
+          return { tags };
+        },
+      )
+      .post(
+        "/organizations/:orgId/devices/tags/bulk",
+        async ({ authContext, body }) => {
+          const actor = getTagActor({ authContext, apiKeyAuth: null });
+          const parsed = bulkAssignDeviceTagsBody.parse(body);
+          const touched = [...parsed.add, ...parsed.remove];
+          const missing = await ensureTagDefinitionsExist(
+            actor.organizationId,
+            touched,
+          );
+          if (missing.length > 0) {
+            return badRequest(
+              `Unknown tag definition(s): ${missing.join(", ")}`,
+            );
+          }
+          const ownership = await assertCanAssignTags(
+            actor.organizationId,
+            touched,
+            actor,
+          );
+          if (!ownership.ok) {
+            return forbidden();
+          }
+
+          const updated = await db.transaction(async (tx) => {
+            const results: Array<{ endpointId: string; tags: string[] }> = [];
+            for (const endpointId of parsed.endpointIds) {
+              const device = await tx.query.devices.findFirst({
+                where: and(
+                  eq(schema.devices.endpointId, endpointId),
+                  eq(schema.devices.organizationId, actor.organizationId),
+                ),
+                columns: { endpointId: true },
+              });
+              if (!device) continue;
+              const tags = await applyDeviceTagChanges(
+                endpointId,
+                parsed.add,
+                parsed.remove,
+                tx,
+              );
+              results.push({ endpointId, tags });
+            }
+            await writeAudit(tx, {
+              organizationId: actor.organizationId,
+              actor: actor.userId ?? actor.apiKeyId ?? "system",
+              action: "device.tags_bulk_updated",
+              target: actor.organizationId,
+              metadata: {
+                count: results.length,
+                add: parsed.add,
+                remove: parsed.remove,
+              },
+            });
+            await bumpOrgAndNotify(tx, actor.organizationId);
+            return results;
+          });
+          return { devices: updated };
+        },
+      ),
   )
   .group("", (app) =>
     app
@@ -315,7 +524,8 @@ export const devicesRoutes = new Elysia()
             metadata: row.device.metadata,
             type: row.device.type,
             labels: row.device.labels,
-            expiresAt: row.device.expiresAt,
+            expiredAt: row.device.expiredAt,
+            inactivityTtl: row.device.inactivityTtl,
             assignedIp: row.membership.assignedIp,
             publicIp: row.device.publicIp,
             tenantIpv6: row.device.tenantIpv6,
@@ -416,7 +626,8 @@ export const devicesRoutes = new Elysia()
               metadata: row.device.metadata,
               type: row.device.type,
               labels: row.device.labels,
-              expiresAt: row.device.expiresAt,
+              expiredAt: row.device.expiredAt,
+              inactivityTtl: row.device.inactivityTtl,
               assignedIp: row.membership.assignedIp,
               publicIp: row.device.publicIp,
               tenantIpv6: row.device.tenantIpv6,

@@ -6,6 +6,9 @@ export const API_KEY_SCOPE_VALUES = [
   "policy:read",
   "policy:write",
   "policy:apply",
+  "tag:read",
+  "tag:write",
+  "tag:assign",
 ] as const;
 
 export type ApiKeyScope = (typeof API_KEY_SCOPE_VALUES)[number];
@@ -15,6 +18,9 @@ export const SDK_MANAGE_SCOPE: ApiKeyScope = "sdk:manage";
 export const POLICY_READ_SCOPE: ApiKeyScope = "policy:read";
 export const POLICY_WRITE_SCOPE: ApiKeyScope = "policy:write";
 export const POLICY_APPLY_SCOPE: ApiKeyScope = "policy:apply";
+export const TAG_READ_SCOPE: ApiKeyScope = "tag:read";
+export const TAG_WRITE_SCOPE: ApiKeyScope = "tag:write";
+export const TAG_ASSIGN_SCOPE: ApiKeyScope = "tag:assign";
 
 export const API_KEY_SCOPES: ReadonlyArray<{
   id: ApiKeyScope;
@@ -43,13 +49,29 @@ export const API_KEY_SCOPES: ReadonlyArray<{
     id: POLICY_WRITE_SCOPE,
     label: "Write policy entities",
     description:
-      "Create and update granular policy entities (groups, rules, tags).",
+      "Create and update granular policy entities (rules, grants, aliases).",
   },
   {
     id: POLICY_APPLY_SCOPE,
     label: "Apply policy documents",
     description:
       "Apply, force-apply, and rollback policy documents (GitOps / Terraform).",
+  },
+  {
+    id: TAG_READ_SCOPE,
+    label: "Read tags",
+    description: "List tag definitions and device tag assignments.",
+  },
+  {
+    id: TAG_WRITE_SCOPE,
+    label: "Manage tag definitions",
+    description: "Create, update, and delete tag definitions and owners.",
+  },
+  {
+    id: TAG_ASSIGN_SCOPE,
+    label: "Assign tags",
+    description:
+      "Assign and remove ACL tags on devices (subject to tag ownership).",
   },
 ];
 

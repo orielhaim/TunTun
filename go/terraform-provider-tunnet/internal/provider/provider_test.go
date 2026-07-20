@@ -50,8 +50,8 @@ func TestProviderResourceRegistration(t *testing.T) {
 
 	p := providerpkg.New("test")()
 	factories := p.Resources(context.Background())
-	if len(factories) != 12 {
-		t.Fatalf("expected 12 resources, got %d", len(factories))
+	if len(factories) != 10 {
+		t.Fatalf("expected 10 resources, got %d", len(factories))
 	}
 
 	names := make(map[string]struct{}, len(factories))
@@ -70,8 +70,6 @@ func TestProviderResourceRegistration(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"tunnet_user_group",
-		"tunnet_device_group",
 		"tunnet_tag",
 		"tunnet_host_alias",
 		"tunnet_ip_set",

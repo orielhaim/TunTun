@@ -42,6 +42,7 @@ export function EnrollmentTokenDialog({
   const { data: networks } = useNetworks(orgId);
   const [networkId, setNetworkId] = useState(defaultNetworkId ?? "");
   const [ttlMinutes, setTtlMinutes] = useState("15");
+  const [tagsInput, setTagsInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [token, setToken] = useState<string | null>(null);
 
@@ -54,9 +55,14 @@ export function EnrollmentTokenDialog({
     }
     setLoading(true);
     try {
+      const tags = tagsInput
+        .split(/[,\s]+/)
+        .map((s) => s.trim().replace(/^tag:/, "").toLowerCase())
+        .filter(Boolean);
       const client = createManagementClient(orgId);
       const result = await client.createEnrollmentToken(selectedNetworkId, {
         ttlMinutes: Number(ttlMinutes) || 15,
+        tags,
       });
       setToken(result.token);
       void queryClient.invalidateQueries({
@@ -76,6 +82,7 @@ export function EnrollmentTokenDialog({
     if (!next) {
       setToken(null);
       setNetworkId(defaultNetworkId ?? "");
+      setTagsInput("");
     }
     onOpenChange(next);
   }
@@ -137,6 +144,18 @@ export function EnrollmentTokenDialog({
                 value={ttlMinutes}
                 onChange={(e) => setTtlMinutes(e.target.value)}
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="enroll-tags">Tags (optional)</Label>
+              <Input
+                id="enroll-tags"
+                value={tagsInput}
+                onChange={(e) => setTagsInput(e.target.value)}
+                placeholder="prod, web-server"
+              />
+              <p className="text-muted-foreground text-xs">
+                Machines that enroll with this token receive these ACL tags.
+              </p>
             </div>
           </div>
         )}

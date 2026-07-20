@@ -14,7 +14,6 @@ export {
   type AclRule,
   type AutoApprover,
   aclKey,
-  type DeviceGroup,
   type DiffChange,
   type DiffKind,
   emptyDocument,
@@ -31,7 +30,6 @@ export {
   type TagDefinition,
   type TestCaseResult,
   type TestResults,
-  type UserGroup,
   type ValidationIssue,
   type ValidationResult,
 } from "./types";

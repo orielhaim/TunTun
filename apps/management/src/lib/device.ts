@@ -27,9 +27,10 @@ function formatNullableIp(value: string | null): string | null {
   return formatIp(value);
 }
 
-function deviceExpiryFields(device: DeviceRow) {
+function deviceExpiryFields(device: DeviceRow, tags: string[] = []) {
   return {
     labels: normalizeDeviceLabels(device.labels),
+    tags,
     inactivityTtl: device.inactivityTtl ?? null,
     expiredAt: toIso(device.expiredAt),
   };
@@ -38,6 +39,7 @@ function deviceExpiryFields(device: DeviceRow) {
 export function serializeDeviceDetail(
   device: DeviceRow,
   memberships: Array<MembershipRow & { networkName: string }>,
+  tags: string[] = [],
 ) {
   return {
     endpointId: device.endpointId,
@@ -56,7 +58,7 @@ export function serializeDeviceDetail(
     lastHeartbeatAt: toIso(device.lastHeartbeatAt),
     firstSeen: toIso(device.firstSeen)!,
     lastSeen: toIso(device.lastSeen)!,
-    ...deviceExpiryFields(device),
+    ...deviceExpiryFields(device, tags),
     memberships: memberships.map((m) => ({
       networkId: m.networkId,
       networkName: m.networkName,
@@ -87,12 +89,17 @@ export async function getDeviceInOrg(
 
   if (!device) return null;
 
+  const tagRows = await conn.query.deviceTags.findMany({
+    where: eq(schema.deviceTags.endpointId, endpointId),
+  });
+
   return serializeDeviceDetail(
     device,
     device.memberships.map((m) => ({
       ...m,
       networkName: m.network.name,
     })),
+    tagRows.map((t) => t.tag).sort(),
   );
 }
 

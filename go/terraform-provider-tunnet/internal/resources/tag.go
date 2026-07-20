@@ -55,7 +55,7 @@ func (r *tagResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *
 			"owners": schema.SetAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
-				Description: "User or group IDs allowed to assign this tag.",
+				Description: "Owners allowed to assign this tag (user:<id|email>, tag:<name>, or autogroup:admin).",
 			},
 		},
 	}

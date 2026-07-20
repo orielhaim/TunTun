@@ -1,13 +1,31 @@
 package tunnet
 
-import "context"
+import (
+	"context"
+	"fmt"
+	"net/http"
+)
 
 // TagDefinition is an organization-scoped tag with ownership rules.
 type TagDefinition struct {
 	ID             string   `json:"id"`
-	OrganizationID string   `json:"organizationId"`
+	OrganizationID string   `json:"organizationId,omitempty"`
 	Name           string   `json:"name"`
 	Owners         []string `json:"owners,omitempty"`
+	MachineCount   int      `json:"machineCount,omitempty"`
+	CreatedAt      string   `json:"createdAt,omitempty"`
+}
+
+// CreateTagDefinitionInput is the payload for creating a tag definition.
+type CreateTagDefinitionInput struct {
+	Name   string   `json:"name"`
+	Owners []string `json:"owners,omitempty"`
+}
+
+// UpdateTagDefinitionInput is the payload for updating a tag definition.
+type UpdateTagDefinitionInput struct {
+	Name   *string  `json:"name,omitempty"`
+	Owners []string `json:"owners,omitempty"`
 }
 
 // HostAlias maps a name to an IP or CIDR.
@@ -62,29 +80,73 @@ type AutoApprover struct {
 	Name           string `json:"name"`
 }
 
+func (c *Client) tagDefinitionsPath() string {
+	return fmt.Sprintf("/api/v1/organizations/%s/tag-definitions", c.organizationID)
+}
+
+func (c *Client) tagDefinitionPath(id string) string {
+	return fmt.Sprintf("%s/%s", c.tagDefinitionsPath(), id)
+}
+
 // ListTagDefinitions lists tag definitions.
 func (c *Client) ListTagDefinitions(ctx context.Context) ([]TagDefinition, error) {
-	return nil, ErrNotImplemented
+	var out struct {
+		Tags []TagDefinition `json:"tags"`
+	}
+	if err := c.do(ctx, http.MethodGet, c.tagDefinitionsPath(), nil, &out); err != nil {
+		return nil, err
+	}
+	return out.Tags, nil
 }
 
 // GetTagDefinition returns a tag definition by ID.
 func (c *Client) GetTagDefinition(ctx context.Context, id string) (*TagDefinition, error) {
-	return nil, ErrNotImplemented
+	tags, err := c.ListTagDefinitions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i := range tags {
+		if tags[i].ID == id {
+			return &tags[i], nil
+		}
+	}
+	return nil, &APIError{
+		StatusCode: http.StatusNotFound,
+		Method:     http.MethodGet,
+		Path:       c.tagDefinitionPath(id),
+		Body:       "tag definition not found",
+	}
 }
 
 // CreateTagDefinition creates a tag definition.
 func (c *Client) CreateTagDefinition(ctx context.Context, tag TagDefinition) (*TagDefinition, error) {
-	return nil, ErrNotImplemented
+	var created TagDefinition
+	if err := c.do(ctx, http.MethodPost, c.tagDefinitionsPath(), CreateTagDefinitionInput{
+		Name:   tag.Name,
+		Owners: tag.Owners,
+	}, &created); err != nil {
+		return nil, err
+	}
+	return &created, nil
 }
 
 // UpdateTagDefinition updates a tag definition.
 func (c *Client) UpdateTagDefinition(ctx context.Context, id string, tag TagDefinition) (*TagDefinition, error) {
-	return nil, ErrNotImplemented
+	input := UpdateTagDefinitionInput{Owners: tag.Owners}
+	if tag.Name != "" {
+		name := tag.Name
+		input.Name = &name
+	}
+	var updated TagDefinition
+	if err := c.do(ctx, http.MethodPatch, c.tagDefinitionPath(id), input, &updated); err != nil {
+		return nil, err
+	}
+	return &updated, nil
 }
 
 // DeleteTagDefinition deletes a tag definition.
 func (c *Client) DeleteTagDefinition(ctx context.Context, id string) error {
-	return ErrNotImplemented
+	return c.do(ctx, http.MethodDelete, c.tagDefinitionPath(id), nil, nil)
 }
 
 // ListHostAliases lists host aliases.

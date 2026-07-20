@@ -23,6 +23,7 @@ export function serializeDevice(row: {
   name?: string | null;
   metadata: unknown;
   labels?: unknown;
+  tags?: string[];
   inactivityTtl?: string | null;
   expiredAt?: Date | null;
   deviceLastSeen?: Date;
@@ -63,6 +64,7 @@ export function serializeDevice(row: {
     lastSeen: toIso(row.lastSeen)!,
     status: row.status as "active" | "suspended" | "pending" | "expired",
     labels,
+    tags: row.tags ?? [],
     inactivityTtl: row.inactivityTtl ?? null,
     expiredAt: toIso(row.expiredAt),
   };

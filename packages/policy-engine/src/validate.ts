@@ -52,8 +52,6 @@ function checkSelectorRefs(
   sel: string,
   path: string,
   refs: {
-    userGroups: Set<string>;
-    deviceGroups: Set<string>;
     tags: Set<string>;
     hostAliases: Set<string>;
     ipSets: Set<string>;
@@ -71,16 +69,6 @@ function checkSelectorRefs(
   }
 
   switch (parsed.kind) {
-    case "user_group":
-      if (!refs.userGroups.has(parsed.value)) {
-        errors.push(issue(path, `unknown user group '${parsed.value}'`));
-      }
-      break;
-    case "device_group":
-      if (!refs.deviceGroups.has(parsed.value)) {
-        errors.push(issue(path, `unknown device group '${parsed.value}'`));
-      }
-      break;
     case "tag":
       if (!refs.tags.has(parsed.value)) {
         errors.push(issue(path, `unknown tag '${parsed.value}'`));
@@ -105,26 +93,19 @@ export function validateDocument(doc: PolicyDocument): ValidationResult {
   const errors: ValidationIssue[] = [];
   const warnings: ValidationIssue[] = [];
 
-  const userGroups = new Set(doc.user_groups.map((g) => g.name));
-  const deviceGroups = new Set(doc.device_groups.map((g) => g.name));
   const tags = new Set(doc.tags.map((t) => t.name));
   const hostAliases = new Set(doc.host_aliases.map((h) => h.name));
   const ipSets = new Set(doc.ip_sets.map((s) => s.name));
   const postures = new Set(doc.postures.map((p) => p.name));
 
   checkUnique(
-    doc.user_groups.map((g) => g.name),
-    "user_groups",
-    errors,
-  );
-  checkUnique(
-    doc.device_groups.map((g) => g.name),
-    "device_groups",
+    doc.tags.map((t) => t.name),
+    "tags",
     errors,
   );
   checkUnique(doc.acls.map(aclKey), "acls", errors);
 
-  const refs = { userGroups, deviceGroups, tags, hostAliases, ipSets };
+  const refs = { tags, hostAliases, ipSets };
 
   for (const acl of doc.acls) {
     if (acl.action !== "allow" && acl.action !== "deny") {

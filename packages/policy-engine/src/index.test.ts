@@ -19,13 +19,15 @@ import {
 function sampleDoc(): PolicyDocument {
   return {
     ...emptyDocument(),
-    user_groups: [{ name: "eng", members: ["a@x.com"] }],
-    tags: [{ name: "staging", owners: [] }],
+    tags: [
+      { name: "eng", owners: ["a@x.com"] },
+      { name: "staging", owners: [] },
+    ],
     acls: [
       {
         name: "allow-eng-staging",
         action: "allow",
-        src: ["group:user:eng"],
+        src: ["tag:eng"],
         dst: ["tag:staging"],
         ports: ["443"],
         protocol: "tcp",
@@ -65,7 +67,7 @@ describe("parseJsonDocument + validateDocument", () => {
         {
           name: "bad",
           action: "allow",
-          src: ["group:user:missing"],
+          src: ["tag:missing"],
           dst: ["*"],
           ports: [],
           protocol: null,
@@ -84,14 +86,14 @@ describe("parseJsonDocument + validateDocument", () => {
 });
 
 describe("mergeDocuments", () => {
-  test("conflicts on duplicate user group name", () => {
+  test("conflicts on duplicate tag name", () => {
     const a = {
       ...emptyDocument(),
-      user_groups: [{ name: "eng", members: ["a@x.com"] }],
+      tags: [{ name: "eng", owners: ["a@x.com"] }],
     };
     const b = {
       ...emptyDocument(),
-      user_groups: [{ name: "eng", members: ["b@x.com"] }],
+      tags: [{ name: "eng", owners: ["b@x.com"] }],
     };
     expect(() => mergeDocuments([a, b])).toThrow(MergeConflictError);
     try {
@@ -99,7 +101,7 @@ describe("mergeDocuments", () => {
     } catch (error) {
       expect(error).toBeInstanceOf(MergeConflictError);
       expect((error as MergeConflictError).name).toBe("MergeConflictError");
-      expect((error as MergeConflictError).entity).toBe("user_group");
+      expect((error as MergeConflictError).entity).toBe("tag");
       expect((error as MergeConflictError).message).toContain("eng");
     }
   });
@@ -108,7 +110,7 @@ describe("mergeDocuments", () => {
 describe("simulateDocument", () => {
   test("allow matching rule", () => {
     const result = simulateDocument(sampleDoc(), {
-      src: "group:user:eng",
+      src: "tag:eng",
       dst: "tag:staging",
       port: 443,
       protocol: "tcp",
@@ -119,7 +121,7 @@ describe("simulateDocument", () => {
 
   test("deny when unmatched", () => {
     const result = simulateDocument(sampleDoc(), {
-      src: "group:user:eng",
+      src: "tag:eng",
       dst: "tag:prod",
       port: 443,
       protocol: "tcp",
@@ -238,26 +240,17 @@ describe("diffDocuments", () => {
 describe("documentFromRows", () => {
   test("maps fixture rows into a policy document", () => {
     const rows: PolicyRows = {
-      userGroups: [
-        {
-          name: "eng",
-          members: [{ userId: "u1", email: "a@x.com" }],
-        },
+      tags: [
+        { name: "eng", owners: ["a@x.com"] },
+        { name: "staging", owners: ["tag:eng"] },
       ],
-      deviceGroups: [
-        {
-          name: "servers",
-          members: [{ endpointId: "aabbccddeeff0011" }],
-        },
-      ],
-      tags: [{ name: "staging", owners: ["group:user:eng"] }],
       hostAliases: [{ name: "db", target: "tag:staging" }],
       ipSets: [{ name: "office", entries: ["10.0.0.0/8"] }],
       policies: [
         {
           slug: "allow-eng",
           action: "allow",
-          srcSelector: { kind: "user_group", value: "eng" },
+          srcSelector: { kind: "tag", value: "eng" },
           dstSelector: { kind: "tag", value: "staging" },
           ports: [{ start: 443, end: 443 }],
           protocol: "tcp",
@@ -274,9 +267,11 @@ describe("documentFromRows", () => {
     };
 
     const doc = documentFromRows(rows);
-    expect(doc.user_groups).toEqual([{ name: "eng", members: ["a@x.com"] }]);
-    expect(doc.device_groups[0]?.endpoints).toEqual(["aabbccddeeff0011"]);
-    expect(doc.acls[0]?.src).toEqual(["group:user:eng"]);
+    expect(doc.tags).toEqual([
+      { name: "eng", owners: ["a@x.com"] },
+      { name: "staging", owners: ["tag:eng"] },
+    ]);
+    expect(doc.acls[0]?.src).toEqual(["tag:eng"]);
     expect(doc.acls[0]?.dst).toEqual(["tag:staging"]);
     expect(doc.acls[0]?.ports).toEqual(["443"]);
     expect(doc.postures[0]?.name).toBe("disk");

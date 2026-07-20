@@ -6,8 +6,6 @@ type Selector =
   | { kind: "tag"; value: string }
   | { kind: "network"; value: string }
   | { kind: "cidr"; value: string }
-  | { kind: "user_group"; value: string }
-  | { kind: "device_group"; value: string }
   | { kind: "user"; value: string };
 
 export function selectorToString(selector: Selector): string {
@@ -22,10 +20,6 @@ export function selectorToString(selector: Selector): string {
       return `network:${selector.value}`;
     case "cidr":
       return selector.value;
-    case "user_group":
-      return `group:user:${selector.value}`;
-    case "device_group":
-      return `group:device:${selector.value}`;
     case "user":
       return `user:${selector.value}`;
   }
@@ -38,14 +32,6 @@ function formatPorts(ports: Array<{ start: number; end: number }>): string[] {
 }
 
 export type PolicyRows = {
-  userGroups: Array<{
-    name: string;
-    members: Array<{ userId: string | null; email: string | null }>;
-  }>;
-  deviceGroups: Array<{
-    name: string;
-    members: Array<{ endpointId: string }>;
-  }>;
   tags: Array<{ name: string; owners: string[] }>;
   hostAliases: Array<{ name: string; target: string }>;
   ipSets: Array<{ name: string; entries: string[] }>;
@@ -92,16 +78,6 @@ export type PolicyRows = {
 
 export function documentFromRows(rows: PolicyRows): PolicyDocument {
   return {
-    user_groups: rows.userGroups.map((group) => ({
-      name: group.name,
-      members: group.members
-        .map((m) => m.email ?? m.userId)
-        .filter((m): m is string => Boolean(m)),
-    })),
-    device_groups: rows.deviceGroups.map((group) => ({
-      name: group.name,
-      endpoints: group.members.map((m) => m.endpointId),
-    })),
     tags: rows.tags.map((tag) => ({
       name: tag.name,
       owners: tag.owners,

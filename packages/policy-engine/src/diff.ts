@@ -44,13 +44,6 @@ export function diffDocuments(
   b: PolicyDocument,
 ): DiffChange[] {
   return [
-    ...diffEntities("user_group", a.user_groups, b.user_groups, (g) => g.name),
-    ...diffEntities(
-      "device_group",
-      a.device_groups,
-      b.device_groups,
-      (g) => g.name,
-    ),
     ...diffEntities("tag", a.tags, b.tags, (t) => t.name),
     ...diffEntities(
       "host_alias",

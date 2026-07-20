@@ -138,6 +138,33 @@ pub async fn run(
     }
     crate::auto_update::spawn(node.paths.clone(), Some(config_store.clone()));
 
+    // Request configured self tags from control plane (best-effort).
+    if !is_direct && !agent_cfg.tags.self_tags.is_empty() {
+        let wanted: Vec<String> = agent_cfg
+            .tags
+            .self_tags
+            .iter()
+            .map(|t| t.trim().trim_start_matches("tag:").to_lowercase())
+            .filter(|t| !t.is_empty())
+            .collect();
+        if !wanted.is_empty()
+            && let Ok(managed) = node.persisted.require_managed()
+        {
+            match tunnet_core::control::SignedClient::new(
+                managed.control_url.clone(),
+                node.endpoint_id_hex(),
+                node.identity.signing_key.clone(),
+            ) {
+                Ok(client) => {
+                    if let Err(e) = client.patch_device_tags(&wanted, &[]).await {
+                        tracing::warn!(?e, "failed to apply tunnet.toml self tags");
+                    }
+                }
+                Err(e) => tracing::warn!(?e, "signed client for self tags"),
+            }
+        }
+    }
+
     #[cfg(windows)]
     let wintun_file = args.wintun_file.clone();
 

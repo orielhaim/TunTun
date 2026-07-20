@@ -5,10 +5,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PolicyDocument {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub user_groups: Vec<UserGroup>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub device_groups: Vec<DeviceGroup>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<TagDefinition>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub host_aliases: Vec<HostAlias>,
@@ -28,20 +24,6 @@ pub struct PolicyDocument {
     pub node_attributes: Vec<NodeAttribute>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tests: Vec<PolicyTest>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct UserGroup {
-    pub name: String,
-    #[serde(default)]
-    pub members: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DeviceGroup {
-    pub name: String,
-    #[serde(default)]
-    pub endpoints: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

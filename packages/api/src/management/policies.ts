@@ -12,8 +12,6 @@ export const selectorSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("tag"), value: z.string() }),
   z.object({ kind: z.literal("network"), value: z.string() }),
   cidrSelector,
-  z.object({ kind: z.literal("user_group"), value: z.string().min(1) }),
-  z.object({ kind: z.literal("device_group"), value: z.string().min(1) }),
   z.object({ kind: z.literal("user"), value: z.string().min(1) }),
 ]);
 

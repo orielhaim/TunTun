@@ -41,8 +41,6 @@ export function PolicySelectorFields({
             <SelectItem value="endpoint">Endpoint</SelectItem>
             <SelectItem value="cidr">CIDR</SelectItem>
             <SelectItem value="network">Network</SelectItem>
-            <SelectItem value="user_group">User group</SelectItem>
-            <SelectItem value="device_group">Device group</SelectItem>
             <SelectItem value="user">User</SelectItem>
           </SelectContent>
         </Select>
@@ -65,10 +63,6 @@ function selectorPlaceholder(kind: string): string {
       return "10.0.0.0/8";
     case "tag":
       return "production";
-    case "user_group":
-      return "engineering";
-    case "device_group":
-      return "servers";
     case "user":
       return "alice@company.com";
     case "network":
@@ -78,15 +72,26 @@ function selectorPlaceholder(kind: string): string {
   }
 }
 
-export function buildPolicySelector(kind: string, value: string): Selector {
+export function selectorKind(selector: Selector): string {
+  return selector.kind;
+}
+
+export function selectorValue(selector: Selector): string {
+  if (selector.kind === "any") return "";
+  return selector.value;
+}
+
+export function buildSelector(kind: string, value: string): Selector {
   if (kind === "any") return { kind: "any" };
   if (kind === "tag") return { kind: "tag", value };
   if (kind === "endpoint") return { kind: "endpoint", value };
   if (kind === "network") return { kind: "network", value };
-  if (kind === "user_group") return { kind: "user_group", value };
-  if (kind === "device_group") return { kind: "device_group", value };
   if (kind === "user") return { kind: "user", value };
   return { kind: "cidr", value };
+}
+
+export function buildPolicySelector(kind: string, value: string): Selector {
+  return buildSelector(kind, value);
 }
 
 export function formatPolicySelector(selector: Selector): string {

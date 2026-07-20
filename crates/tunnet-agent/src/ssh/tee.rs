@@ -56,46 +56,6 @@ pub fn resolve_recorder_target(
             })
         }
         Selector::Network(_) | Selector::Cidr(_) => None,
-        Selector::UserGroup(name) => {
-            let marker = format!("ug:{name}");
-            if self_id
-                .tags
-                .iter()
-                .any(|t| t == &marker || t.as_str() == name.as_str())
-            {
-                return Some(RecorderTarget::Local);
-            }
-            routes.peers().into_iter().find_map(|p| {
-                if p.tags
-                    .iter()
-                    .any(|t| t == &marker || t.as_str() == name.as_str())
-                {
-                    Some(RecorderTarget::Remote(p.endpoint))
-                } else {
-                    None
-                }
-            })
-        }
-        Selector::DeviceGroup(name) => {
-            let marker = format!("dg:{name}");
-            if self_id
-                .tags
-                .iter()
-                .any(|t| t == &marker || t.as_str() == name.as_str())
-            {
-                return Some(RecorderTarget::Local);
-            }
-            routes.peers().into_iter().find_map(|p| {
-                if p.tags
-                    .iter()
-                    .any(|t| t == &marker || t.as_str() == name.as_str())
-                {
-                    Some(RecorderTarget::Remote(p.endpoint))
-                } else {
-                    None
-                }
-            })
-        }
         Selector::User(id) => {
             let marker = format!("user:{id}");
             if self_id

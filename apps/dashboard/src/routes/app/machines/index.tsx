@@ -17,6 +17,11 @@ import {
   MachineExpiryDialog,
   MachineLabelsEditor,
 } from "@/components/app/machine-labels";
+import {
+  BulkTagsDialog,
+  MachineTagsEditor,
+  MachineTagsList,
+} from "@/components/app/machine-tags";
 import { PageHeader } from "@/components/app/page-header";
 import { PageToolbar } from "@/components/app/page-toolbar";
 import { StatusBadge } from "@/components/app/status-badge";
@@ -113,6 +118,9 @@ function MachinesPage() {
   const [labelsEditor, setLabelsEditor] = useState<AggregatedMachine | null>(
     null,
   );
+  const [tagsEditor, setTagsEditor] = useState<AggregatedMachine | null>(null);
+  const [bulkTagsOpen, setBulkTagsOpen] = useState(false);
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [expiryEditor, setExpiryEditor] = useState<AggregatedMachine | null>(
     null,
   );
@@ -144,9 +152,19 @@ function MachinesPage() {
     if (typeFilter !== "all") {
       list = list.filter((m) => m.type === typeFilter);
     }
+    if (tagFilter) {
+      list = list.filter((m) => (m.tags ?? []).includes(tagFilter));
+    }
     if (!q) return list;
     return list.filter((m) => {
       if (matchesLabelSearch(m.labels, q)) return true;
+      if (
+        (m.tags ?? []).some(
+          (t) => t.toLowerCase().includes(q) || `tag:${t}`.includes(q),
+        )
+      ) {
+        return true;
+      }
       return (
         m.name.toLowerCase().includes(q) ||
         m.hostname.toLowerCase().includes(q) ||
@@ -158,7 +176,7 @@ function MachinesPage() {
         (m.kind?.toLowerCase().includes(q) ?? false)
       );
     });
-  }, [machines, search, statusFilter, typeFilter]);
+  }, [machines, search, statusFilter, typeFilter, tagFilter]);
 
   const selectedMachines = useMemo(() => {
     if (!filtered.length) return [];
@@ -240,6 +258,19 @@ function MachinesPage() {
               {row.original.assignedIp}
             </span>
           ),
+      },
+      {
+        id: "tags",
+        header: "Tags",
+        cell: ({ row }) => (
+          <MachineTagsList
+            tags={row.original.tags ?? []}
+            onTagClick={(tag) =>
+              setTagFilter((prev) => (prev === tag ? null : tag))
+            }
+            empty="—"
+          />
+        ),
       },
       {
         id: "type",
@@ -374,6 +405,11 @@ function MachinesPage() {
                           Edit labels
                         </DropdownMenuItem>
                         <DropdownMenuItem
+                          onClick={() => setTagsEditor(machine)}
+                        >
+                          Edit tags
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
                           onClick={() => setExpiryEditor(machine)}
                         >
                           Set expiry
@@ -472,7 +508,7 @@ function MachinesPage() {
           setSearch(value);
           setRowSelection({});
         }}
-        searchPlaceholder="Search name, labels, network, IP..."
+        searchPlaceholder="Search name, tags, labels, network, IP..."
         count={filtered.length}
         countLabel={filtered.length === 1 ? "machine" : "machines"}
         filters={
@@ -519,18 +555,34 @@ function MachinesPage() {
                 <SelectItem value="k8s">Kubernetes</SelectItem>
               </SelectContent>
             </Select>
+            {tagFilter ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="h-9 gap-1.5"
+                onClick={() => setTagFilter(null)}
+              >
+                tag:{tagFilter}
+                <span className="text-muted-foreground">×</span>
+              </Button>
+            ) : null}
           </>
         }
         actions={
           canManage && selectedMachines.length > 0 ? (
-            <Button
-              variant="destructive"
-              onClick={() => setConfirmBulkRemove(true)}
-            >
-              <Trash2Icon className="mr-2 size-4" />
-              Remove {selectedMachines.length}{" "}
-              {selectedMachines.length === 1 ? "machine" : "machines"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => setBulkTagsOpen(true)}>
+                Assign tag
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => setConfirmBulkRemove(true)}
+              >
+                <Trash2Icon className="mr-2 size-4" />
+                Remove {selectedMachines.length}{" "}
+                {selectedMachines.length === 1 ? "machine" : "machines"}
+              </Button>
+            </div>
           ) : null
         }
       />
@@ -654,6 +706,32 @@ function MachinesPage() {
           await deviceMutations.updateLabels.mutateAsync({
             endpointId: labelsEditor.endpointId,
             body: patch,
+          });
+        }}
+      />
+
+      <MachineTagsEditor
+        open={tagsEditor !== null}
+        onOpenChange={(open) => !open && setTagsEditor(null)}
+        tags={tagsEditor?.tags ?? []}
+        loading={deviceMutations.putTags.isPending}
+        onSave={async (tags) => {
+          if (!tagsEditor) return;
+          await deviceMutations.putTags.mutateAsync({
+            endpointId: tagsEditor.endpointId,
+            tags,
+          });
+        }}
+      />
+
+      <BulkTagsDialog
+        open={bulkTagsOpen}
+        onOpenChange={setBulkTagsOpen}
+        loading={deviceMutations.bulkAssignTags.isPending}
+        onSubmit={async (add) => {
+          await deviceMutations.bulkAssignTags.mutateAsync({
+            endpointIds: selectedMachines.map((m) => m.endpointId),
+            add,
           });
         }}
       />

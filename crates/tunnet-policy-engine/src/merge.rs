@@ -4,15 +4,6 @@ use crate::ir::PolicyDocument;
 pub fn merge_documents(docs: &[PolicyDocument]) -> Result<PolicyDocument> {
     let mut out = PolicyDocument::default();
     for doc in docs {
-        merge_vec(&mut out.user_groups, &doc.user_groups, "user_group", |g| {
-            &g.name
-        })?;
-        merge_vec(
-            &mut out.device_groups,
-            &doc.device_groups,
-            "device_group",
-            |g| &g.name,
-        )?;
         merge_vec(&mut out.tags, &doc.tags, "tag", |t| &t.name)?;
         merge_vec(
             &mut out.host_aliases,
@@ -64,21 +55,21 @@ fn merge_vec<T: Clone>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{AclRule, UserGroup};
+    use crate::ir::{AclRule, TagDefinition};
 
     #[test]
-    fn merge_conflict_on_duplicate_user_group() {
+    fn merge_conflict_on_duplicate_tag() {
         let a = PolicyDocument {
-            user_groups: vec![UserGroup {
+            tags: vec![TagDefinition {
                 name: "eng".into(),
-                members: vec!["a@x.com".into()],
+                owners: vec!["a@x.com".into()],
             }],
             ..Default::default()
         };
         let b = PolicyDocument {
-            user_groups: vec![UserGroup {
+            tags: vec![TagDefinition {
                 name: "eng".into(),
-                members: vec!["b@x.com".into()],
+                owners: vec!["b@x.com".into()],
             }],
             ..Default::default()
         };

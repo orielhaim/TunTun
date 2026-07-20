@@ -1,15 +1,5 @@
 import { z } from "zod";
 
-export const userGroupSchema = z.object({
-  name: z.string(),
-  members: z.array(z.string()).default([]),
-});
-
-export const deviceGroupSchema = z.object({
-  name: z.string(),
-  endpoints: z.array(z.string()).default([]),
-});
-
 export const tagDefinitionSchema = z.object({
   name: z.string(),
   owners: z.array(z.string()).default([]),
@@ -82,8 +72,6 @@ export const policyTestSchema = z.object({
 });
 
 export const policyDocumentSchema = z.object({
-  user_groups: z.array(userGroupSchema).default([]),
-  device_groups: z.array(deviceGroupSchema).default([]),
   tags: z.array(tagDefinitionSchema).default([]),
   host_aliases: z.array(hostAliasSchema).default([]),
   ip_sets: z.array(ipSetSchema).default([]),
@@ -96,8 +84,6 @@ export const policyDocumentSchema = z.object({
   tests: z.array(policyTestSchema).default([]),
 });
 
-export type UserGroup = z.infer<typeof userGroupSchema>;
-export type DeviceGroup = z.infer<typeof deviceGroupSchema>;
 export type TagDefinition = z.infer<typeof tagDefinitionSchema>;
 export type HostAlias = z.infer<typeof hostAliasSchema>;
 export type IpSet = z.infer<typeof ipSetSchema>;

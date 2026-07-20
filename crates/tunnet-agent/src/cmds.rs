@@ -784,6 +784,9 @@ pub struct ServeArgs {
     pub port: Option<u16>,
     #[arg(long, default_value = "tcp")]
     pub protocol: String,
+    /// Allow peers with this tag (`tag:frontend` or `frontend`). Repeatable.
+    #[arg(long = "allow", value_name = "SELECTOR")]
+    pub allow: Vec<String>,
     #[arg(long)]
     pub json: bool,
     #[arg(long, env = "TUNNET_STATE_DIR")]
@@ -823,7 +826,14 @@ pub async fn run_serve(args: ServeArgs) -> anyhow::Result<()> {
             let port = args.port.context(
                 "usage: tunnet serve <port> | tunnet serve status | tunnet serve off <port>",
             )?;
-            run_serve_start(port, &args.protocol, args.json, args.state_dir.as_deref()).await
+            run_serve_start(
+                port,
+                &args.protocol,
+                &args.allow,
+                args.json,
+                args.state_dir.as_deref(),
+            )
+            .await
         }
     }
 }
@@ -831,10 +841,30 @@ pub async fn run_serve(args: ServeArgs) -> anyhow::Result<()> {
 async fn run_serve_start(
     port: u16,
     protocol: &str,
+    allow: &[String],
     json: bool,
     state_dir: Option<&str>,
 ) -> anyhow::Result<()> {
     let out = Output::new(json);
+    let mut allowed_tags = Vec::new();
+    let mut allowed_endpoint_ids = Vec::new();
+    for raw in allow {
+        let s = raw.trim();
+        if let Some(tag) = s.strip_prefix("tag:") {
+            allowed_tags.push(tag.to_string());
+        } else if s.len() >= 16 && s.chars().all(|c| c.is_ascii_hexdigit()) {
+            allowed_endpoint_ids.push(s.to_lowercase());
+        } else {
+            allowed_tags.push(s.to_string());
+        }
+    }
+    let access_mode = if !allowed_endpoint_ids.is_empty() {
+        Some("machines".to_string())
+    } else if !allowed_tags.is_empty() {
+        Some("tags".to_string())
+    } else {
+        None
+    };
     let ipc = ipc_or_err(state_dir).await?;
     let resp = ipc
         .request(IpcRequest::ServeStart {
@@ -844,6 +874,9 @@ async fn run_serve_start(
             private_key_pem: None,
             internal_hostname: None,
             serve_id: None,
+            access_mode,
+            allowed_tags,
+            allowed_endpoint_ids,
         })
         .await?;
     let IpcResponse::Serve(info) = resp else {

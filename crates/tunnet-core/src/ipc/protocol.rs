@@ -62,6 +62,12 @@ pub enum IpcRequest {
         internal_hostname: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         serve_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        access_mode: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        allowed_tags: Vec<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        allowed_endpoint_ids: Vec<String>,
     },
     ServeStatus,
     ServeOff {

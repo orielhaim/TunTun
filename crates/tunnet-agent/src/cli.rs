@@ -91,6 +91,10 @@ pub enum Command {
     #[command(subcommand)]
     Labels(crate::cmds_device::LabelsCommand),
 
+    /// Manage ACL tags on this machine
+    #[command(subcommand)]
+    Tag(crate::cmds_device::TagCommand),
+
     /// Machine lifecycle settings
     #[command(subcommand)]
     Machine(crate::cmds_device::MachineCommand),

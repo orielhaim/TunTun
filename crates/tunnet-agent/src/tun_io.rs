@@ -93,11 +93,10 @@ pub async fn run_outbound(deps: OutboundDeps) -> anyhow::Result<()> {
     let (bulk_tx, bulk_rx) = tokio::sync::mpsc::channel::<(EndpointId, Bytes)>(OUTBOUND_QUEUE_CAP);
 
     // Two workers so a bulk `send_datagram_wait` cannot block ICMP.
-    // Both still wait for QUIC buffer space — that restores upload throughput.
-    let spawn_send_worker = |mut rx: tokio::sync::mpsc::Receiver<(EndpointId, Bytes)>,
+    // Latency worker uses a dedicated QUIC connection (own CWND).
+    let spawn_bulk_worker = |mut rx: tokio::sync::mpsc::Receiver<(EndpointId, Bytes)>,
                              pool: ConnPool,
-                             metrics: AgentMetrics,
-                             label: &'static str| {
+                             metrics: AgentMetrics| {
         tokio::spawn(async move {
             while let Some((peer, payload)) = rx.recv().await {
                 let n = payload.len() as u64;
@@ -108,15 +107,43 @@ pub async fn run_outbound(deps: OutboundDeps) -> anyhow::Result<()> {
                         pool.record_bytes_out(peer, n);
                     }
                     Err(e) => {
-                        tracing::debug!(%peer, ?e, worker = label, "send/buffer failed");
-                        metrics.dropped_inc(label);
+                        tracing::debug!(%peer, ?e, "send/buffer failed");
+                        metrics.dropped_inc("send_failed_bulk");
                     }
                 }
             }
         })
     };
-    let prio_worker = spawn_send_worker(prio_rx, pool.clone(), metrics.clone(), "send_failed_prio");
-    let bulk_worker = spawn_send_worker(bulk_rx, pool.clone(), metrics.clone(), "send_failed_bulk");
+    let spawn_prio_worker = |mut rx: tokio::sync::mpsc::Receiver<(EndpointId, Bytes)>,
+                             pool: ConnPool,
+                             metrics: AgentMetrics| {
+        tokio::spawn(async move {
+            while let Some((peer, payload)) = rx.recv().await {
+                let n = payload.len() as u64;
+                let result = match pool.send_latency(peer, payload.clone()).await {
+                    Ok(()) => Ok(()),
+                    Err(e) => {
+                        // Older peers may not advertise tunnel-lat — fall back to bulk.
+                        tracing::debug!(%peer, ?e, "latency path unavailable; using bulk");
+                        pool.send_or_buffer(peer, payload).await
+                    }
+                };
+                match result {
+                    Ok(()) => {
+                        metrics.packets_inc("out");
+                        metrics.bytes_add("out", n);
+                        pool.record_bytes_out(peer, n);
+                    }
+                    Err(e) => {
+                        tracing::debug!(%peer, ?e, "latency send failed");
+                        metrics.dropped_inc("send_failed_prio");
+                    }
+                }
+            }
+        })
+    };
+    let prio_worker = spawn_prio_worker(prio_rx, pool.clone(), metrics.clone());
+    let bulk_worker = spawn_bulk_worker(bulk_rx, pool.clone(), metrics.clone());
 
     let mut buf = vec![0u8; 65_536];
     tracing::info!("outbound TUN→iroh loop started");
@@ -224,7 +251,8 @@ pub async fn run_outbound(deps: OutboundDeps) -> anyhow::Result<()> {
     read_result
 }
 
-/// Handle an already-accepted connection negotiated with [`tunnet_common::TUNNEL_ALPN`].
+/// Handle an already-accepted connection negotiated with [`tunnet_common::TUNNEL_ALPN`]
+/// or [`tunnet_common::TUNNEL_LATENCY_ALPN`].
 pub struct InboundDeps {
     pub conn: Connection,
     pub tun: TunSlot,
@@ -235,6 +263,8 @@ pub struct InboundDeps {
     pub pool: Option<ConnPool>,
     pub metrics: AgentMetrics,
     pub direct_auth: Option<AuthCache>,
+    /// When false (latency ALPN), do not install as the bulk canonical conn.
+    pub install_as_canonical: bool,
 }
 
 pub async fn serve_tunnel_connection(deps: InboundDeps) {
@@ -248,6 +278,7 @@ pub async fn serve_tunnel_connection(deps: InboundDeps) {
         pool,
         metrics,
         direct_auth,
+        install_as_canonical,
     } = deps;
     let remote_id = conn.remote_id();
     let remote_hex = format!("{remote_id}");
@@ -256,15 +287,17 @@ pub async fn serve_tunnel_connection(deps: InboundDeps) {
         conn.close(1u32.into(), b"policy_deny");
         return;
     }
-    tracing::info!(%remote_id, "peer connected");
+    tracing::info!(%remote_id, install_as_canonical, "peer connected");
     metrics.active_conns_inc();
     if let Some(p) = &pool {
         p.touch_peer(remote_id);
-        // Canonical install usually happened in accept/dial; keep pool in sync.
-        if !p.adopt(remote_id, conn.clone()).await {
-            tracing::debug!(%remote_id, "ingress conn not canonical; exiting reader");
-            metrics.active_conns_dec();
-            return;
+        if install_as_canonical {
+            // Canonical install usually happened in accept/dial; keep pool in sync.
+            if !p.adopt(remote_id, conn.clone()).await {
+                tracing::debug!(%remote_id, "ingress conn not canonical; exiting reader");
+                metrics.active_conns_dec();
+                return;
+            }
         }
     }
     // Prefer network from auth cache; fall back to route table peer.

@@ -16,12 +16,12 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AcceptInvitationInvitationIdRouteImport } from './routes/accept-invitation.$invitationId'
 import { Route as AppIndexRouteImport } from './routes/app/index'
 import { Route as AppAccessRouteImport } from './routes/app/access'
-import { Route as AppGroupsRouteImport } from './routes/app/groups'
 import { Route as AppLogsRouteImport } from './routes/app/logs'
 import { Route as AppOnboardingRouteImport } from './routes/app/onboarding'
 import { Route as AppOrganizationRouteImport } from './routes/app/organization'
 import { Route as AppRolesRouteImport } from './routes/app/roles'
 import { Route as AppSettingsRouteRouteImport } from './routes/app/settings/route'
+import { Route as AppTagsRouteImport } from './routes/app/tags'
 import { Route as AppUsersRouteImport } from './routes/app/users'
 import { Route as AuthSshRouteImport } from './routes/auth/ssh'
 import { Route as DeviceIndexRouteImport } from './routes/device/index'
@@ -88,11 +88,6 @@ const AppAccessRoute = AppAccessRouteImport.update({
   path: '/access',
   getParentRoute: () => AppRouteRoute,
 } as any)
-const AppGroupsRoute = AppGroupsRouteImport.update({
-  id: '/groups',
-  path: '/groups',
-  getParentRoute: () => AppRouteRoute,
-} as any)
 const AppLogsRoute = AppLogsRouteImport.update({
   id: '/logs',
   path: '/logs',
@@ -116,6 +111,11 @@ const AppRolesRoute = AppRolesRouteImport.update({
 const AppSettingsRouteRoute = AppSettingsRouteRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => AppRouteRoute,
+} as any)
+const AppTagsRoute = AppTagsRouteImport.update({
+  id: '/tags',
+  path: '/tags',
   getParentRoute: () => AppRouteRoute,
 } as any)
 const AppUsersRoute = AppUsersRouteImport.update({
@@ -280,11 +280,11 @@ export interface FileRoutesByFullPath {
   '/app/settings': typeof AppSettingsRouteRouteWithChildren
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
   '/app/access': typeof AppAccessRoute
-  '/app/groups': typeof AppGroupsRoute
   '/app/logs': typeof AppLogsRoute
   '/app/onboarding': typeof AppOnboardingRoute
   '/app/organization': typeof AppOrganizationRoute
   '/app/roles': typeof AppRolesRoute
+  '/app/tags': typeof AppTagsRoute
   '/app/users': typeof AppUsersRoute
   '/auth/ssh': typeof AuthSshRoute
   '/device/approve': typeof DeviceApproveRoute
@@ -322,11 +322,11 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
   '/app/access': typeof AppAccessRoute
-  '/app/groups': typeof AppGroupsRoute
   '/app/logs': typeof AppLogsRoute
   '/app/onboarding': typeof AppOnboardingRoute
   '/app/organization': typeof AppOrganizationRoute
   '/app/roles': typeof AppRolesRoute
+  '/app/tags': typeof AppTagsRoute
   '/app/users': typeof AppUsersRoute
   '/auth/ssh': typeof AuthSshRoute
   '/device/approve': typeof DeviceApproveRoute
@@ -366,11 +366,11 @@ export interface FileRoutesById {
   '/app/settings': typeof AppSettingsRouteRouteWithChildren
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
   '/app/access': typeof AppAccessRoute
-  '/app/groups': typeof AppGroupsRoute
   '/app/logs': typeof AppLogsRoute
   '/app/onboarding': typeof AppOnboardingRoute
   '/app/organization': typeof AppOrganizationRoute
   '/app/roles': typeof AppRolesRoute
+  '/app/tags': typeof AppTagsRoute
   '/app/users': typeof AppUsersRoute
   '/auth/ssh': typeof AuthSshRoute
   '/device/approve': typeof DeviceApproveRoute
@@ -412,11 +412,11 @@ export interface FileRouteTypes {
     | '/app/settings'
     | '/accept-invitation/$invitationId'
     | '/app/access'
-    | '/app/groups'
     | '/app/logs'
     | '/app/onboarding'
     | '/app/organization'
     | '/app/roles'
+    | '/app/tags'
     | '/app/users'
     | '/auth/ssh'
     | '/device/approve'
@@ -454,11 +454,11 @@ export interface FileRouteTypes {
     | '/login'
     | '/accept-invitation/$invitationId'
     | '/app/access'
-    | '/app/groups'
     | '/app/logs'
     | '/app/onboarding'
     | '/app/organization'
     | '/app/roles'
+    | '/app/tags'
     | '/app/users'
     | '/auth/ssh'
     | '/device/approve'
@@ -497,11 +497,11 @@ export interface FileRouteTypes {
     | '/app/settings'
     | '/accept-invitation/$invitationId'
     | '/app/access'
-    | '/app/groups'
     | '/app/logs'
     | '/app/onboarding'
     | '/app/organization'
     | '/app/roles'
+    | '/app/tags'
     | '/app/users'
     | '/auth/ssh'
     | '/device/approve'
@@ -596,13 +596,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAccessRouteImport
       parentRoute: typeof AppRouteRoute
     }
-    '/app/groups': {
-      id: '/app/groups'
-      path: '/groups'
-      fullPath: '/app/groups'
-      preLoaderRoute: typeof AppGroupsRouteImport
-      parentRoute: typeof AppRouteRoute
-    }
     '/app/logs': {
       id: '/app/logs'
       path: '/logs'
@@ -636,6 +629,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/app/settings'
       preLoaderRoute: typeof AppSettingsRouteRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/app/tags': {
+      id: '/app/tags'
+      path: '/tags'
+      fullPath: '/app/tags'
+      preLoaderRoute: typeof AppTagsRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/app/users': {
@@ -884,11 +884,11 @@ const AppNetworksNetworkIdRouteRouteWithChildren =
 interface AppRouteRouteChildren {
   AppSettingsRouteRoute: typeof AppSettingsRouteRouteWithChildren
   AppAccessRoute: typeof AppAccessRoute
-  AppGroupsRoute: typeof AppGroupsRoute
   AppLogsRoute: typeof AppLogsRoute
   AppOnboardingRoute: typeof AppOnboardingRoute
   AppOrganizationRoute: typeof AppOrganizationRoute
   AppRolesRoute: typeof AppRolesRoute
+  AppTagsRoute: typeof AppTagsRoute
   AppUsersRoute: typeof AppUsersRoute
   AppIndexRoute: typeof AppIndexRoute
   AppNetworksNetworkIdRouteRoute: typeof AppNetworksNetworkIdRouteRouteWithChildren
@@ -913,11 +913,11 @@ interface AppRouteRouteChildren {
 const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppSettingsRouteRoute: AppSettingsRouteRouteWithChildren,
   AppAccessRoute: AppAccessRoute,
-  AppGroupsRoute: AppGroupsRoute,
   AppLogsRoute: AppLogsRoute,
   AppOnboardingRoute: AppOnboardingRoute,
   AppOrganizationRoute: AppOrganizationRoute,
   AppRolesRoute: AppRolesRoute,
+  AppTagsRoute: AppTagsRoute,
   AppUsersRoute: AppUsersRoute,
   AppIndexRoute: AppIndexRoute,
   AppNetworksNetworkIdRouteRoute: AppNetworksNetworkIdRouteRouteWithChildren,

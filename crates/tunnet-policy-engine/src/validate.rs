@@ -20,29 +20,11 @@ pub fn validate(doc: &PolicyDocument) -> ValidationResult {
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
 
-    let user_groups: HashSet<_> = doc.user_groups.iter().map(|g| g.name.as_str()).collect();
-    let device_groups: HashSet<_> = doc.device_groups.iter().map(|g| g.name.as_str()).collect();
     let tags: HashSet<_> = doc.tags.iter().map(|t| t.name.as_str()).collect();
     let host_aliases: HashSet<_> = doc.host_aliases.iter().map(|h| h.name.as_str()).collect();
     let ip_sets: HashSet<_> = doc.ip_sets.iter().map(|s| s.name.as_str()).collect();
     let postures: HashSet<_> = doc.postures.iter().map(|p| p.name.as_str()).collect();
 
-    check_unique(
-        &doc.user_groups
-            .iter()
-            .map(|g| g.name.as_str())
-            .collect::<Vec<_>>(),
-        "user_groups",
-        &mut errors,
-    );
-    check_unique(
-        &doc.device_groups
-            .iter()
-            .map(|g| g.name.as_str())
-            .collect::<Vec<_>>(),
-        "device_groups",
-        &mut errors,
-    );
     check_unique(
         &doc.acls.iter().map(|a| a.key()).collect::<Vec<_>>(),
         "acls",
@@ -73,8 +55,6 @@ pub fn validate(doc: &PolicyDocument) -> ValidationResult {
                 sel,
                 &format!("acls.{}", acl.name),
                 &SelectorRefSets {
-                    user_groups: &user_groups,
-                    device_groups: &device_groups,
                     tags: &tags,
                     host_aliases: &host_aliases,
                     ip_sets: &ip_sets,
@@ -137,8 +117,6 @@ fn check_unique(names: &[&str], entity: &str, errors: &mut Vec<ValidationIssue>)
 }
 
 struct SelectorRefSets<'a> {
-    user_groups: &'a HashSet<&'a str>,
-    device_groups: &'a HashSet<&'a str>,
     tags: &'a HashSet<&'a str>,
     host_aliases: &'a HashSet<&'a str>,
     ip_sets: &'a HashSet<&'a str>,
@@ -158,20 +136,6 @@ fn check_selector_refs(
         }
     };
     match parsed {
-        selector::ParsedSelector::UserGroup(name) if !refs.user_groups.contains(name.as_str()) => {
-            errors.push(issue(
-                Some(path.into()),
-                format!("unknown user group '{name}'"),
-            ));
-        }
-        selector::ParsedSelector::DeviceGroup(name)
-            if !refs.device_groups.contains(name.as_str()) =>
-        {
-            errors.push(issue(
-                Some(path.into()),
-                format!("unknown device group '{name}'"),
-            ));
-        }
         selector::ParsedSelector::Tag(name) if !refs.tags.contains(name.as_str()) => {
             errors.push(issue(Some(path.into()), format!("unknown tag '{name}'")));
         }
@@ -205,10 +169,10 @@ fn issue(path: Option<String>, message: String) -> ValidationIssue {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{AclRule, TagDefinition, UserGroup};
+    use crate::ir::{AclRule, TagDefinition};
 
     #[test]
-    fn catches_unknown_user_group_reference() {
+    fn rejects_group_user_selector() {
         let doc = PolicyDocument {
             acls: vec![AclRule {
                 name: "r1".into(),
@@ -227,25 +191,32 @@ mod tests {
         };
         let result = validate(&doc);
         assert!(!result.valid);
-        assert!(result.errors.iter().any(|e| e.message.contains("missing")));
+        assert!(
+            result
+                .errors
+                .iter()
+                .any(|e| e.message.contains("group:user"))
+        );
     }
 
     #[test]
     fn valid_document_passes() {
         let doc = PolicyDocument {
-            user_groups: vec![UserGroup {
-                name: "eng".into(),
-                members: vec![],
-            }],
-            tags: vec![TagDefinition {
-                name: "staging".into(),
-                owners: vec![],
-            }],
+            tags: vec![
+                TagDefinition {
+                    name: "eng".into(),
+                    owners: vec![],
+                },
+                TagDefinition {
+                    name: "staging".into(),
+                    owners: vec![],
+                },
+            ],
             acls: vec![AclRule {
                 name: "allow".into(),
                 slug: None,
                 action: "allow".into(),
-                src: vec!["group:user:eng".into()],
+                src: vec!["tag:eng".into()],
                 dst: vec!["tag:staging".into()],
                 ports: vec!["443".into()],
                 protocol: Some("tcp".into()),

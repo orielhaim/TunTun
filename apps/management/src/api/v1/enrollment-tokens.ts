@@ -7,13 +7,25 @@ import { blake3 } from "hash-wasm";
 import { writeAudit } from "../../lib/audit";
 import { db } from "../../lib/db";
 import { toIso } from "../../lib/serialize";
+import {
+  assertCanAssignTags,
+  ensureTagDefinitionsExist,
+  normalizeTagName,
+} from "../../lib/tag-ownership";
 import { getAuth, requireAuth, requirePermission } from "./middleware/authz";
-import { notFound, sessionPlugin } from "./middleware/session";
+import {
+  badRequest,
+  forbidden,
+  notFound,
+  sessionPlugin,
+} from "./middleware/session";
+import { isOrgAdminRole } from "./middleware/tag-auth";
 
 function serializeToken(row: typeof schema.enrollmentTokens.$inferSelect) {
   return {
     tokenHash: row.tokenHash,
     networkId: row.networkId,
+    tags: row.tags ?? [],
     expiresAt: toIso(row.expiresAt)!,
     usedAt: toIso(row.usedAt),
     createdAt: toIso(row.createdAt)!,
@@ -65,6 +77,34 @@ export const enrollmentTokensRoutes = new Elysia()
           );
           if (!network) return notFound("Network not found");
 
+          const tags = [
+            ...new Set(parsed.tags.map(normalizeTagName).filter(Boolean)),
+          ];
+          if (tags.length > 0) {
+            const missing = await ensureTagDefinitionsExist(
+              auth.organizationId,
+              tags,
+            );
+            if (missing.length > 0) {
+              return badRequest(
+                `Unknown tag definition(s): ${missing.join(", ")}`,
+              );
+            }
+            const ownership = await assertCanAssignTags(
+              auth.organizationId,
+              tags,
+              {
+                userId: auth.user.id,
+                email: auth.user.email,
+                isOrgAdmin: isOrgAdminRole(auth.memberRole),
+                endpointId: null,
+              },
+            );
+            if (!ownership.ok) {
+              return forbidden();
+            }
+          }
+
           const token = randomBytes(32).toString("base64url");
           const tokenHash = await blake3(Buffer.from(token));
           const expiresAt = new Date(Date.now() + parsed.ttlMinutes * 60_000);
@@ -77,6 +117,7 @@ export const enrollmentTokensRoutes = new Elysia()
                 organizationId: auth.organizationId,
                 networkId: params.networkId,
                 createdBy: auth.user.id,
+                tags,
                 expiresAt,
               })
               .returning();
@@ -93,6 +134,7 @@ export const enrollmentTokensRoutes = new Elysia()
               metadata: {
                 networkId: params.networkId,
                 expiresAt: expiresAt.toISOString(),
+                tags,
               },
             });
 

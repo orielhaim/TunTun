@@ -27,8 +27,6 @@ function mergeVec<T>(
 
 export function mergeDocuments(docs: PolicyDocument[]): PolicyDocument {
   const out: PolicyDocument = {
-    user_groups: [],
-    device_groups: [],
     tags: [],
     host_aliases: [],
     ip_sets: [],
@@ -42,13 +40,6 @@ export function mergeDocuments(docs: PolicyDocument[]): PolicyDocument {
   };
 
   for (const doc of docs) {
-    mergeVec(out.user_groups, doc.user_groups, "user_group", (g) => g.name);
-    mergeVec(
-      out.device_groups,
-      doc.device_groups,
-      "device_group",
-      (g) => g.name,
-    );
     mergeVec(out.tags, doc.tags, "tag", (t) => t.name);
     mergeVec(out.host_aliases, doc.host_aliases, "host_alias", (h) => h.name);
     mergeVec(out.ip_sets, doc.ip_sets, "ip_set", (s) => s.name);

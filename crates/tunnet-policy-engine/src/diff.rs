@@ -23,20 +23,6 @@ pub enum DiffKind {
 
 pub fn diff(a: &PolicyDocument, b: &PolicyDocument) -> DiffResult {
     let mut changes = Vec::new();
-    diff_entities(
-        "user_group",
-        &a.user_groups,
-        &b.user_groups,
-        |g| &g.name,
-        &mut changes,
-    );
-    diff_entities(
-        "device_group",
-        &a.device_groups,
-        &b.device_groups,
-        |g| &g.name,
-        &mut changes,
-    );
     diff_entities("tag", &a.tags, &b.tags, |t| &t.name, &mut changes);
     diff_entities(
         "host_alias",

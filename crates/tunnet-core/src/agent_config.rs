@@ -35,6 +35,16 @@ pub struct TunnetConfig {
     /// Local-only control-plane connection settings.
     #[serde(default)]
     pub control: ControlSection,
+    /// ACL tags to request for this node (ownership-checked by control plane).
+    #[serde(default)]
+    pub tags: TagsSection,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TagsSection {
+    /// Tags this machine should hold (`self = ["prod", "web"]`).
+    #[serde(default, rename = "self")]
+    pub self_tags: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

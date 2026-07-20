@@ -10,7 +10,7 @@ use std::sync::Arc;
 use iroh::endpoint::Connection;
 use iroh::protocol::{AcceptError, ProtocolHandler, Router};
 use tunnet_common::ws::ClientMsg;
-use tunnet_common::{RECORDING_ALPN, SEND_ALPN, TUNNEL_ALPN};
+use tunnet_common::{RECORDING_ALPN, SEND_ALPN, TUNNEL_ALPN, TUNNEL_LATENCY_ALPN};
 use tunnet_core::direct::{
     AUTH_ALPN, AuthCache, DOCS_ALPN, DocsMembership, FirewallEngine, GOSSIP_ALPN, SecretResolver,
     SpoofTracker, run_psk_handshake_server,
@@ -95,7 +95,8 @@ pub fn spawn(deps: AcceptDeps) -> Router {
     };
 
     let mut builder = Router::builder(deps.endpoint);
-    builder = builder.accept(TUNNEL_ALPN, tunnel);
+    builder = builder.accept(TUNNEL_ALPN, tunnel.clone());
+    builder = builder.accept(TUNNEL_LATENCY_ALPN, tunnel);
     builder = builder.accept(TUNNEL_STREAM_ALPN, stream);
     builder = builder.accept(AUTH_ALPN, auth);
     builder = builder.accept(DOCS_ALPN, docs);
@@ -154,11 +155,50 @@ impl fmt::Debug for TunnelHandler {
 impl ProtocolHandler for TunnelHandler {
     async fn accept(&self, conn: Connection) -> Result<(), AcceptError> {
         if self.tun.read().await.device.is_none() {
-            tracing::debug!("TUNNEL_ALPN ignored (data plane down)");
+            tracing::debug!("tunnel ALPN ignored (data plane down)");
             conn.close(1u32.into(), b"dataplane_down");
             return Ok(());
         }
         let peer = conn.remote_id();
+        let is_latency = conn.alpn() == TUNNEL_LATENCY_ALPN;
+
+        if is_latency {
+            if !self.dgram_pool.adopt_latency(peer, conn.clone()).await {
+                tracing::debug!(%peer, "latency accept superseded by live dial; closing");
+                conn.close(0u32.into(), b"superseded");
+                return Ok(());
+            }
+            if !self.ingress.try_spawn_latency(peer, {
+                let conn = conn.clone();
+                let tun = self.tun.clone();
+                let routes = self.routes.clone();
+                let acl = self.acl.clone();
+                let firewalls = self.firewalls.clone();
+                let spoofs = self.spoofs.clone();
+                let dgram_pool = self.dgram_pool.clone();
+                let metrics = self.metrics.clone();
+                let direct_auth = self.direct_auth.clone();
+                async move {
+                    serve_tunnel_connection(InboundDeps {
+                        conn,
+                        tun,
+                        routes,
+                        acl,
+                        firewalls,
+                        spoofs,
+                        pool: Some(dgram_pool),
+                        metrics,
+                        direct_auth,
+                        install_as_canonical: false,
+                    })
+                    .await;
+                }
+            }) {
+                tracing::debug!(%peer, "latency ingress skipped (reader already active)");
+            }
+            return Ok(());
+        }
+
         // Install into pool first so outbound send and ingress share one QUIC conn.
         if !self.dgram_pool.adopt(peer, conn.clone()).await {
             tracing::debug!(%peer, "accept superseded by live dial; closing");
@@ -186,6 +226,7 @@ impl ProtocolHandler for TunnelHandler {
                     pool: Some(dgram_pool),
                     metrics,
                     direct_auth,
+                    install_as_canonical: true,
                 })
                 .await;
             }

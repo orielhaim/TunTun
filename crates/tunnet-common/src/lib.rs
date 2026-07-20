@@ -25,6 +25,10 @@ pub type EndpointIdHex = String;
 /// ALPN identifier for our tunnel protocol (mesh datagrams).
 pub const TUNNEL_ALPN: &[u8] = b"tunnet/tunnel/1";
 
+/// Low-latency datagram path (ICMP / interactive). Separate QUIC connection so
+/// bulk TCP does not share the congestion window with ping/SSH-under-load probes.
+pub const TUNNEL_LATENCY_ALPN: &[u8] = b"tunnet/tunnel-lat/1";
+
 /// ALPN for agent ↔ public relay reverse tunnels.
 pub const RELAY_ALPN: &[u8] = b"tunnet/relay/1";
 

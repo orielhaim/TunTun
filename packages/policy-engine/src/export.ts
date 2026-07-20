@@ -17,22 +17,6 @@ export function exportYaml(doc: PolicyDocument): string {
 export function exportHcl(doc: PolicyDocument): string {
   let out = "";
 
-  for (const group of doc.user_groups) {
-    out += `user_group "${group.name}" {\n`;
-    if (group.members.length > 0) {
-      out += `  members = ${renderStringList(group.members)}\n`;
-    }
-    out += "}\n\n";
-  }
-
-  for (const group of doc.device_groups) {
-    out += `device_group "${group.name}" {\n`;
-    if (group.endpoints.length > 0) {
-      out += `  endpoints = ${renderStringList(group.endpoints)}\n`;
-    }
-    out += "}\n\n";
-  }
-
   for (const tag of doc.tags) {
     out += `tag "${tag.name}" {\n`;
     if (tag.owners.length > 0) {

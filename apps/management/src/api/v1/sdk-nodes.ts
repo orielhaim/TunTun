@@ -14,6 +14,10 @@ import { registerDevice } from "../../lib/control-plane-client";
 import { db } from "../../lib/db";
 import { removeDeviceMembership } from "../../lib/remove-device-membership";
 import {
+  ensureTagDefinitionsExist,
+  replaceDeviceTags,
+} from "../../lib/tag-ownership";
+import {
   apiKeyAuthPlugin,
   getApiKeyAuth,
   requireApiKey,
@@ -124,15 +128,15 @@ export const sdkNodesRoutes = new Elysia()
       }
 
       if (parsed.tags && parsed.tags.length > 0) {
-        for (const tag of parsed.tags) {
-          await db
-            .insert(schema.deviceTags)
-            .values({
-              endpointId: parsed.endpointId,
-              tag,
-            })
-            .onConflictDoNothing();
+        const missing = await ensureTagDefinitionsExist(
+          params.orgId,
+          parsed.tags,
+        );
+        if (missing.length > 0) {
+          return badRequest(`Unknown tag definition(s): ${missing.join(", ")}`);
         }
+        // API keys are treated as org admins for tag ownership.
+        await replaceDeviceTags(parsed.endpointId, parsed.tags);
       }
 
       const membership = (

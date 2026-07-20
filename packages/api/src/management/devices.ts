@@ -69,6 +69,7 @@ export const deviceSchema = z.object({
   lastSeen: z.string().datetime(),
   status: deviceStatusSchema,
   labels: deviceLabelsSchema,
+  tags: z.array(z.string()).default([]),
   inactivityTtl: z.string().nullable(),
   expiredAt: z.string().datetime().nullable(),
 });
@@ -91,6 +92,7 @@ export const deviceDetailSchema = z.object({
   firstSeen: z.string().datetime(),
   lastSeen: z.string().datetime(),
   labels: deviceLabelsSchema,
+  tags: z.array(z.string()).default([]),
   inactivityTtl: z.string().nullable(),
   expiredAt: z.string().datetime().nullable(),
   memberships: z.array(deviceMembershipSchema),

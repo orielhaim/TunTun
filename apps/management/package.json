@@ -18,7 +18,7 @@
     "@tunnet/env": "workspace:*",
     "@tunnet/ip": "workspace:*",
     "@tunnet/policy-engine": "workspace:*",
-    "argon2": "^0.44.0",
+    "argon2": "^0.45.0",
     "better-auth": "^1.6.23",
     "drizzle-orm": "^0.45.2",
     "elysia": "^1.4.29",

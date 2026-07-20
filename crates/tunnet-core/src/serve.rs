@@ -187,30 +187,44 @@ impl ServeManager {
 }
 
 fn allow_peer(routes: &RoutingTable, acl: &ServeAcl, peer_addr: SocketAddr) -> bool {
+    use tunnet_common::policy::Selector;
+
     match acl.access_mode.as_str() {
         "all_peers" => true,
         "machines" => {
-            let Some(peer) = routes.lookup_ip(&match peer_addr.ip() {
+            let ip = match peer_addr.ip() {
                 std::net::IpAddr::V4(ip) => ip,
                 std::net::IpAddr::V6(_) => return false,
-            }) else {
+            };
+            let Some(peer) = routes.lookup_ip(&ip) else {
                 return false;
             };
-            acl.allowed_endpoint_ids
-                .iter()
-                .any(|id| id.eq_ignore_ascii_case(&peer.endpoint_hex))
+            acl.allowed_endpoint_ids.iter().any(|id| {
+                Selector::Endpoint(id.clone()).matches_endpoint(
+                    &peer.endpoint_hex,
+                    &peer.tags,
+                    "",
+                    Some(ip),
+                )
+            })
         }
         "tags" => {
-            let Some(peer) = routes.lookup_ip(&match peer_addr.ip() {
+            let ip = match peer_addr.ip() {
                 std::net::IpAddr::V4(ip) => ip,
                 std::net::IpAddr::V6(_) => return false,
-            }) else {
-                // Unknown peer - deny in tags mode.
+            };
+            let Some(peer) = routes.lookup_ip(&ip) else {
                 return false;
             };
-            peer.tags
-                .iter()
-                .any(|t| acl.allowed_tags.iter().any(|a| a == t))
+            acl.allowed_tags.iter().any(|tag| {
+                let name = tag.strip_prefix("tag:").unwrap_or(tag);
+                Selector::Tag(name.to_string()).matches_endpoint(
+                    &peer.endpoint_hex,
+                    &peer.tags,
+                    "",
+                    Some(ip),
+                )
+            })
         }
         _ => true,
     }

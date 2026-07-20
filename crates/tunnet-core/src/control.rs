@@ -310,6 +310,35 @@ impl SignedClient {
         Ok(())
     }
 
+    pub async fn get_device_tags(&self) -> anyhow::Result<Vec<String>> {
+        let v: serde_json::Value = self.do_get("/v1/device/tags").await?;
+        Ok(v.get("tags")
+            .and_then(|t| t.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|x| x.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default())
+    }
+
+    pub async fn patch_device_tags(
+        &self,
+        add: &[String],
+        remove: &[String],
+    ) -> anyhow::Result<Vec<String>> {
+        let body = serde_json::json!({ "add": add, "remove": remove });
+        let v: serde_json::Value = self.do_patch("/v1/device/tags", &body).await?;
+        Ok(v.get("tags")
+            .and_then(|t| t.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|x| x.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default())
+    }
+
     pub async fn register(
         &self,
         hostname: &str,

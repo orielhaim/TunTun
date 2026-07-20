@@ -151,6 +151,9 @@ async fn async_main() -> anyhow::Result<()> {
         crate::cli::Command::Labels(a) => {
             crate::cmds_device::run_labels(a, cli.state_dir.as_deref()).await
         }
+        crate::cli::Command::Tag(a) => {
+            crate::cmds_device::run_tags(a, cli.state_dir.as_deref()).await
+        }
         crate::cli::Command::Machine(a) => {
             crate::cmds_device::run_machine(a, cli.state_dir.as_deref()).await
         }

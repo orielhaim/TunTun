@@ -3,8 +3,6 @@ export type ParsedSelector =
   | { kind: "endpoint"; value: string }
   | { kind: "tag"; value: string }
   | { kind: "cidr"; value: string }
-  | { kind: "user_group"; value: string }
-  | { kind: "device_group"; value: string }
   | { kind: "user"; value: string }
   | { kind: "host_alias"; value: string }
   | { kind: "ip_set"; value: string };
@@ -38,11 +36,8 @@ export function parseSelector(raw: string): ParsedSelector {
   if (s.startsWith("user:")) {
     return { kind: "user", value: s.slice(5) };
   }
-  if (s.startsWith("group:user:")) {
-    return { kind: "user_group", value: s.slice(11) };
-  }
-  if (s.startsWith("group:device:")) {
-    return { kind: "device_group", value: s.slice(13) };
+  if (s.startsWith("group:user:") || s.startsWith("group:device:")) {
+    throw new SelectorParseError(`unsupported group selector: ${s}`);
   }
   if (s.startsWith("host:")) {
     return { kind: "host_alias", value: s.slice(5) };
@@ -67,10 +62,6 @@ export function simulationTags(parsed: ParsedSelector): string[] {
       return [];
     case "tag":
       return [parsed.value];
-    case "user_group":
-      return [`ug:${parsed.value}`, parsed.value];
-    case "device_group":
-      return [`dg:${parsed.value}`, parsed.value];
     case "user":
       return [`user:${parsed.value}`, parsed.value];
     case "host_alias":
@@ -99,10 +90,6 @@ export function selectorMatches(
       return endpointHex === parsed.value;
     case "tag":
       return tags.includes(parsed.value);
-    case "user_group":
-      return tags.includes(`ug:${parsed.value}`) || tags.includes(parsed.value);
-    case "device_group":
-      return tags.includes(`dg:${parsed.value}`) || tags.includes(parsed.value);
     case "user":
       return (
         tags.includes(`user:${parsed.value}`) || tags.includes(parsed.value)

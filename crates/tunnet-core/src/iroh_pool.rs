@@ -17,6 +17,7 @@ use iroh::{Endpoint, EndpointId};
 use parking_lot::Mutex;
 use serde::Serialize;
 use tokio::sync::Mutex as AsyncMutex;
+use tunnet_common::TUNNEL_LATENCY_ALPN;
 
 pub const DEFAULT_IDLE_SECS: u64 = 120;
 pub const RECONNECT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -155,6 +156,7 @@ pub struct ConnPool {
     bytes_in: Arc<DashMap<EndpointId, AtomicU64>>,
     bytes_out: Arc<DashMap<EndpointId, AtomicU64>>,
     tunnel_hook: Arc<Mutex<Option<TunnelConnHook>>>,
+    latency_hook: Arc<Mutex<Option<TunnelConnHook>>>,
 }
 
 struct PoolPolicy {
@@ -181,6 +183,7 @@ impl ConnPool {
             bytes_in: Arc::new(DashMap::new()),
             bytes_out: Arc::new(DashMap::new()),
             tunnel_hook: Arc::new(Mutex::new(None)),
+            latency_hook: Arc::new(Mutex::new(None)),
         };
         pool.spawn_idle_sweeper();
         pool
@@ -201,6 +204,7 @@ impl ConnPool {
             bytes_in: other.bytes_in.clone(),
             bytes_out: other.bytes_out.clone(),
             tunnel_hook: Arc::new(Mutex::new(None)),
+            latency_hook: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -209,8 +213,20 @@ impl ConnPool {
         *self.tunnel_hook.lock() = Some(hook);
     }
 
+    /// Register a hook invoked whenever this pool dials a latency-ALPN connection.
+    pub fn set_latency_hook(&self, hook: TunnelConnHook) {
+        *self.latency_hook.lock() = Some(hook);
+    }
+
     fn fire_tunnel_hook(&self, peer: EndpointId, conn: Connection) {
         let hook = self.tunnel_hook.lock().clone();
+        if let Some(hook) = hook {
+            hook(peer, conn);
+        }
+    }
+
+    fn fire_latency_hook(&self, peer: EndpointId, conn: Connection) {
+        let hook = self.latency_hook.lock().clone();
         if let Some(hook) = hook {
             hook(peer, conn);
         }
@@ -239,6 +255,65 @@ impl ConnPool {
         true
     }
 
+    /// Install an accepted latency-ALPN connection (does not replace the bulk tunnel).
+    ///
+    /// Returns `false` if a different live latency conn already won the race.
+    pub async fn adopt_latency(&self, peer: EndpointId, conn: Connection) -> bool {
+        let key = (peer, TUNNEL_LATENCY_ALPN.to_vec());
+        let slot = self
+            .extra
+            .entry(key)
+            .or_insert_with(|| Arc::new(AsyncMutex::new(None)))
+            .clone();
+        let mut guard = slot.lock().await;
+        if let Some(existing) = guard.as_ref().filter(|c| c.close_reason().is_none()) {
+            if existing.stable_id() == conn.stable_id() {
+                return true;
+            }
+            return false;
+        }
+        *guard = Some(conn);
+        true
+    }
+
+    /// Dial or reuse the latency ALPN connection for `peer`.
+    pub async fn get_latency(&self, peer: EndpointId) -> anyhow::Result<Connection> {
+        let key = (peer, TUNNEL_LATENCY_ALPN.to_vec());
+        let slot = self
+            .extra
+            .entry(key)
+            .or_insert_with(|| Arc::new(AsyncMutex::new(None)))
+            .clone();
+        let guard = slot.lock().await;
+        if let Some(c) = guard.as_ref().filter(|c| c.close_reason().is_none()) {
+            return Ok(c.clone());
+        }
+        drop(guard);
+        let conn = self
+            .endpoint
+            .connect(peer, TUNNEL_LATENCY_ALPN)
+            .await
+            .with_context(|| format!("latency connect to {peer}"))?;
+        let mut guard = slot.lock().await;
+        // Accept may have won while we dialed.
+        if let Some(existing) = guard.as_ref().filter(|c| c.close_reason().is_none()) {
+            let existing = existing.clone();
+            drop(guard);
+            conn.close(0u32.into(), b"superseded");
+            return Ok(existing);
+        }
+        *guard = Some(conn.clone());
+        drop(guard);
+        self.fire_latency_hook(peer, conn.clone());
+        Ok(conn)
+    }
+
+    /// Send on the latency ALPN (ICMP / interactive). Own CWND vs bulk tunnel.
+    pub async fn send_latency(&self, peer: EndpointId, packet: Bytes) -> anyhow::Result<()> {
+        let conn = self.get_latency(peer).await?;
+        send_datagram(&conn, packet).await
+    }
+
     /// Close every default-ALPN peer connection (e.g. data plane down).
     pub async fn close_all(&self) {
         let peers: Vec<_> = self
@@ -254,6 +329,19 @@ impl ConnPool {
             g.state = PeerConnState::Suspended;
             g.drop_buf();
             tracing::debug!(%peer, "closed tunnel pool connection");
+        }
+        let latency: Vec<_> = self
+            .extra
+            .iter()
+            .filter(|e| e.key().1.as_slice() == TUNNEL_LATENCY_ALPN)
+            .map(|e| (e.key().clone(), e.value().clone()))
+            .collect();
+        for ((peer, _), slot) in latency {
+            let mut g = slot.lock().await;
+            if let Some(c) = g.take() {
+                c.close(0u32.into(), b"dataplane_down");
+            }
+            tracing::debug!(%peer, "closed latency tunnel connection");
         }
     }
 

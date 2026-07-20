@@ -13,6 +13,7 @@ export const statement = {
   relay: ["create", "read", "update", "delete"],
   apiKey: ["create", "read", "revoke"],
   policy: ["create", "read", "update", "delete"],
+  tag: ["create", "read", "update", "delete", "assign"],
   tunnel: ["create", "read", "update", "delete"],
   serve: ["create", "read", "update", "delete"],
   route: ["create", "read", "update", "delete"],
@@ -32,6 +33,7 @@ const allDevice = ["create", "read", "update", "delete", "approve"] as const;
 const allRelay = ["create", "read", "update", "delete"] as const;
 const allApiKey = ["create", "read", "revoke"] as const;
 const allPolicy = ["create", "read", "update", "delete"] as const;
+const allTag = ["create", "read", "update", "delete", "assign"] as const;
 const allTunnel = ["create", "read", "update", "delete"] as const;
 const allServe = ["create", "read", "update", "delete"] as const;
 const allRoute = ["create", "read", "update", "delete"] as const;
@@ -47,6 +49,7 @@ export const owner = ac.newRole({
   relay: [...allRelay],
   apiKey: [...allApiKey],
   policy: [...allPolicy],
+  tag: [...allTag],
   tunnel: [...allTunnel],
   serve: [...allServe],
   route: [...allRoute],
@@ -66,6 +69,7 @@ export const admin = ac.newRole({
   relay: ["read"],
   apiKey: ["create", "read"],
   policy: ["create", "read", "update", "delete"],
+  tag: [...allTag],
   tunnel: ["create", "read", "update", "delete"],
   serve: ["create", "read", "update", "delete"],
   route: ["create", "read", "update", "delete"],
@@ -85,6 +89,7 @@ export const member = ac.newRole({
   relay: ["read"],
   apiKey: [],
   policy: ["read"],
+  tag: ["read"],
   tunnel: ["read"],
   serve: ["read"],
   route: ["read"],

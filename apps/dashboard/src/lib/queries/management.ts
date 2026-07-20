@@ -1,13 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
-  CreateDeviceGroupBody,
   CreateTagDefinitionBody,
-  CreateUserGroupBody,
   Device,
   Network,
-  PatchDeviceGroupBody,
   PatchTagDefinitionBody,
-  PatchUserGroupBody,
   PolicyDriftRequest,
 } from "@tunnet/api/management";
 
@@ -112,30 +108,6 @@ export function useOrganizationPolicies(orgId: string | undefined) {
   });
 }
 
-export function useUserGroups(orgId: string | undefined) {
-  return useQuery({
-    queryKey: orgId ? queryKeys.userGroups(orgId) : ["user-groups"],
-    enabled: Boolean(orgId),
-    queryFn: async () => {
-      const { groups } = await createManagementClient(orgId!).listUserGroups();
-      return groups;
-    },
-  });
-}
-
-export function useDeviceGroups(orgId: string | undefined) {
-  return useQuery({
-    queryKey: orgId ? queryKeys.deviceGroups(orgId) : ["device-groups"],
-    enabled: Boolean(orgId),
-    queryFn: async () => {
-      const { groups } = await createManagementClient(
-        orgId!,
-      ).listDeviceGroups();
-      return groups;
-    },
-  });
-}
-
 export function useTagDefinitions(orgId: string | undefined) {
   return useQuery({
     queryKey: orgId ? queryKeys.tagDefinitions(orgId) : ["tag-definitions"],
@@ -164,20 +136,6 @@ export function usePolicyHistory(orgId: string | undefined) {
 
 export function usePolicyEntityMutations(orgId: string | undefined) {
   const queryClient = useQueryClient();
-  const invalidateUserGroups = () => {
-    if (orgId) {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.userGroups(orgId),
-      });
-    }
-  };
-  const invalidateDeviceGroups = () => {
-    if (orgId) {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.deviceGroups(orgId),
-      });
-    }
-  };
   const invalidateTagDefinitions = () => {
     if (orgId) {
       void queryClient.invalidateQueries({
@@ -187,60 +145,6 @@ export function usePolicyEntityMutations(orgId: string | undefined) {
   };
 
   return {
-    createUserGroup: useMutation({
-      mutationFn: async (body: CreateUserGroupBody) => {
-        if (!orgId) throw new Error("No organization");
-        return createManagementClient(orgId).createUserGroup(body);
-      },
-      onSuccess: invalidateUserGroups,
-    }),
-    patchUserGroup: useMutation({
-      mutationFn: async ({
-        id,
-        body,
-      }: {
-        id: string;
-        body: PatchUserGroupBody;
-      }) => {
-        if (!orgId) throw new Error("No organization");
-        return createManagementClient(orgId).patchUserGroup(id, body);
-      },
-      onSuccess: invalidateUserGroups,
-    }),
-    deleteUserGroup: useMutation({
-      mutationFn: async (id: string) => {
-        if (!orgId) throw new Error("No organization");
-        return createManagementClient(orgId).deleteUserGroup(id);
-      },
-      onSuccess: invalidateUserGroups,
-    }),
-    createDeviceGroup: useMutation({
-      mutationFn: async (body: CreateDeviceGroupBody) => {
-        if (!orgId) throw new Error("No organization");
-        return createManagementClient(orgId).createDeviceGroup(body);
-      },
-      onSuccess: invalidateDeviceGroups,
-    }),
-    patchDeviceGroup: useMutation({
-      mutationFn: async ({
-        id,
-        body,
-      }: {
-        id: string;
-        body: PatchDeviceGroupBody;
-      }) => {
-        if (!orgId) throw new Error("No organization");
-        return createManagementClient(orgId).patchDeviceGroup(id, body);
-      },
-      onSuccess: invalidateDeviceGroups,
-    }),
-    deleteDeviceGroup: useMutation({
-      mutationFn: async (id: string) => {
-        if (!orgId) throw new Error("No organization");
-        return createManagementClient(orgId).deleteDeviceGroup(id);
-      },
-      onSuccess: invalidateDeviceGroups,
-    }),
     createTagDefinition: useMutation({
       mutationFn: async (body: CreateTagDefinitionBody) => {
         if (!orgId) throw new Error("No organization");
@@ -602,6 +506,38 @@ export function useDeviceMutations(orgId: string | undefined) {
         );
       },
       onSuccess: (_data, { endpointId }) => invalidateDevice(endpointId),
+    }),
+    putTags: useMutation({
+      mutationFn: async ({
+        endpointId,
+        tags,
+      }: {
+        endpointId: string;
+        tags: string[];
+      }) => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).putDeviceTags(endpointId, {
+          tags,
+        });
+      },
+      onSuccess: (_data, { endpointId }) => invalidateDevice(endpointId),
+    }),
+    bulkAssignTags: useMutation({
+      mutationFn: async ({
+        endpointIds,
+        add,
+      }: {
+        endpointIds: string[];
+        add: string[];
+      }) => {
+        if (!orgId) throw new Error("No organization");
+        return createManagementClient(orgId).bulkAssignDeviceTags({
+          endpointIds,
+          add,
+          remove: [],
+        });
+      },
+      onSuccess: invalidate,
     }),
     updateMembership: useMutation({
       mutationFn: async ({

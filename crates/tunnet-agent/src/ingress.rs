@@ -1,4 +1,4 @@
-//! At most one datagram ingress reader per peer.
+//! Datagram ingress readers: one bulk + one optional latency reader per peer.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -7,10 +7,11 @@ use dashmap::DashMap;
 use iroh::EndpointId;
 use tokio::task::JoinHandle;
 
-/// Tracks the single active TUN ingress task per remote endpoint.
+/// Tracks active TUN ingress tasks per remote endpoint.
 #[derive(Clone, Default)]
 pub struct IngressRegistry {
     readers: Arc<DashMap<EndpointId, JoinHandle<()>>>,
+    latency_readers: Arc<DashMap<EndpointId, JoinHandle<()>>>,
     generation: Arc<AtomicU64>,
 }
 
@@ -29,14 +30,48 @@ impl IngressRegistry {
         self.generation.fetch_add(1, Ordering::SeqCst);
     }
 
-    /// Try to claim ingress for `peer`. Returns `false` if a live reader already exists.
-    /// On success, spawns `fut` and clears the registry entry when it finishes.
+    /// Try to claim bulk ingress for `peer`. Returns `false` if a live reader already exists.
     pub fn try_spawn<F>(&self, peer: EndpointId, fut: F) -> bool
     where
         F: std::future::Future<Output = ()> + Send + 'static,
     {
+        Self::try_spawn_map(&self.readers, peer, fut)
+    }
+
+    /// Abort any existing bulk reader and start a new one.
+    pub fn force_spawn<F>(&self, peer: EndpointId, fut: F)
+    where
+        F: std::future::Future<Output = ()> + Send + 'static,
+    {
+        Self::force_spawn_map(&self.readers, peer, fut);
+    }
+
+    /// Try to claim latency-ALPN ingress (parallel to bulk).
+    pub fn try_spawn_latency<F>(&self, peer: EndpointId, fut: F) -> bool
+    where
+        F: std::future::Future<Output = ()> + Send + 'static,
+    {
+        Self::try_spawn_map(&self.latency_readers, peer, fut)
+    }
+
+    /// Replace the latency-ALPN ingress reader.
+    pub fn force_spawn_latency<F>(&self, peer: EndpointId, fut: F)
+    where
+        F: std::future::Future<Output = ()> + Send + 'static,
+    {
+        Self::force_spawn_map(&self.latency_readers, peer, fut);
+    }
+
+    fn try_spawn_map<F>(
+        map: &Arc<DashMap<EndpointId, JoinHandle<()>>>,
+        peer: EndpointId,
+        fut: F,
+    ) -> bool
+    where
+        F: std::future::Future<Output = ()> + Send + 'static,
+    {
         use dashmap::mapref::entry::Entry;
-        match self.readers.entry(peer) {
+        match map.entry(peer) {
             Entry::Occupied(occ) => {
                 if !occ.get().is_finished() {
                     return false;
@@ -47,39 +82,40 @@ impl IngressRegistry {
                 drop(v);
             }
         }
-        self.spawn_inner(peer, fut);
+        Self::spawn_inner(map, peer, fut);
         true
     }
 
-    /// Abort any existing reader and start a new one (dial installed a new canonical conn).
-    pub fn force_spawn<F>(&self, peer: EndpointId, fut: F)
+    fn force_spawn_map<F>(map: &Arc<DashMap<EndpointId, JoinHandle<()>>>, peer: EndpointId, fut: F)
     where
         F: std::future::Future<Output = ()> + Send + 'static,
     {
-        if let Some((_, h)) = self.readers.remove(&peer) {
+        if let Some((_, h)) = map.remove(&peer) {
             h.abort();
         }
-        self.spawn_inner(peer, fut);
+        Self::spawn_inner(map, peer, fut);
     }
 
-    fn spawn_inner<F>(&self, peer: EndpointId, fut: F)
+    fn spawn_inner<F>(map: &Arc<DashMap<EndpointId, JoinHandle<()>>>, peer: EndpointId, fut: F)
     where
         F: std::future::Future<Output = ()> + Send + 'static,
     {
-        let readers = self.readers.clone();
+        let readers = map.clone();
         let handle = tokio::spawn(async move {
             fut.await;
             readers.remove(&peer);
         });
-        self.readers.insert(peer, handle);
+        map.insert(peer, handle);
     }
 
     pub fn abort_all(&self) {
         self.bump_generation();
-        let keys: Vec<_> = self.readers.iter().map(|e| *e.key()).collect();
-        for k in keys {
-            if let Some((_, h)) = self.readers.remove(&k) {
-                h.abort();
+        for map in [&self.readers, &self.latency_readers] {
+            let keys: Vec<_> = map.iter().map(|e| *e.key()).collect();
+            for k in keys {
+                if let Some((_, h)) = map.remove(&k) {
+                    h.abort();
+                }
             }
         }
     }
@@ -120,14 +156,41 @@ mod tests {
             assert!(reg.try_spawn(p, async move {
                 let _ = rx.await;
             }));
-            // Drive the runtime so the reader task parks on the oneshot.
             tokio::task::yield_now().await;
             assert!(reg.has_reader(p));
             assert!(!reg.try_spawn(p, async {}));
             reg.abort_all();
             assert!(!reg.has_reader(p));
             drop(tx);
-            // Give the aborted task a chance to unwind before runtime drop.
+            tokio::task::yield_now().await;
+        });
+    }
+
+    #[test]
+    fn latency_reader_independent_of_bulk() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            let reg = IngressRegistry::new();
+            let mut bytes = [9u8; 32];
+            bytes[0] = 4;
+            let p = iroh::SecretKey::from(bytes).public();
+            let (tx1, rx1) = tokio::sync::oneshot::channel::<()>();
+            let (tx2, rx2) = tokio::sync::oneshot::channel::<()>();
+            assert!(reg.try_spawn(p, async move {
+                let _ = rx1.await;
+            }));
+            assert!(reg.try_spawn_latency(p, async move {
+                let _ = rx2.await;
+            }));
+            tokio::task::yield_now().await;
+            assert!(!reg.try_spawn(p, async {}));
+            assert!(!reg.try_spawn_latency(p, async {}));
+            reg.abort_all();
+            drop(tx1);
+            drop(tx2);
             tokio::task::yield_now().await;
         });
     }

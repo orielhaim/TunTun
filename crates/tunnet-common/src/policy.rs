@@ -21,7 +21,7 @@ pub enum Protocol {
 }
 
 /// Stable selector kinds for Policy-as-Code (IR + wire).
-/// Syntax in documents: `tag:X`, `user:email`, `group:user:name`, `group:device:name`.
+/// Syntax in documents: `tag:X`, `user:email`, `network:name`, CIDR literals.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "value", rename_all = "lowercase")]
 pub enum Selector {
@@ -30,12 +30,6 @@ pub enum Selector {
     Tag(String),
     Network(String),
     Cidr(String),
-    /// Org user group name (`group:user:<name>`). Expanded at compile time when possible.
-    #[serde(rename = "user_group")]
-    UserGroup(String),
-    /// Device group name (`group:device:<name>`). Expanded at compile time when possible.
-    #[serde(rename = "device_group")]
-    DeviceGroup(String),
     /// User email or id (`user:<email>`).
     User(String),
 }
@@ -224,16 +218,6 @@ impl Selector {
                 (Some(ip), Ok(net)) => net.contains(&ip),
                 _ => false,
             },
-            // Compile-time expansion should replace these with Tag/Endpoint/User.
-            // Until then, match synthetic tags `ug:<name>` / `dg:<name>` / `user:<id>`.
-            Selector::UserGroup(name) => {
-                let marker = format!("ug:{name}");
-                tags.iter().any(|x| x == &marker || x == name)
-            }
-            Selector::DeviceGroup(name) => {
-                let marker = format!("dg:{name}");
-                tags.iter().any(|x| x == &marker || x == name)
-            }
             Selector::User(id) => {
                 let marker = format!("user:{id}");
                 tags.iter()
@@ -257,14 +241,6 @@ impl Selector {
                 (Some(ip), Ok(net)) => net.contains(&std::net::IpAddr::V6(ip)),
                 _ => false,
             },
-            Selector::UserGroup(name) => {
-                let marker = format!("ug:{name}");
-                tags.iter().any(|x| x == &marker || x == name)
-            }
-            Selector::DeviceGroup(name) => {
-                let marker = format!("dg:{name}");
-                tags.iter().any(|x| x == &marker || x == name)
-            }
             Selector::User(id) => {
                 let marker = format!("user:{id}");
                 tags.iter()

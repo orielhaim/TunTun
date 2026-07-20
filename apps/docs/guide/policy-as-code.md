@@ -6,7 +6,6 @@ Define Tunnet access control in version-controlled files, review every change in
 
 Policy documents describe the same objects you configure in the dashboard:
 
-- User groups and device groups
 - Tags and tag ownership
 - Host aliases and IP sets
 - ACL rules and grants
@@ -35,7 +34,6 @@ Keep a single root file or split ownership across directories. A common layout:
 ```text
 .tunnet/
   policy.tunnet.hcl
-  groups/
   tags/
   acls/
   grants/
@@ -44,7 +42,7 @@ Keep a single root file or split ownership across directories. A common layout:
   tests/
 ```
 
-Use `include` blocks (for example `include "groups/*"`) so teams can own fragments with CODEOWNERS. Tunnet merges includes by meaning - not by concatenating text - so overlapping definitions are caught at validate time.
+Use `include` blocks (for example `include "tags/*"`) so teams can own fragments with CODEOWNERS. Tunnet merges includes by meaning - not by concatenating text - so overlapping definitions are caught at validate time.
 
 ### Example ACL fragment
 
@@ -185,7 +183,6 @@ Environment variables: `TUNNET_API_URL`, `TUNNET_API_KEY`, `TUNNET_ORGANIZATION_
 
 ### Granular resources (examples)
 
-- `tunnet_user_group` / `tunnet_device_group`
 - `tunnet_tag`
 - `tunnet_host_alias` / `tunnet_ip_set`
 - `tunnet_acl_rule` / `tunnet_grant`

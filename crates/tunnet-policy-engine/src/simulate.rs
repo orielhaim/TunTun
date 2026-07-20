@@ -215,24 +215,26 @@ fn parse_protocol(proto: &str) -> Protocol {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{AclRule, TagDefinition, UserGroup};
+    use crate::ir::{AclRule, TagDefinition};
 
     fn sample_doc() -> PolicyDocument {
         PolicyDocument {
-            user_groups: vec![UserGroup {
-                name: "eng".into(),
-                members: vec![],
-            }],
-            tags: vec![TagDefinition {
-                name: "staging".into(),
-                owners: vec![],
-            }],
+            tags: vec![
+                TagDefinition {
+                    name: "eng".into(),
+                    owners: vec![],
+                },
+                TagDefinition {
+                    name: "staging".into(),
+                    owners: vec![],
+                },
+            ],
             acls: vec![
                 AclRule {
                     name: "allow-eng-staging".into(),
                     slug: None,
                     action: "allow".into(),
-                    src: vec!["group:user:eng".into()],
+                    src: vec!["tag:eng".into()],
                     dst: vec!["tag:staging".into()],
                     ports: vec!["443".into()],
                     protocol: Some("tcp".into()),
@@ -262,7 +264,7 @@ mod tests {
     #[test]
     fn simulate_allow_matching_rule() {
         let doc = sample_doc();
-        let result = simulate(&doc, "group:user:eng", "tag:staging", Some(443), "tcp");
+        let result = simulate(&doc, "tag:eng", "tag:staging", Some(443), "tcp");
         assert_eq!(result.verdict, "allow");
         assert_eq!(result.matched_rules, vec!["allow-eng-staging"]);
     }

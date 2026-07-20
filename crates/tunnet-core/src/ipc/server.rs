@@ -174,6 +174,9 @@ async fn dispatch(req: IpcRequest, state: &AgentIpcState) -> IpcResponse {
             private_key_pem,
             internal_hostname,
             serve_id,
+            access_mode,
+            allowed_tags,
+            allowed_endpoint_ids,
         } => {
             match start_serve(
                 state,
@@ -183,6 +186,9 @@ async fn dispatch(req: IpcRequest, state: &AgentIpcState) -> IpcResponse {
                 private_key_pem.as_deref(),
                 internal_hostname.as_deref(),
                 serve_id,
+                access_mode,
+                allowed_tags,
+                allowed_endpoint_ids,
             )
             .await
             {
@@ -622,6 +628,7 @@ fn transfer_info(r: crate::send::TransferRecord) -> super::protocol::TransferInf
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn start_serve(
     state: &AgentIpcState,
     port: u16,
@@ -630,6 +637,9 @@ async fn start_serve(
     private_key_pem: Option<&str>,
     internal_hostname: Option<&str>,
     serve_id: Option<String>,
+    access_mode: Option<String>,
+    allowed_tags: Vec<String>,
+    allowed_endpoint_ids: Vec<String>,
 ) -> anyhow::Result<super::protocol::ServeInfo> {
     let network = state
         .node
@@ -650,6 +660,13 @@ async fn start_serve(
         );
     }
 
+    let mode = access_mode.unwrap_or_else(|| "all_peers".into());
+    let acl = crate::serve::ServeAcl {
+        access_mode: mode,
+        allowed_tags,
+        allowed_endpoint_ids,
+    };
+
     state
         .serves
         .start(
@@ -659,7 +676,7 @@ async fn start_serve(
             &internal_hostname,
             certificate_pem,
             private_key_pem,
-            crate::serve::ServeAcl::default(),
+            acl,
             None,
         )
         .await

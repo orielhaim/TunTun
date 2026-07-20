@@ -33,6 +33,14 @@ pub async fn serve(state: SharedState) -> anyhow::Result<()> {
             patch(crate::device_handlers::patch_device_labels_handler),
         )
         .route(
+            "/v1/device/tags",
+            get(crate::device_handlers::get_device_tags_handler),
+        )
+        .route(
+            "/v1/device/tags",
+            patch(crate::device_handlers::patch_device_tags_handler),
+        )
+        .route(
             "/v1/device/expiry",
             patch(crate::device_handlers::patch_device_expiry_handler),
         )
@@ -185,12 +193,15 @@ async fn enroll_inner(
         .map(str::trim)
         .filter(|s| !s.is_empty());
 
-    let (organization_id, network_id, membership_status) = match (token, org_slug) {
+    let (organization_id, network_id, membership_status, enroll_tags) = match (token, org_slug) {
         (Some(token), None) => {
-            let (org_id, net_id) = consume_enrollment_token(state, token).await?;
-            (org_id, net_id, "active".to_string())
+            let (org_id, net_id, tags) = consume_enrollment_token(state, token).await?;
+            (org_id, net_id, "active".to_string(), tags)
         }
-        (None, Some(slug)) => resolve_quick_enroll(state, slug, &req).await?,
+        (None, Some(slug)) => {
+            let (org_id, net_id, status) = resolve_quick_enroll(state, slug, &req).await?;
+            (org_id, net_id, status, Vec::new())
+        }
         (Some(_), Some(_)) => {
             return Err((
                 StatusCode::BAD_REQUEST,
@@ -225,7 +236,7 @@ async fn enroll_inner(
         &state.policy_key,
         crate::register::RegisterDeviceParams {
             endpoint_id: req.endpoint_id.clone(),
-            organization_id,
+            organization_id: organization_id.clone(),
             network_id,
             hostname: req.hostname.clone(),
             os: req.os.clone(),
@@ -240,14 +251,47 @@ async fn enroll_inner(
     )
     .await?;
 
+    if !enroll_tags.is_empty() {
+        apply_enrollment_tags(&state.pool, &req.endpoint_id, &enroll_tags).await?;
+        let _ = sqlx::query(
+            "UPDATE organization SET snapshot_version = snapshot_version + 1 WHERE id = $1",
+        )
+        .bind(&organization_id)
+        .execute(&state.pool)
+        .await;
+        let _ = crate::pg_notify::emit_org_changed(&state.pool, &organization_id).await;
+    }
+
     state.metrics.http_request("enroll", "200");
     Ok(resp)
+}
+
+async fn apply_enrollment_tags(
+    pool: &sqlx::PgPool,
+    endpoint_id: &str,
+    tags: &[String],
+) -> Result<(), (StatusCode, String)> {
+    for tag in tags {
+        let tag = tag.trim().to_lowercase();
+        if tag.is_empty() {
+            continue;
+        }
+        sqlx::query(
+            "INSERT INTO device_tags (endpoint_id, tag) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        )
+        .bind(endpoint_id)
+        .bind(&tag)
+        .execute(pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db: {e}")))?;
+    }
+    Ok(())
 }
 
 async fn consume_enrollment_token(
     state: &SharedState,
     token: &str,
-) -> Result<(String, uuid::Uuid), (StatusCode, String)> {
+) -> Result<(String, uuid::Uuid, Vec<String>), (StatusCode, String)> {
     let token_hash = crate::token_hash::hash_token(token);
 
     let mut tx = state
@@ -256,19 +300,19 @@ async fn consume_enrollment_token(
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db: {e}")))?;
 
-    let row: Option<(String, uuid::Uuid)> = sqlx::query_as(
+    let row: Option<(String, uuid::Uuid, Option<Vec<String>>)> = sqlx::query_as(
         "UPDATE enrollment_tokens et SET used_at = now() \
          FROM networks n \
          WHERE et.token_hash = $1 AND et.network_id = n.id \
            AND et.used_at IS NULL AND et.expires_at > now() \
-         RETURNING n.organization_id, et.network_id",
+         RETURNING n.organization_id, et.network_id, et.tags",
     )
     .bind(&token_hash)
     .fetch_optional(&mut *tx)
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db: {e}")))?;
 
-    let (organization_id, network_id) = row.ok_or_else(|| {
+    let (organization_id, network_id, tags) = row.ok_or_else(|| {
         state.metrics.auth_failure("bad_enroll_token");
         (
             StatusCode::UNAUTHORIZED,
@@ -280,7 +324,7 @@ async fn consume_enrollment_token(
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("db: {e}")))?;
 
-    Ok((organization_id, network_id))
+    Ok((organization_id, network_id, tags.unwrap_or_default()))
 }
 
 async fn resolve_quick_enroll(

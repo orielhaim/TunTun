@@ -16,6 +16,28 @@ pub enum LabelsCommand {
     Delete(LabelsDeleteArgs),
 }
 
+#[derive(Subcommand, Debug)]
+pub enum TagCommand {
+    /// List ACL tags on this machine
+    List,
+    /// Request a tag for this machine
+    Add(TagAddArgs),
+    /// Remove a tag from this machine
+    Remove(TagRemoveArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct TagAddArgs {
+    /// Tag name (`prod` or `tag:prod`)
+    pub tag: String,
+}
+
+#[derive(Args, Debug)]
+pub struct TagRemoveArgs {
+    /// Tag name (`prod` or `tag:prod`)
+    pub tag: String,
+}
+
 #[derive(Args, Debug)]
 pub struct LabelsSetArgs {
     /// Label pairs as key=value (e.g. user_id=customer-42)
@@ -59,6 +81,41 @@ pub async fn run_labels(command: LabelsCommand, state_dir: Option<&str>) -> anyh
         }
     }
     Ok(())
+}
+
+pub async fn run_tags(command: TagCommand, state_dir: Option<&str>) -> anyhow::Result<()> {
+    let client = signed_client(state_dir).await?;
+    match command {
+        TagCommand::List => {
+            let tags = client.get_device_tags().await?;
+            print_tags(&tags);
+        }
+        TagCommand::Add(args) => {
+            let tag = normalize_cli_tag(&args.tag);
+            let tags = client.patch_device_tags(&[tag], &[]).await?;
+            print_tags(&tags);
+        }
+        TagCommand::Remove(args) => {
+            let tag = normalize_cli_tag(&args.tag);
+            let tags = client.patch_device_tags(&[], &[tag]).await?;
+            print_tags(&tags);
+        }
+    }
+    Ok(())
+}
+
+fn normalize_cli_tag(raw: &str) -> String {
+    raw.trim().trim_start_matches("tag:").to_lowercase()
+}
+
+fn print_tags(tags: &[String]) {
+    if tags.is_empty() {
+        println!("(no tags)");
+        return;
+    }
+    for tag in tags {
+        println!("tag:{tag}");
+    }
 }
 
 pub async fn run_machine(command: MachineCommand, state_dir: Option<&str>) -> anyhow::Result<()> {

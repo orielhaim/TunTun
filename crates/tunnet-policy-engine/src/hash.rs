@@ -36,14 +36,14 @@ fn canonicalize(value: &Value) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{AclRule, UserGroup};
+    use crate::ir::{AclRule, TagDefinition};
 
     #[test]
     fn content_hash_is_stable() {
         let doc = PolicyDocument {
-            user_groups: vec![UserGroup {
+            tags: vec![TagDefinition {
                 name: "eng".into(),
-                members: vec!["a@x.com".into()],
+                owners: vec!["a@x.com".into()],
             }],
             acls: vec![AclRule {
                 name: "allow".into(),

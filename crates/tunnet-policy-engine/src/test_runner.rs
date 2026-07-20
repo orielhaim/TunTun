@@ -89,25 +89,27 @@ fn split_dst(dst: &str) -> (String, Option<u16>, String) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{AclRule, PolicyTest, TagDefinition, UserGroup};
+    use crate::ir::{AclRule, PolicyTest, TagDefinition};
 
     #[test]
     fn run_tests_accept_and_deny_pass() {
         let doc = PolicyDocument {
-            user_groups: vec![UserGroup {
-                name: "eng".into(),
-                members: vec![],
-            }],
-            tags: vec![TagDefinition {
-                name: "staging".into(),
-                owners: vec![],
-            }],
+            tags: vec![
+                TagDefinition {
+                    name: "eng".into(),
+                    owners: vec![],
+                },
+                TagDefinition {
+                    name: "staging".into(),
+                    owners: vec![],
+                },
+            ],
             acls: vec![
                 AclRule {
                     name: "allow-eng-staging".into(),
                     slug: None,
                     action: "allow".into(),
-                    src: vec!["group:user:eng".into()],
+                    src: vec!["tag:eng".into()],
                     dst: vec!["tag:staging".into()],
                     ports: vec!["443".into()],
                     protocol: Some("tcp".into()),
@@ -133,13 +135,13 @@ mod tests {
             tests: vec![
                 PolicyTest {
                     name: "eng-can-reach-staging".into(),
-                    src: "group:user:eng".into(),
+                    src: "tag:eng".into(),
                     accept: vec!["tag:staging:443/tcp".into()],
                     deny: vec![],
                 },
                 PolicyTest {
                     name: "eng-denied-elsewhere".into(),
-                    src: "group:user:eng".into(),
+                    src: "tag:eng".into(),
                     accept: vec![],
                     deny: vec!["tag:prod".into()],
                 },

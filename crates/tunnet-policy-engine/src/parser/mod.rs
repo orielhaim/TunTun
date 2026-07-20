@@ -64,8 +64,6 @@ mod hcl_parser {
     fn merge_root_attribute(doc: &mut PolicyDocument, key: &str, expr: &Expression) -> Result<()> {
         let value = expr_to_json(expr)?;
         match key {
-            "user_groups" => doc.user_groups.extend(json_to_vec(value)?),
-            "device_groups" => doc.device_groups.extend(json_to_vec(value)?),
             "tags" => doc.tags.extend(json_to_vec(value)?),
             "host_aliases" => doc.host_aliases.extend(json_to_vec(value)?),
             "ip_sets" => doc.ip_sets.extend(json_to_vec(value)?),
@@ -97,8 +95,6 @@ mod hcl_parser {
 
         let value = JsonValue::Object(obj);
         match identifier {
-            "user_group" => doc.user_groups.push(json_to_one(value)?),
-            "device_group" => doc.device_groups.push(json_to_one(value)?),
             "tag" => doc.tags.push(json_to_one(value)?),
             "host_alias" => doc.host_aliases.push(json_to_one(value)?),
             "ip_set" => doc.ip_sets.push(json_to_one(value)?),
@@ -188,11 +184,10 @@ mod hcl_parser {
         let mapped = match name {
             "tag" => format!("tag:{}", args.first().cloned().unwrap_or_default()),
             "user" => format!("user:{}", args.first().cloned().unwrap_or_default()),
-            "usergroup" | "user_group" => {
-                format!("group:user:{}", args.first().cloned().unwrap_or_default())
-            }
-            "devicegroup" | "device_group" => {
-                format!("group:device:{}", args.first().cloned().unwrap_or_default())
+            "usergroup" | "user_group" | "devicegroup" | "device_group" => {
+                return Err(PolicyError::Parse(format!(
+                    "deprecated group selector function '{name}()'; use tag() instead"
+                )));
             }
             "cidr" => args.first().cloned().unwrap_or_default(),
             "endpoint" => args.first().cloned().unwrap_or_default(),

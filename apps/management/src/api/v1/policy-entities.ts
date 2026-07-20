@@ -1,32 +1,30 @@
 import {
   createAutoApproverBody,
-  createDeviceGroupBody,
   createGrantBody,
   createHostAliasBody,
   createIpSetBody,
   createTagDefinitionBody,
-  createUserGroupBody,
-  patchDeviceGroupBody,
   patchGrantBody,
   patchHostAliasBody,
   patchIpSetBody,
   patchTagDefinitionBody,
-  patchUserGroupBody,
 } from "@tunnet/api/management";
 import { schema } from "@tunnet/db";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { Elysia } from "elysia";
 
 import { writeAudit } from "../../lib/audit";
 import { db } from "../../lib/db";
 import { bumpOrgAndNotify } from "../../lib/notify";
 import { toIso } from "../../lib/serialize";
+import { defaultOwnerForUser, normalizeTagName } from "../../lib/tag-ownership";
 import {
   getPolicyActor,
   policyAuthPlugin,
   requirePolicyAccess,
 } from "./middleware/policy-auth";
 import { badRequest, notFound } from "./middleware/session";
+import { getTagActor, requireTagAccess } from "./middleware/tag-auth";
 
 async function notifyPolicyChange(
   tx: Parameters<typeof writeAudit>[0],
@@ -48,383 +46,31 @@ export const policyEntitiesRoutes = new Elysia()
   .use(policyAuthPlugin)
   .group("", (app) =>
     app
-      .use(requirePolicyAccess("read"))
-      .get("/organizations/:orgId/user-groups", async ({ params }) => {
-        const groups = await db.query.userGroups.findMany({
-          where: eq(schema.userGroups.organizationId, params.orgId),
-        });
-        const groupIds = groups.map((g) => g.id);
-        const members =
-          groupIds.length > 0
-            ? await db.query.userGroupMembers.findMany({
-                where: inArray(schema.userGroupMembers.groupId, groupIds),
-              })
-            : [];
-        const membersByGroup = new Map<string, typeof members>();
-        for (const member of members) {
-          const list = membersByGroup.get(member.groupId) ?? [];
-          list.push(member);
-          membersByGroup.set(member.groupId, list);
-        }
-        return {
-          groups: groups.map((group) => ({
-            id: group.id,
-            organizationId: group.organizationId,
-            name: group.name,
-            description: group.description,
-            labels: group.labels,
-            members: (membersByGroup.get(group.id) ?? []).map((m) => ({
-              userId: m.userId,
-              email: m.email,
-            })),
-            createdAt: toIso(group.createdAt)!,
-            updatedAt: toIso(group.updatedAt)!,
-          })),
-        };
-      }),
-  )
-  .group("", (app) =>
-    app
-      .use(requirePolicyAccess("write"))
-      .post(
-        "/organizations/:orgId/user-groups",
-        async ({ params, body, authContext, apiKeyAuth }) => {
-          const actor = getPolicyActor({ authContext, apiKeyAuth });
-          const parsed = createUserGroupBody.parse(body);
-          const created = await db.transaction(async (tx) => {
-            const [group] = await tx
-              .insert(schema.userGroups)
-              .values({
-                organizationId: params.orgId,
-                name: parsed.name,
-                description: parsed.description ?? null,
-                labels: parsed.labels ?? {},
-              })
-              .returning();
-            if (!group) throw new Error("Failed to create user group");
-            if (parsed.members.length > 0) {
-              await tx.insert(schema.userGroupMembers).values(
-                parsed.members.map((member) => ({
-                  groupId: group.id,
-                  userId: member.userId ?? null,
-                  email: member.email ?? null,
-                })),
-              );
-            }
-            await notifyPolicyChange(
-              tx,
-              params.orgId,
-              actor.userId ?? actor.apiKeyId ?? "system",
-              "user_group.created",
-              group.id,
-            );
-            return group;
-          });
-          return {
-            id: created.id,
-            organizationId: created.organizationId,
-            name: created.name,
-            createdAt: toIso(created.createdAt)!,
-          };
-        },
-      )
-      .patch(
-        "/organizations/:orgId/user-groups/:id",
-        async ({ params, body, authContext, apiKeyAuth, set }) => {
-          const actor = getPolicyActor({ authContext, apiKeyAuth });
-          const parsed = patchUserGroupBody.parse(body);
-          const updated = await db.transaction(async (tx) => {
-            const [group] = await tx
-              .update(schema.userGroups)
-              .set({
-                ...(parsed.name !== undefined ? { name: parsed.name } : {}),
-                ...(parsed.description !== undefined
-                  ? { description: parsed.description }
-                  : {}),
-                ...(parsed.labels !== undefined
-                  ? { labels: parsed.labels }
-                  : {}),
-                updatedAt: new Date(),
-              })
-              .where(
-                and(
-                  eq(schema.userGroups.id, params.id),
-                  eq(schema.userGroups.organizationId, params.orgId),
-                ),
-              )
-              .returning();
-            if (!group) return null;
-            if (parsed.members !== undefined) {
-              await tx
-                .delete(schema.userGroupMembers)
-                .where(eq(schema.userGroupMembers.groupId, group.id));
-              if (parsed.members.length > 0) {
-                await tx.insert(schema.userGroupMembers).values(
-                  parsed.members.map((member) => ({
-                    groupId: group.id,
-                    userId: member.userId ?? null,
-                    email: member.email ?? null,
-                  })),
-                );
-              }
-            }
-            await notifyPolicyChange(
-              tx,
-              params.orgId,
-              actor.userId ?? actor.apiKeyId ?? "system",
-              "user_group.updated",
-              group.id,
-            );
-            return group;
-          });
-          if (!updated) {
-            set.status = 404;
-            return { error: "User group not found" };
-          }
-          return {
-            id: updated.id,
-            name: updated.name,
-            updatedAt: toIso(updated.updatedAt)!,
-          };
-        },
-      )
-      .delete(
-        "/organizations/:orgId/user-groups/:id",
-        async ({ params, authContext, apiKeyAuth, set }) => {
-          const actor = getPolicyActor({ authContext, apiKeyAuth });
-          const deleted = await db.transaction(async (tx) => {
-            const [group] = await tx
-              .delete(schema.userGroups)
-              .where(
-                and(
-                  eq(schema.userGroups.id, params.id),
-                  eq(schema.userGroups.organizationId, params.orgId),
-                ),
-              )
-              .returning();
-            if (!group) return null;
-            await notifyPolicyChange(
-              tx,
-              params.orgId,
-              actor.userId ?? actor.apiKeyId ?? "system",
-              "user_group.deleted",
-              group.id,
-            );
-            return group;
-          });
-          if (!deleted) {
-            set.status = 404;
-            return { error: "User group not found" };
-          }
-          return { deleted: true };
-        },
-      ),
-  )
-  .group("", (app) =>
-    app
-      .use(requirePolicyAccess("read"))
-      .get("/organizations/:orgId/device-groups", async ({ params }) => {
-        const groups = await db.query.deviceGroups.findMany({
-          where: eq(schema.deviceGroups.organizationId, params.orgId),
-        });
-        const groupIds = groups.map((g) => g.id);
-        const members =
-          groupIds.length > 0
-            ? await db.query.deviceGroupMembers.findMany({
-                where: inArray(schema.deviceGroupMembers.groupId, groupIds),
-              })
-            : [];
-        const membersByGroup = new Map<string, typeof members>();
-        for (const member of members) {
-          const list = membersByGroup.get(member.groupId) ?? [];
-          list.push(member);
-          membersByGroup.set(member.groupId, list);
-        }
-        return {
-          groups: groups.map((group) => ({
-            id: group.id,
-            organizationId: group.organizationId,
-            networkId: group.networkId,
-            name: group.name,
-            description: group.description,
-            labels: group.labels,
-            members: (membersByGroup.get(group.id) ?? []).map((m) => ({
-              endpointId: m.endpointId,
-            })),
-            createdAt: toIso(group.createdAt)!,
-          })),
-        };
-      }),
-  )
-  .group("", (app) =>
-    app
-      .use(requirePolicyAccess("write"))
-      .post(
-        "/organizations/:orgId/device-groups",
-        async ({ params, body, authContext, apiKeyAuth, set }) => {
-          const actor = getPolicyActor({ authContext, apiKeyAuth });
-          const parsed = createDeviceGroupBody.parse(body);
-          if (parsed.networkId) {
-            const network = await db.query.networks.findFirst({
-              where: and(
-                eq(schema.networks.id, parsed.networkId),
-                eq(schema.networks.organizationId, params.orgId),
-              ),
-            });
-            if (!network) return notFound("Network not found");
-          }
-          for (const member of parsed.members) {
-            const device = await db.query.devices.findFirst({
-              where: and(
-                eq(schema.devices.endpointId, member.endpointId),
-                eq(schema.devices.organizationId, params.orgId),
-              ),
-            });
-            if (!device) {
-              return badRequest(
-                `Device ${member.endpointId.slice(0, 8)}… not found in organization`,
-              );
-            }
-          }
-          const created = await db.transaction(async (tx) => {
-            const [group] = await tx
-              .insert(schema.deviceGroups)
-              .values({
-                organizationId: params.orgId,
-                networkId: parsed.networkId ?? null,
-                name: parsed.name,
-                description: parsed.description ?? null,
-                labels: parsed.labels ?? {},
-              })
-              .returning();
-            if (!group) throw new Error("Failed to create device group");
-            if (parsed.members.length > 0) {
-              await tx.insert(schema.deviceGroupMembers).values(
-                parsed.members.map((member) => ({
-                  groupId: group.id,
-                  endpointId: member.endpointId,
-                })),
-              );
-            }
-            await notifyPolicyChange(
-              tx,
-              params.orgId,
-              actor.userId ?? actor.apiKeyId ?? "system",
-              "device_group.created",
-              group.id,
-            );
-            return group;
-          });
-          return {
-            id: created.id,
-            name: created.name,
-            createdAt: toIso(created.createdAt)!,
-          };
-        },
-      )
-      .patch(
-        "/organizations/:orgId/device-groups/:id",
-        async ({ params, body, authContext, apiKeyAuth, set }) => {
-          const actor = getPolicyActor({ authContext, apiKeyAuth });
-          const parsed = patchDeviceGroupBody.parse(body);
-          const updated = await db.transaction(async (tx) => {
-            const [group] = await tx
-              .update(schema.deviceGroups)
-              .set({
-                ...(parsed.name !== undefined ? { name: parsed.name } : {}),
-                ...(parsed.networkId !== undefined
-                  ? { networkId: parsed.networkId ?? null }
-                  : {}),
-                ...(parsed.description !== undefined
-                  ? { description: parsed.description }
-                  : {}),
-                ...(parsed.labels !== undefined
-                  ? { labels: parsed.labels }
-                  : {}),
-                updatedAt: new Date(),
-              })
-              .where(
-                and(
-                  eq(schema.deviceGroups.id, params.id),
-                  eq(schema.deviceGroups.organizationId, params.orgId),
-                ),
-              )
-              .returning();
-            if (!group) return null;
-            if (parsed.members !== undefined) {
-              await tx
-                .delete(schema.deviceGroupMembers)
-                .where(eq(schema.deviceGroupMembers.groupId, group.id));
-              if (parsed.members.length > 0) {
-                await tx.insert(schema.deviceGroupMembers).values(
-                  parsed.members.map((member) => ({
-                    groupId: group.id,
-                    endpointId: member.endpointId,
-                  })),
-                );
-              }
-            }
-            await notifyPolicyChange(
-              tx,
-              params.orgId,
-              actor.userId ?? actor.apiKeyId ?? "system",
-              "device_group.updated",
-              group.id,
-            );
-            return group;
-          });
-          if (!updated) {
-            set.status = 404;
-            return { error: "Device group not found" };
-          }
-          return { id: updated.id, name: updated.name };
-        },
-      )
-      .delete(
-        "/organizations/:orgId/device-groups/:id",
-        async ({ params, authContext, apiKeyAuth, set }) => {
-          const actor = getPolicyActor({ authContext, apiKeyAuth });
-          const deleted = await db.transaction(async (tx) => {
-            const [group] = await tx
-              .delete(schema.deviceGroups)
-              .where(
-                and(
-                  eq(schema.deviceGroups.id, params.id),
-                  eq(schema.deviceGroups.organizationId, params.orgId),
-                ),
-              )
-              .returning();
-            if (!group) return null;
-            await notifyPolicyChange(
-              tx,
-              params.orgId,
-              actor.userId ?? actor.apiKeyId ?? "system",
-              "device_group.deleted",
-              group.id,
-            );
-            return group;
-          });
-          if (!deleted) {
-            set.status = 404;
-            return { error: "Device group not found" };
-          }
-          return { deleted: true };
-        },
-      ),
-  )
-  .group("", (app) =>
-    app
-      .use(requirePolicyAccess("read"))
+      .use(requireTagAccess("read"))
       .get("/organizations/:orgId/tag-definitions", async ({ params }) => {
         const rows = await db.query.tagDefinitions.findMany({
           where: eq(schema.tagDefinitions.organizationId, params.orgId),
         });
+        const counts = await db
+          .select({
+            tag: schema.deviceTags.tag,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(schema.deviceTags)
+          .innerJoin(
+            schema.devices,
+            eq(schema.deviceTags.endpointId, schema.devices.endpointId),
+          )
+          .where(eq(schema.devices.organizationId, params.orgId))
+          .groupBy(schema.deviceTags.tag);
+        const countByTag = new Map(counts.map((c) => [c.tag, c.count]));
         return {
           tags: rows.map((row) => ({
             id: row.id,
             organizationId: row.organizationId,
             name: row.name,
             owners: row.owners,
+            machineCount: countByTag.get(row.name) ?? 0,
             createdAt: toIso(row.createdAt)!,
           })),
         };
@@ -432,19 +78,30 @@ export const policyEntitiesRoutes = new Elysia()
   )
   .group("", (app) =>
     app
-      .use(requirePolicyAccess("write"))
+      .use(requireTagAccess("write"))
       .post(
         "/organizations/:orgId/tag-definitions",
         async ({ params, body, authContext, apiKeyAuth }) => {
-          const actor = getPolicyActor({ authContext, apiKeyAuth });
+          const actor = getTagActor({ authContext, apiKeyAuth });
           const parsed = createTagDefinitionBody.parse(body);
+          const name = normalizeTagName(parsed.name);
+          let owners = parsed.owners.map((o) =>
+            o.startsWith("tag:") ? `tag:${normalizeTagName(o.slice(4))}` : o,
+          );
+          if (owners.length === 0) {
+            if (actor.userId) {
+              owners = [defaultOwnerForUser(actor.userId)];
+            } else {
+              return badRequest("Tag definition requires at least one owner");
+            }
+          }
           const [created] = await db.transaction(async (tx) => {
             const [row] = await tx
               .insert(schema.tagDefinitions)
               .values({
                 organizationId: params.orgId,
-                name: parsed.name,
-                owners: parsed.owners,
+                name,
+                owners,
               })
               .returning();
             if (!row) throw new Error("Failed to create tag definition");
@@ -461,6 +118,7 @@ export const policyEntitiesRoutes = new Elysia()
           return {
             id: created.id,
             name: created.name,
+            owners: created.owners,
             createdAt: toIso(created.createdAt)!,
           };
         },
@@ -468,15 +126,26 @@ export const policyEntitiesRoutes = new Elysia()
       .patch(
         "/organizations/:orgId/tag-definitions/:id",
         async ({ params, body, authContext, apiKeyAuth, set }) => {
-          const actor = getPolicyActor({ authContext, apiKeyAuth });
+          const actor = getTagActor({ authContext, apiKeyAuth });
           const parsed = patchTagDefinitionBody.parse(body);
+          if (parsed.owners !== undefined && parsed.owners.length === 0) {
+            return badRequest("Tag definition requires at least one owner");
+          }
           const updated = await db.transaction(async (tx) => {
             const [row] = await tx
               .update(schema.tagDefinitions)
               .set({
-                ...(parsed.name !== undefined ? { name: parsed.name } : {}),
+                ...(parsed.name !== undefined
+                  ? { name: normalizeTagName(parsed.name) }
+                  : {}),
                 ...(parsed.owners !== undefined
-                  ? { owners: parsed.owners }
+                  ? {
+                      owners: parsed.owners.map((o) =>
+                        o.startsWith("tag:")
+                          ? `tag:${normalizeTagName(o.slice(4))}`
+                          : o,
+                      ),
+                    }
                   : {}),
                 updatedAt: new Date(),
               })
@@ -501,13 +170,17 @@ export const policyEntitiesRoutes = new Elysia()
             set.status = 404;
             return { error: "Tag definition not found" };
           }
-          return { id: updated.id, name: updated.name };
+          return {
+            id: updated.id,
+            name: updated.name,
+            owners: updated.owners,
+          };
         },
       )
       .delete(
         "/organizations/:orgId/tag-definitions/:id",
         async ({ params, authContext, apiKeyAuth, set }) => {
-          const actor = getPolicyActor({ authContext, apiKeyAuth });
+          const actor = getTagActor({ authContext, apiKeyAuth });
           const deleted = await db.transaction(async (tx) => {
             const [row] = await tx
               .delete(schema.tagDefinitions)

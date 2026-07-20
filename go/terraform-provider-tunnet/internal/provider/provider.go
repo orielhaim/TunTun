@@ -148,8 +148,6 @@ func (p *tunnetProvider) Configure(ctx context.Context, req provider.ConfigureRe
 
 func (p *tunnetProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
-		resources.NewUserGroupResource,
-		resources.NewDeviceGroupResource,
 		resources.NewTagResource,
 		resources.NewHostAliasResource,
 		resources.NewIPSetResource,
