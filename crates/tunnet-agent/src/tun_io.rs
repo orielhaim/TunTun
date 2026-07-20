@@ -23,9 +23,9 @@ const PRIORITY_QUEUE_CAP: usize = 256;
 
 #[derive(Clone, Copy)]
 enum OutPriority {
-    /// ICMP / small latency-sensitive packets — drained first, may wait on CC.
+    /// ICMP — dedicated worker so bulk TCP waits cannot stall ping.
     Latency,
-    /// Bulk TCP/UDP — never blocks the worker on datagram congestion.
+    /// Everything else (TCP/UDP bulk + ACKs).
     Bulk,
 }
 
@@ -89,45 +89,34 @@ pub async fn run_outbound(deps: OutboundDeps) -> anyhow::Result<()> {
         metrics,
     } = deps;
 
-    let (prio_tx, mut prio_rx) =
-        tokio::sync::mpsc::channel::<(EndpointId, Bytes)>(PRIORITY_QUEUE_CAP);
-    let (bulk_tx, mut bulk_rx) =
-        tokio::sync::mpsc::channel::<(EndpointId, Bytes)>(OUTBOUND_QUEUE_CAP);
+    let (prio_tx, prio_rx) = tokio::sync::mpsc::channel::<(EndpointId, Bytes)>(PRIORITY_QUEUE_CAP);
+    let (bulk_tx, bulk_rx) = tokio::sync::mpsc::channel::<(EndpointId, Bytes)>(OUTBOUND_QUEUE_CAP);
 
-    let worker_pool = pool.clone();
-    let worker_metrics = metrics.clone();
-    let worker = tokio::spawn(async move {
-        loop {
-            // Prefer latency packets so iperf flood cannot stall ICMP.
-            let (peer, payload, latency) = tokio::select! {
-                biased;
-                Some((peer, payload)) = prio_rx.recv() => (peer, payload, true),
-                Some((peer, payload)) = bulk_rx.recv() => (peer, payload, false),
-                else => break,
-            };
-            let n = payload.len() as u64;
-            let result = if latency {
-                worker_pool.send_or_buffer_priority(peer, payload).await
-            } else {
-                worker_pool.send_or_buffer(peer, payload).await
-            };
-            match result {
-                Ok(()) => {
-                    worker_metrics.packets_inc("out");
-                    worker_metrics.bytes_add("out", n);
-                    worker_pool.record_bytes_out(peer, n);
-                }
-                Err(e) => {
-                    tracing::debug!(%peer, ?e, latency, "send/buffer failed");
-                    worker_metrics.dropped_inc(if latency {
-                        "send_failed_prio"
-                    } else {
-                        "send_failed_bulk"
-                    });
+    // Two workers so a bulk `send_datagram_wait` cannot block ICMP.
+    // Both still wait for QUIC buffer space — that restores upload throughput.
+    let spawn_send_worker = |mut rx: tokio::sync::mpsc::Receiver<(EndpointId, Bytes)>,
+                             pool: ConnPool,
+                             metrics: AgentMetrics,
+                             label: &'static str| {
+        tokio::spawn(async move {
+            while let Some((peer, payload)) = rx.recv().await {
+                let n = payload.len() as u64;
+                match pool.send_or_buffer(peer, payload).await {
+                    Ok(()) => {
+                        metrics.packets_inc("out");
+                        metrics.bytes_add("out", n);
+                        pool.record_bytes_out(peer, n);
+                    }
+                    Err(e) => {
+                        tracing::debug!(%peer, ?e, worker = label, "send/buffer failed");
+                        metrics.dropped_inc(label);
+                    }
                 }
             }
-        }
-    });
+        })
+    };
+    let prio_worker = spawn_send_worker(prio_rx, pool.clone(), metrics.clone(), "send_failed_prio");
+    let bulk_worker = spawn_send_worker(bulk_rx, pool.clone(), metrics.clone(), "send_failed_bulk");
 
     let mut buf = vec![0u8; 65_536];
     tracing::info!("outbound TUN→iroh loop started");
@@ -203,11 +192,10 @@ pub async fn run_outbound(deps: OutboundDeps) -> anyhow::Result<()> {
                 }
             }
 
-            let priority = match parsed.protocol {
-                tunnet_common::policy::Protocol::Icmp => OutPriority::Latency,
-                // Very small packets are often ACKs / DNS / control — keep them responsive.
-                _ if packet.len() <= 128 => OutPriority::Latency,
-                _ => OutPriority::Bulk,
+            let priority = if parsed.protocol == tunnet_common::policy::Protocol::Icmp {
+                OutPriority::Latency
+            } else {
+                OutPriority::Bulk
             };
             let payload = Bytes::copy_from_slice(packet);
             let tx = match priority {
@@ -232,7 +220,7 @@ pub async fn run_outbound(deps: OutboundDeps) -> anyhow::Result<()> {
 
     drop(prio_tx);
     drop(bulk_tx);
-    let _ = worker.await;
+    let _ = tokio::join!(prio_worker, bulk_worker);
     read_result
 }
 
