@@ -711,6 +711,7 @@ function MachinesPage() {
       />
 
       <MachineTagsEditor
+        orgId={orgId}
         open={tagsEditor !== null}
         onOpenChange={(open) => !open && setTagsEditor(null)}
         tags={tagsEditor?.tags ?? []}
@@ -725,6 +726,7 @@ function MachinesPage() {
       />
 
       <BulkTagsDialog
+        orgId={orgId}
         open={bulkTagsOpen}
         onOpenChange={setBulkTagsOpen}
         loading={deviceMutations.bulkAssignTags.isPending}

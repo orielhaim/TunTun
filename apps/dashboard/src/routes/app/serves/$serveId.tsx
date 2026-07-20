@@ -1,12 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { formatDistanceToNow } from "date-fns";
-import { ChevronRightIcon, XIcon } from "lucide-react";
+import { ChevronRightIcon } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { CopyField } from "@/components/app/copy-field";
 import { EntityStatus } from "@/components/app/entity-status";
 import { PageHeader } from "@/components/app/page-header";
+import { TagMultiCombobox } from "@/components/app/tag-combobox";
 import { Badge } from "@/components/ui/badge";
 import {
   Breadcrumb,
@@ -19,7 +20,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -90,7 +90,6 @@ function ServeDetailPage() {
     "all_peers" | "tags" | "machines"
   >("all_peers");
   const [tags, setTags] = useState<string[]>([]);
-  const [tagInput, setTagInput] = useState("");
   const [selectedEndpoints, setSelectedEndpoints] = useState<string[]>([]);
 
   useEffect(() => {
@@ -123,16 +122,6 @@ function ServeDetailPage() {
         </Button>
       </div>
     );
-  }
-
-  function addTag() {
-    const next = tagInput.trim();
-    if (!next || tags.includes(next)) {
-      setTagInput("");
-      return;
-    }
-    setTags([...tags, next]);
-    setTagInput("");
   }
 
   async function saveAccess() {
@@ -345,41 +334,13 @@ function ServeDetailPage() {
               {accessMode === "tags" ? (
                 <div className="space-y-2">
                   <Label>Allowed tags</Label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {tags.map((tag) => (
-                      <Badge key={tag} variant="secondary" className="gap-1">
-                        {tag}
-                        {canManage ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setTags(tags.filter((t) => t !== tag))
-                            }
-                          >
-                            <XIcon className="size-3" />
-                          </button>
-                        ) : null}
-                      </Badge>
-                    ))}
-                  </div>
-                  {canManage ? (
-                    <div className="flex gap-2">
-                      <Input
-                        value={tagInput}
-                        onChange={(e) => setTagInput(e.target.value)}
-                        placeholder="Add tag"
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            addTag();
-                          }
-                        }}
-                      />
-                      <Button type="button" variant="outline" onClick={addTag}>
-                        Add
-                      </Button>
-                    </div>
-                  ) : null}
+                  <TagMultiCombobox
+                    orgId={orgId}
+                    value={tags}
+                    onValueChange={setTags}
+                    placeholder="Search tags…"
+                    disabled={!canManage}
+                  />
                 </div>
               ) : null}
 

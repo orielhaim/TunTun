@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 import { CopyField } from "@/components/app/copy-field";
+import { TagMultiCombobox } from "@/components/app/tag-combobox";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -42,7 +43,7 @@ export function EnrollmentTokenDialog({
   const { data: networks } = useNetworks(orgId);
   const [networkId, setNetworkId] = useState(defaultNetworkId ?? "");
   const [ttlMinutes, setTtlMinutes] = useState("15");
-  const [tagsInput, setTagsInput] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [token, setToken] = useState<string | null>(null);
 
@@ -55,10 +56,6 @@ export function EnrollmentTokenDialog({
     }
     setLoading(true);
     try {
-      const tags = tagsInput
-        .split(/[,\s]+/)
-        .map((s) => s.trim().replace(/^tag:/, "").toLowerCase())
-        .filter(Boolean);
       const client = createManagementClient(orgId);
       const result = await client.createEnrollmentToken(selectedNetworkId, {
         ttlMinutes: Number(ttlMinutes) || 15,
@@ -82,7 +79,7 @@ export function EnrollmentTokenDialog({
     if (!next) {
       setToken(null);
       setNetworkId(defaultNetworkId ?? "");
-      setTagsInput("");
+      setTags([]);
     }
     onOpenChange(next);
   }
@@ -147,11 +144,13 @@ export function EnrollmentTokenDialog({
             </div>
             <div className="space-y-2">
               <Label htmlFor="enroll-tags">Tags (optional)</Label>
-              <Input
+              <TagMultiCombobox
                 id="enroll-tags"
-                value={tagsInput}
-                onChange={(e) => setTagsInput(e.target.value)}
-                placeholder="prod, web-server"
+                orgId={orgId}
+                value={tags}
+                onValueChange={setTags}
+                placeholder="Search tags…"
+                disabled={loading}
               />
               <p className="text-muted-foreground text-xs">
                 Machines that enroll with this token receive these ACL tags.

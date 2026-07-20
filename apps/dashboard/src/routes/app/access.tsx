@@ -262,6 +262,7 @@ function OrganizationPoliciesPanel() {
       )}
 
       <CreateOrgPolicyDialog
+        orgId={orgId}
         open={createOpen}
         onOpenChange={setCreateOpen}
         loading={createPolicy.isPending}
@@ -353,11 +354,13 @@ function PolicyRevisionsPanel() {
 }
 
 function CreateOrgPolicyDialog({
+  orgId,
   open,
   onOpenChange,
   loading,
   onSubmit,
 }: {
+  orgId?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   loading: boolean;
@@ -424,6 +427,7 @@ function CreateOrgPolicyDialog({
               </Select>
             </div>
             <PolicySelectorFields
+              orgId={orgId}
               label="Source"
               kind={srcKind}
               value={srcValue}
@@ -431,6 +435,7 @@ function CreateOrgPolicyDialog({
               onValueChange={setSrcValue}
             />
             <PolicySelectorFields
+              orgId={orgId}
               label="Destination"
               kind={dstKind}
               value={dstValue}

@@ -7,13 +7,13 @@ import {
 import { Elysia } from "elysia";
 
 import { auth } from "../../../auth";
-import { hasScope } from "../../../lib/api-key-auth";
+import { hasScope, verifyApiKeySecret } from "../../../lib/api-key-auth";
 import type { TagActor } from "../../../lib/tag-ownership";
-import { type ApiKeyAuthContext, apiKeyAuthPlugin } from "./api-key-auth";
+import type { ApiKeyAuthContext } from "./api-key-auth";
 import {
   type AuthContext,
   forbidden,
-  sessionPlugin,
+  resolveOrgContext,
   unauthorized,
 } from "./session";
 
@@ -31,66 +31,97 @@ const API_KEY_SCOPES: Record<TagAuthMode, string> = {
   assign: TAG_ASSIGN_SCOPE,
 };
 
-/** Parent must already use sessionPlugin + apiKeyAuthPlugin (e.g. policyAuthPlugin). */
+function orgIdFromParams(params: unknown): string {
+  if (
+    typeof params === "object" &&
+    params !== null &&
+    "orgId" in params &&
+    typeof params.orgId === "string"
+  ) {
+    return params.orgId;
+  }
+  return "";
+}
+
+/**
+ * Self-contained auth for tag routes. Nested Elysia plugins do not reliably
+ * see parent `authContext` derives, so we resolve session/API key here.
+ */
 export function requireTagAccess(mode: TagAuthMode) {
   const apiKeyScope = API_KEY_SCOPES[mode];
 
-  return new Elysia({ name: `require-tag-${mode}` }).onBeforeHandle(
-    { as: "scoped" },
-    async ({ authContext, apiKeyAuth, request, params }) => {
-      const orgId =
-        typeof params === "object" &&
-        params !== null &&
-        "orgId" in params &&
-        typeof params.orgId === "string"
-          ? params.orgId
-          : "";
-
-      if (apiKeyAuth) {
-        if (!orgId || apiKeyAuth.organizationId !== orgId) {
-          return forbidden();
-        }
-        const scopes = apiKeyAuth.scopes;
-        const ok =
-          hasScope(scopes, apiKeyScope) ||
-          (mode === "read" &&
-            (hasScope(scopes, TAG_WRITE_SCOPE) ||
-              hasScope(scopes, TAG_ASSIGN_SCOPE))) ||
-          (mode === "assign" && hasScope(scopes, TAG_WRITE_SCOPE));
-        if (!ok) {
-          return forbidden();
-        }
-        return;
+  return new Elysia({ name: `require-tag-${mode}` })
+    .derive({ as: "scoped" }, async ({ request, params }) => {
+      const orgId = orgIdFromParams(params);
+      const authHeader = request.headers.get("authorization");
+      if (authHeader?.startsWith("Bearer ")) {
+        const secret = authHeader.slice(7).trim();
+        const apiKeyAuth = secret
+          ? await verifyApiKeySecret(secret, orgId || undefined)
+          : null;
+        return {
+          authContext: null as AuthContext | null,
+          apiKeyAuth,
+        };
       }
+      const authContext = await resolveOrgContext(request.headers, orgId);
+      return {
+        authContext,
+        apiKeyAuth: null as ApiKeyAuthContext | null,
+      };
+    })
+    .onBeforeHandle(
+      { as: "scoped" },
+      async ({ authContext, apiKeyAuth, request, params }) => {
+        const orgId = orgIdFromParams(params);
 
-      if (!authContext) {
-        return unauthorized();
-      }
-      if (!orgId || authContext.organizationId !== orgId) {
-        return forbidden();
-      }
-
-      const permissions =
-        mode === "assign"
-          ? { tag: ["assign", "update", "create"] as string[] }
-          : { tag: [...SESSION_PERMISSIONS[mode]] };
-
-      const result = await auth.api.hasPermission({
-        headers: request.headers,
-        body: {
-          organizationId: authContext.organizationId,
-          permissions: permissions as Record<string, string[]>,
-        },
-      });
-
-      if (!result?.success) {
-        if (mode === "assign") {
+        if (apiKeyAuth) {
+          if (!orgId || apiKeyAuth.organizationId !== orgId) {
+            return forbidden();
+          }
+          const scopes = apiKeyAuth.scopes;
+          const ok =
+            hasScope(scopes, apiKeyScope) ||
+            (mode === "read" &&
+              (hasScope(scopes, TAG_WRITE_SCOPE) ||
+                hasScope(scopes, TAG_ASSIGN_SCOPE))) ||
+            (mode === "assign" && hasScope(scopes, TAG_WRITE_SCOPE));
+          if (!ok) {
+            return forbidden();
+          }
           return;
         }
-        return forbidden();
-      }
-    },
-  );
+
+        if (!authContext) {
+          return unauthorized();
+        }
+        if (!orgId || authContext.organizationId !== orgId) {
+          return forbidden();
+        }
+
+        const permissions =
+          mode === "assign"
+            ? { tag: ["assign", "update", "create"] as string[] }
+            : { tag: [...SESSION_PERMISSIONS[mode]] };
+
+        const result = await auth.api.hasPermission({
+          headers: request.headers,
+          body: {
+            organizationId: authContext.organizationId,
+            permissions: permissions as Record<string, string[]>,
+          },
+        });
+
+        if (!result?.success) {
+          if (mode === "assign") {
+            // Members may still assign when they own the tag; ownership is
+            // checked in the handler.
+            return;
+          }
+          return forbidden();
+        }
+      },
+    );
 }
 
 export function isOrgAdminRole(memberRole: string): boolean {
@@ -129,8 +160,3 @@ export function getTagActor(ctx: {
   }
   throw new Error("Tag auth context missing");
 }
-
-/** Standalone plugin when parent is not already using policyAuthPlugin. */
-export const tagAuthPlugin = new Elysia({ name: "tag-auth" })
-  .use(sessionPlugin)
-  .use(apiKeyAuthPlugin);

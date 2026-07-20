@@ -218,6 +218,7 @@ function NetworkPoliciesPanel() {
       )}
 
       <CreatePolicyDialog
+        orgId={orgId}
         open={createOpen}
         onOpenChange={setCreateOpen}
         loading={createPolicy.isPending}
@@ -409,6 +410,7 @@ function SshRulesPanel() {
       )}
 
       <CreateSshRuleDialog
+        orgId={orgId}
         open={createOpen}
         onOpenChange={setCreateOpen}
         loading={createPolicy.isPending}
@@ -451,11 +453,13 @@ function SshRulesPanel() {
 }
 
 function CreatePolicyDialog({
+  orgId,
   open,
   onOpenChange,
   loading,
   onSubmit,
 }: {
+  orgId?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   loading: boolean;
@@ -520,6 +524,7 @@ function CreatePolicyDialog({
               </Select>
             </div>
             <PolicySelectorFields
+              orgId={orgId}
               label="Source"
               kind={srcKind}
               value={srcValue}
@@ -527,6 +532,7 @@ function CreatePolicyDialog({
               onValueChange={setSrcValue}
             />
             <PolicySelectorFields
+              orgId={orgId}
               label="Destination"
               kind={dstKind}
               value={dstValue}
@@ -582,11 +588,13 @@ function CreatePolicyDialog({
 }
 
 function CreateSshRuleDialog({
+  orgId,
   open,
   onOpenChange,
   loading,
   onSubmit,
 }: {
+  orgId?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   loading: boolean;
@@ -660,6 +668,7 @@ function CreateSshRuleDialog({
               />
             </div>
             <PolicySelectorFields
+              orgId={orgId}
               label="Source"
               kind={srcKind}
               value={srcValue}
@@ -667,6 +676,7 @@ function CreateSshRuleDialog({
               onValueChange={setSrcValue}
             />
             <PolicySelectorFields
+              orgId={orgId}
               label="Destination"
               kind={dstKind}
               value={dstValue}

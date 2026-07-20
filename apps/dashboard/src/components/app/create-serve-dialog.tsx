@@ -1,9 +1,8 @@
-import { XIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { CopyField } from "@/components/app/copy-field";
-import { Badge } from "@/components/ui/badge";
+import { TagMultiCombobox } from "@/components/app/tag-combobox";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -53,7 +52,6 @@ export function CreateServeDialog({
     "all_peers" | "tags" | "machines"
   >("all_peers");
   const [tags, setTags] = useState<string[]>([]);
-  const [tagInput, setTagInput] = useState("");
   const [selectedEndpoints, setSelectedEndpoints] = useState<string[]>([]);
   const [createdHostname, setCreatedHostname] = useState<string | null>(null);
 
@@ -114,7 +112,6 @@ export function CreateServeDialog({
     setProtocol("https");
     setAccessMode("all_peers");
     setTags([]);
-    setTagInput("");
     setSelectedEndpoints([]);
     setCreatedHostname(null);
   }
@@ -122,16 +119,6 @@ export function CreateServeDialog({
   function handleClose(next: boolean) {
     if (!next) reset();
     onOpenChange(next);
-  }
-
-  function addTag() {
-    const next = tagInput.trim();
-    if (!next || tags.includes(next)) {
-      setTagInput("");
-      return;
-    }
-    setTags([...tags, next]);
-    setTagInput("");
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -304,35 +291,12 @@ export function CreateServeDialog({
               {accessMode === "tags" ? (
                 <div className="space-y-2">
                   <Label>Tags</Label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {tags.map((tag) => (
-                      <Badge key={tag} variant="secondary" className="gap-1">
-                        {tag}
-                        <button
-                          type="button"
-                          onClick={() => setTags(tags.filter((t) => t !== tag))}
-                        >
-                          <XIcon className="size-3" />
-                        </button>
-                      </Badge>
-                    ))}
-                  </div>
-                  <div className="flex gap-2">
-                    <Input
-                      value={tagInput}
-                      onChange={(e) => setTagInput(e.target.value)}
-                      placeholder="production"
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          addTag();
-                        }
-                      }}
-                    />
-                    <Button type="button" variant="outline" onClick={addTag}>
-                      Add
-                    </Button>
-                  </div>
+                  <TagMultiCombobox
+                    orgId={orgId}
+                    value={tags}
+                    onValueChange={setTags}
+                    placeholder="Search tags…"
+                  />
                 </div>
               ) : null}
 

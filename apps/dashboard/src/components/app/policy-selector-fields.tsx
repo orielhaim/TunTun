@@ -1,4 +1,5 @@
 import type { CreatePolicyBody, Selector } from "@tunnet/api/management";
+import { TagCombobox } from "@/components/app/tag-combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -10,12 +11,14 @@ import {
 } from "@/components/ui/select";
 
 export function PolicySelectorFields({
+  orgId,
   label,
   kind,
   value,
   onKindChange,
   onValueChange,
 }: {
+  orgId?: string;
   label: string;
   kind: string;
   value: string;
@@ -44,12 +47,21 @@ export function PolicySelectorFields({
             <SelectItem value="user">User</SelectItem>
           </SelectContent>
         </Select>
-        {kind !== "any" ? (
+        {kind === "tag" ? (
+          <TagCombobox
+            orgId={orgId}
+            value={value}
+            onValueChange={onValueChange}
+            placeholder="Search tags…"
+            className="flex-1"
+          />
+        ) : kind !== "any" ? (
           <Input
             value={value}
             onChange={(e) => onValueChange(e.target.value)}
             placeholder={selectorPlaceholder(kind)}
             required
+            className="flex-1"
           />
         ) : null}
       </div>

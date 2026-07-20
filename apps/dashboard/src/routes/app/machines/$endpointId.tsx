@@ -1187,6 +1187,7 @@ function MachineDetailPage() {
       />
 
       <MachineTagsEditor
+        orgId={orgId}
         open={tagsOpen}
         onOpenChange={setTagsOpen}
         tags={device.tags ?? []}

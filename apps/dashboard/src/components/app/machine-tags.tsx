@@ -1,6 +1,6 @@
-import { PlusIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { TagMultiCombobox } from "@/components/app/tag-combobox";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -9,7 +9,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
@@ -44,12 +43,14 @@ export function MachineTagsList({
 }
 
 export function MachineTagsEditor({
+  orgId,
   open,
   onOpenChange,
   tags,
   onSave,
   loading,
 }: {
+  orgId: string | undefined;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tags: string[];
@@ -57,27 +58,12 @@ export function MachineTagsEditor({
   loading?: boolean;
 }) {
   const [draft, setDraft] = useState<string[]>(tags);
-  const [input, setInput] = useState("");
 
   function syncOpen(next: boolean) {
     if (next) {
       setDraft(tags);
-      setInput("");
     }
     onOpenChange(next);
-  }
-
-  function addTag() {
-    const name = input.trim().replace(/^tag:/, "").toLowerCase();
-    if (!name) return;
-    if (!/^[a-z0-9][a-z0-9-_]*$/.test(name)) {
-      toast.error("Invalid tag name");
-      return;
-    }
-    if (!draft.includes(name)) {
-      setDraft([...draft, name].sort());
-    }
-    setInput("");
   }
 
   return (
@@ -86,42 +72,20 @@ export function MachineTagsEditor({
         <DialogHeader>
           <DialogTitle>Edit tags</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 py-2">
-          <MachineTagsList
-            tags={draft}
-            onTagClick={(tag) =>
-              setDraft((prev) => prev.filter((t) => t !== tag))
-            }
-            empty="No tags assigned"
-          />
-          <div className="flex gap-2">
-            <div className="flex-1 space-y-1">
-              <Label htmlFor="tag-input">Add tag</Label>
-              <Input
-                id="tag-input"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="production"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    addTag();
-                  }
-                }}
-              />
-            </div>
-            <Button
-              type="button"
-              className="mt-6"
-              variant="outline"
-              onClick={addTag}
-            >
-              <PlusIcon className="size-4" />
-            </Button>
+        <div className="space-y-3 py-2">
+          <div className="space-y-2">
+            <Label htmlFor="machine-tags">Tags</Label>
+            <TagMultiCombobox
+              id="machine-tags"
+              orgId={orgId}
+              value={draft}
+              onValueChange={setDraft}
+              placeholder="Search tags…"
+              disabled={loading}
+            />
           </div>
           <p className="text-muted-foreground text-xs">
-            Click a tag to remove it from the draft. Tag must already be defined
-            and you must own it.
+            Choose from defined tags you are allowed to assign.
           </p>
         </div>
         <DialogFooter>
@@ -155,31 +119,41 @@ export function MachineTagsEditor({
 }
 
 export function BulkTagsDialog({
+  orgId,
   open,
   onOpenChange,
   onSubmit,
   loading,
 }: {
+  orgId: string | undefined;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (add: string[]) => Promise<void>;
   loading?: boolean;
 }) {
-  const [input, setInput] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) setTags([]);
+        onOpenChange(next);
+      }}
+    >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Assign tag to selected machines</DialogTitle>
+          <DialogTitle>Assign tags to selected machines</DialogTitle>
         </DialogHeader>
         <div className="space-y-2 py-2">
-          <Label htmlFor="bulk-tag">Tag</Label>
-          <Input
-            id="bulk-tag"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="production"
+          <Label htmlFor="bulk-tags">Tags</Label>
+          <TagMultiCombobox
+            id="bulk-tags"
+            orgId={orgId}
+            value={tags}
+            onValueChange={setTags}
+            placeholder="Search tags…"
+            disabled={loading}
           />
         </div>
         <DialogFooter>
@@ -187,14 +161,13 @@ export function BulkTagsDialog({
             Cancel
           </Button>
           <Button
-            disabled={loading || !input.trim()}
+            disabled={loading || tags.length === 0}
             onClick={() => {
-              const name = input.trim().replace(/^tag:/, "").toLowerCase();
               void (async () => {
                 try {
-                  await onSubmit([name]);
+                  await onSubmit(tags);
                   toast.success("Tags assigned");
-                  setInput("");
+                  setTags([]);
                   onOpenChange(false);
                 } catch (err) {
                   toast.error(

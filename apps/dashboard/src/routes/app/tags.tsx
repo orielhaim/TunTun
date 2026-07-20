@@ -9,6 +9,7 @@ import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { DataTable } from "@/components/app/data-table";
 import { EmptyState } from "@/components/app/empty-state";
 import { PageHeader } from "@/components/app/page-header";
+import { TagOwnerCombobox } from "@/components/app/tag-combobox";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,7 +21,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Textarea } from "@/components/ui/textarea";
 import { useCan } from "@/hooks/use-permission";
 import { useActiveOrganization } from "@/lib/auth-client";
 import {
@@ -142,6 +142,7 @@ function TagsPage() {
       </div>
 
       <CreateTagDialog
+        orgId={orgId}
         open={createOpen}
         onOpenChange={setCreateOpen}
         loading={mutations.createTagDefinition.isPending}
@@ -184,31 +185,36 @@ function TagsPage() {
 }
 
 function CreateTagDialog({
+  orgId,
   open,
   onOpenChange,
   loading,
   onSubmit,
 }: {
+  orgId?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   loading: boolean;
   onSubmit: (body: { name: string; owners: string[] }) => Promise<void>;
 }) {
   const [name, setName] = useState("");
-  const [owners, setOwners] = useState("");
+  const [owners, setOwners] = useState<string[]>([]);
+  const [userOwners, setUserOwners] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const ownerList = owners
+    const users = userOwners
       .split(/[,\n]+/)
       .map((s) => s.trim())
-      .filter(Boolean);
+      .filter(Boolean)
+      .map((s) => (s.startsWith("user:") ? s : `user:${s}`));
     await onSubmit({
       name: name.trim(),
-      owners: ownerList,
+      owners: [...owners, ...users],
     });
     setName("");
-    setOwners("");
+    setOwners([]);
+    setUserOwners("");
   }
 
   return (
@@ -231,17 +237,27 @@ function CreateTagDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="tag-owners">Owners (optional)</Label>
-              <Textarea
+              <Label htmlFor="tag-owners">Tag owners (optional)</Label>
+              <TagOwnerCombobox
                 id="tag-owners"
+                orgId={orgId}
                 value={owners}
-                onChange={(e) => setOwners(e.target.value)}
-                placeholder={"user:you@company.com\ntag:ci"}
-                rows={3}
+                onValueChange={setOwners}
+                placeholder="Search tag:… or autogroup:admin"
+                disabled={loading}
               />
               <p className="text-muted-foreground text-xs">
-                Defaults to you. Use `user:…`, `tag:…`, or `autogroup:admin`.
+                Defaults to you if empty. Tag owners may assign this tag.
               </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="tag-user-owners">User owners (optional)</Label>
+              <Input
+                id="tag-user-owners"
+                value={userOwners}
+                onChange={(e) => setUserOwners(e.target.value)}
+                placeholder="you@company.com"
+              />
             </div>
           </div>
           <DialogFooter>

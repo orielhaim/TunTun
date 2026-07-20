@@ -9,7 +9,7 @@ export type AuthContext = {
   memberRole: string;
 };
 
-async function resolveOrgContext(
+export async function resolveOrgContext(
   headers: Headers,
   orgIdParam: string,
 ): Promise<AuthContext | null> {
