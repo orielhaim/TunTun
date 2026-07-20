@@ -6,8 +6,6 @@
 
 **Open-source private mesh networking.** Connect machines into one encrypted network - then SSH, serve internal apps, publish public tunnels, transfer files, and wire Kubernetes into the same fabric. One identity. One policy engine. One stack you can fully self-host.
 
-[Documentation](https://docs.tunnet.io) · [Discord](https://discord.gg/y5bNc3MYKz) · [GitHub](https://github.com/tunnetio/Tunnet)
-
 ## Why Tunnet
 
 Commercial mesh products are excellent but most of them keep the coordination server closed. Tunnet ships the **agent, control plane, management API, dashboard, and relays** in this repository. You can read every line, self-host everything, and never depend on a proprietary coordination service or a lagging third-party reimplementation.
@@ -44,8 +42,8 @@ The Tunnet Operator connects a cluster to your network with CRDs: advertise clus
 
 Ship a mesh node inside the process. No separate agent required for app-to-app traffic:
 
-- **Node.js / Bun** - [`@tunnet/sdk`](https://docs.tunnet.io/sdk/js/)
-- **Rust** - [`tunnet` on crates.io](https://docs.tunnet.io/sdk/rust/)
+- [Node.js / Bun](https://docs.tunnet.io/sdk/js/)
+- [Rust](https://docs.tunnet.io/sdk/rust/)
 
 Open streams to peers, accept inbound connections, transfer files, and compose with your existing HTTP stack.
 
@@ -53,7 +51,7 @@ For management automation (policy, groups, ACLs) see the [Go management SDK](htt
 
 ### Two modes, one product
 
-- **Managed** - control plane, dashboard, SSO/OIDC, centralized policies, Policy as Code (HCL/JSON/YAML, Terraform, GitOps), [audit logs](https://docs.tunnet.io/guide/concepts/audit-logs), tunnels, SSH recording. Built for teams.
+- **Managed** - control plane, dashboard, SSO/OIDC, centralized policies, Policy as Code (HCL/JSON/YAML, Terraform, GitOps), audit logs, tunnels, SSH recording. Built for teams.
 - **Direct** - zero-server P2P mesh for individuals and small groups.
 
 [Managed](https://docs.tunnet.io/modes/managed/) · [Direct](https://docs.tunnet.io/modes/direct/) · [Policy as Code](https://docs.tunnet.io/guide/policy-as-code)
@@ -111,4 +109,4 @@ irm https://github.com/tunnetio/Tunnet/releases/latest/download/install.ps1 | ie
 
 ## License
 
-AGPL-3.0. See [LICENSE](LICENSE). Commercial licenses are available when AGPL does not fit - see [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md).
+AGPL-3.0. See [LICENSE](LICENSE). [Commercial licenses](COMMERCIAL-LICENSE.md) are available when AGPL does not fit.
