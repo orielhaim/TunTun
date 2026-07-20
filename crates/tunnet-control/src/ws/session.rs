@@ -116,36 +116,95 @@ pub async fn run_ws(
                                 .await
                                 {
                                     tracing::warn!(?e, %serve_id, "ServeReady update failed");
-                                } else if let Err(e) =
-                                    crate::entity_notify::notify_serve_status(&pool, &serve_id)
-                                        .await
-                                {
-                                    tracing::warn!(?e, %serve_id, "serve entity notify failed");
-                                }
-                            }
-                            ClientMsg::ServeStopped { serve_id } => {
-                                if let Err(e) = sqlx::query(
-                                    "UPDATE serves SET status = 'stopped', updated_at = now() \
-                                     WHERE id = $1::uuid AND endpoint_id = $2",
-                                )
-                                .bind(&serve_id)
-                                .bind(&ep)
-                                .execute(&pool)
-                                .await
-                                {
-                                    tracing::warn!(?e, %serve_id, "ServeStopped update failed");
                                 } else {
-                                    let _ = sqlx::query(
-                                        "DELETE FROM serve_sessions WHERE serve_id = $1::uuid",
+                                    // Bump so mesh DNS includes the new active serve hostname.
+                                    if let Ok(Some(network_id)) = sqlx::query_scalar::<_, uuid::Uuid>(
+                                        "SELECT network_id FROM serves WHERE id = $1::uuid",
                                     )
                                     .bind(&serve_id)
-                                    .execute(&pool)
-                                    .await;
+                                    .fetch_optional(&pool)
+                                    .await
+                                    {
+                                        let _ = sqlx::query(
+                                            "UPDATE networks SET version = version + 1 WHERE id = $1",
+                                        )
+                                        .bind(network_id)
+                                        .execute(&pool)
+                                        .await;
+                                        let _ = crate::pg_notify::emit_network_changed(
+                                            &pool, network_id,
+                                        )
+                                        .await;
+                                    }
                                     if let Err(e) =
                                         crate::entity_notify::notify_serve_status(&pool, &serve_id)
                                             .await
                                     {
                                         tracing::warn!(?e, %serve_id, "serve entity notify failed");
+                                    }
+                                }
+                            }
+                            ClientMsg::ServeStopped { serve_id } => {
+                                let meta: Option<(String, uuid::Uuid)> = match sqlx::query_as(
+                                    "SELECT d.organization_id, s.network_id \
+                                     FROM serves s \
+                                     JOIN devices d ON d.endpoint_id = s.endpoint_id \
+                                     WHERE s.id = $1::uuid AND s.endpoint_id = $2",
+                                )
+                                .bind(&serve_id)
+                                .bind(&ep)
+                                .fetch_optional(&pool)
+                                .await
+                                {
+                                    Ok(row) => row,
+                                    Err(e) => {
+                                        tracing::warn!(?e, %serve_id, "ServeStopped lookup failed");
+                                        None
+                                    }
+                                };
+
+                                if let Some((org_id, network_id)) = meta {
+                                    if let Err(e) = sqlx::query(
+                                        "DELETE FROM serves \
+                                         WHERE id = $1::uuid AND endpoint_id = $2",
+                                    )
+                                    .bind(&serve_id)
+                                    .bind(&ep)
+                                    .execute(&pool)
+                                    .await
+                                    {
+                                        tracing::warn!(?e, %serve_id, "ServeStopped delete failed");
+                                    } else {
+                                        let _ = sqlx::query(
+                                            "UPDATE networks SET version = version + 1 WHERE id = $1",
+                                        )
+                                        .bind(network_id)
+                                        .execute(&pool)
+                                        .await;
+                                        if let Err(e) =
+                                            crate::pg_notify::emit_network_changed(&pool, network_id)
+                                                .await
+                                        {
+                                            tracing::warn!(
+                                                ?e,
+                                                %network_id,
+                                                "ServeStopped network notify failed"
+                                            );
+                                        }
+                                        if let Err(e) = crate::entity_notify::emit_serve_changed(
+                                            &pool,
+                                            &org_id,
+                                            &network_id.to_string(),
+                                            &serve_id,
+                                        )
+                                        .await
+                                        {
+                                            tracing::warn!(
+                                                ?e,
+                                                %serve_id,
+                                                "serve entity notify failed"
+                                            );
+                                        }
                                     }
                                 }
                             }

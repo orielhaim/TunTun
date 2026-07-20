@@ -802,7 +802,7 @@ pub enum ServeSubcommand {
         #[arg(long, env = "TUNNET_STATE_DIR")]
         state_dir: Option<String>,
     },
-    /// Stop serving a port
+    /// Stop and remove a serve
     Off {
         port: u16,
         #[arg(long)]
@@ -929,7 +929,7 @@ async fn run_serve_off(port: u16, json: bool, state_dir: Option<&str>) -> anyhow
     if out.json {
         return out.print_json(&info);
     }
-    out.writeln(format!("{} Stopped serve on port {port}", out.green("✓")));
+    out.writeln(format!("{} Removed serve on port {port}", out.green("✓")));
     let _ = info;
     Ok(())
 }

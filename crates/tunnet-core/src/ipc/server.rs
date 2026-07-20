@@ -200,7 +200,15 @@ async fn dispatch(req: IpcRequest, state: &AgentIpcState) -> IpcResponse {
             serves: state.serves.list(),
         },
         IpcRequest::ServeOff { port } => match state.serves.stop(port) {
-            Ok(info) => IpcResponse::Serve(info),
+            Ok(info) => {
+                // Report to control plane so the serve row is hard-deleted.
+                if let Some(tx) = state.serves.client_tx() {
+                    let _ = tx.try_send(tunnet_common::ws::ClientMsg::ServeStopped {
+                        serve_id: info.id.clone(),
+                    });
+                }
+                IpcResponse::Serve(info)
+            }
             Err(e) => err_anyhow(e),
         },
         IpcRequest::TunnelStart {

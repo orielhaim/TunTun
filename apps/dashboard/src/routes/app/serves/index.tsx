@@ -159,7 +159,6 @@ function ServesPage() {
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="starting">Starting</SelectItem>
               <SelectItem value="error">Error</SelectItem>
-              <SelectItem value="stopped">Stopped</SelectItem>
             </SelectContent>
           </Select>
         }

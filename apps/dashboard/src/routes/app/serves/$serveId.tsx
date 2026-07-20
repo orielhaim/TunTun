@@ -411,14 +411,14 @@ function ServeDetailPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-muted-foreground text-sm">
-                  Stopping this serve removes the internal hostname from the
-                  mesh snapshot.
+                  Stopping removes this serve and its internal hostname from the
+                  mesh. To expose the port again, create a new serve.
                 </p>
                 <Button
                   variant="destructive"
                   onClick={() => setConfirmStop(true)}
                 >
-                  Stop serve
+                  Stop & remove
                 </Button>
               </CardContent>
             </Card>
@@ -429,9 +429,9 @@ function ServeDetailPage() {
       <ConfirmDialog
         open={confirmStop}
         onOpenChange={setConfirmStop}
-        title="Stop serve"
-        description={`Stop ${serve.internalHostname}? Peers will no longer reach this service.`}
-        confirmLabel="Stop"
+        title="Stop & remove serve"
+        description={`Remove ${serve.internalHostname}? Peers will no longer reach this service, and you will need to create it again to restore it.`}
+        confirmLabel="Stop & remove"
         destructive
         loading={mutations.remove.isPending}
         onConfirm={async () => {
@@ -440,11 +440,11 @@ function ServeDetailPage() {
               networkId: serve.networkId,
               serveId: serve.id,
             });
-            toast.success("Serve stopped");
+            toast.success("Serve removed");
             window.location.href = "/app/serves";
           } catch (err) {
             toast.error(
-              err instanceof Error ? err.message : "Failed to stop serve",
+              err instanceof Error ? err.message : "Failed to remove serve",
             );
           }
         }}

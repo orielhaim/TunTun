@@ -338,6 +338,60 @@ export const servesRoutes = new Elysia()
             networkId: params.networkId,
           });
 
+          const live =
+            existing.status === "active" || existing.status === "starting";
+          const accessChanged =
+            parsed.accessMode !== undefined ||
+            parsed.allowedTags !== undefined ||
+            parsed.allowedEndpointIds !== undefined;
+
+          if (live && accessChanged && updated) {
+            let certificatePem: string | undefined;
+            let privateKeyPem: string | undefined;
+            if (updated.protocol === "https") {
+              try {
+                const leaf = await issueLeafCertificate({
+                  organizationId: auth.organizationId,
+                  endpointId: updated.endpointId,
+                  hostname: updated.internalHostname,
+                });
+                certificatePem = leaf.certificatePem;
+                privateKeyPem = leaf.privateKeyPem;
+              } catch (e) {
+                console.error("issueLeafCertificate for serve patch failed", e);
+              }
+            }
+
+            try {
+              await pushStartServe({
+                endpointId: updated.endpointId,
+                serveId: updated.id,
+                port: updated.localPort,
+                protocol: updated.protocol,
+                internalHostname: updated.internalHostname,
+                certificatePem,
+                privateKeyPem,
+                accessMode: updated.accessMode,
+                allowedTags: updated.allowedTags ?? [],
+                allowedEndpointIds: updated.allowedEndpointIds ?? [],
+              });
+            } catch (e) {
+              const message =
+                e instanceof Error ? e.message : "pushStartServe failed";
+              console.error("pushStartServe failed on serve patch", e);
+              const [errored] = await db
+                .update(schema.serves)
+                .set({
+                  status: "error",
+                  errorMessage: message,
+                  updatedAt: new Date(),
+                })
+                .where(eq(schema.serves.id, updated.id))
+                .returning();
+              return { serve: serializeServe(errored ?? updated) };
+            }
+          }
+
           return { serve: serializeServe(updated!) };
         },
       )
@@ -360,9 +414,9 @@ export const servesRoutes = new Elysia()
           if (!existing) return notFound("Serve not found");
 
           await db.transaction(async (tx) => {
+            // serve_sessions cascade on delete
             await tx
-              .update(schema.serves)
-              .set({ status: "stopped", updatedAt: new Date() })
+              .delete(schema.serves)
               .where(eq(schema.serves.id, params.serveId));
 
             await bumpNetworkAndNotify(
@@ -381,7 +435,7 @@ export const servesRoutes = new Elysia()
             await writeAudit(tx, {
               organizationId: auth.organizationId,
               actor: auth.user.id,
-              action: "serve.stop",
+              action: "serve.delete",
               target: params.serveId,
               metadata: { internalHostname: existing.internalHostname },
             });

@@ -101,10 +101,10 @@ impl ServeManager {
         {
             let guard = self.inner.lock();
             if let Some(existing) = guard.serves.values().find(|s| s.info.id == id) {
-                tracing::debug!(%id, port, "serve already active - skipping start");
-                return Ok(existing.info.clone());
-            }
-            if guard.serves.contains_key(&port) {
+                let port_to_stop = existing.info.port;
+                drop(guard);
+                let _ = self.stop(port_to_stop);
+            } else if guard.serves.contains_key(&port) {
                 // Port held by a different serve id - replace it.
                 drop(guard);
                 let _ = self.stop(port);
