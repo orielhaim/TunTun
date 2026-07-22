@@ -160,9 +160,18 @@ const METADATA_LABELS: Record<string, string> = {
   reportedAt: "Last reported",
 };
 
+const SYSTEM_TAB_HIDDEN_KEYS = new Set([
+  "effectiveConfig",
+  "effectiveConfigReportedAt",
+]);
+
 function SystemTab({ metadata }: { metadata: DeviceMetadata }) {
   const entries = Object.entries(metadata).filter(
-    ([, value]) => value !== undefined && value !== null && value !== "",
+    ([key, value]) =>
+      !SYSTEM_TAB_HIDDEN_KEYS.has(key) &&
+      value !== undefined &&
+      value !== null &&
+      value !== "",
   );
 
   if (entries.length === 0) {
@@ -187,7 +196,7 @@ function SystemTab({ metadata }: { metadata: DeviceMetadata }) {
 
   const sorted = [
     ...orderedKeys
-      .filter((key) => key in metadata)
+      .filter((key) => key in metadata && !SYSTEM_TAB_HIDDEN_KEYS.has(key))
       .map((key) => [key, metadata[key]] as const),
     ...entries.filter(([key]) => !orderedKeys.includes(key)),
   ];

@@ -197,7 +197,10 @@ export function MachineConfigTab({
   orgId: string;
   endpointId: string;
 }) {
-  const { data, isPending } = useDeviceEffectiveConfig(orgId, endpointId);
+  const { data, isPending, isError, error } = useDeviceEffectiveConfig(
+    orgId,
+    endpointId,
+  );
   const { data: networks } = useNetworks(orgId);
   const networkName =
     data?.networkId && networks
@@ -206,6 +209,19 @@ export function MachineConfigTab({
 
   if (isPending) {
     return <Skeleton className="h-80 w-full" />;
+  }
+
+  if (isError) {
+    return (
+      <EmptyState
+        title="Failed to load config"
+        description={
+          error instanceof Error
+            ? error.message
+            : "Could not load effective config"
+        }
+      />
+    );
   }
 
   if (!data?.config) {

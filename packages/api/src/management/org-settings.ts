@@ -287,7 +287,7 @@ export const deviceEffectiveConfigResponse = z.object({
   endpointId: z.string().length(64),
   networkId: z.string().uuid().nullable(),
   config: effectiveAgentConfigSchema.nullable(),
-  reportedAt: z.string().datetime().nullable(),
+  reportedAt: z.string().datetime({ offset: true }).nullable(),
   remotePolicy: remoteAgentPolicySchema,
 });
 

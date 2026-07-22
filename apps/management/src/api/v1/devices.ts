@@ -28,6 +28,7 @@ import {
   removeDeviceMembership,
   removeDeviceMembershipsBulk,
 } from "../../lib/remove-device-membership";
+import { toIso } from "../../lib/serialize";
 import { serializeDevice } from "../../lib/serialize-device";
 import {
   applyDeviceTagChanges,
@@ -183,10 +184,16 @@ export const devicesRoutes = new Elysia()
       const parsedConfig = rawConfig
         ? effectiveAgentConfigSchema.safeParse(rawConfig)
         : null;
-      const reportedAt =
+      const reportedAtRaw =
         typeof meta.effectiveConfigReportedAt === "string"
           ? meta.effectiveConfigReportedAt
           : null;
+      const reportedAtMs = reportedAtRaw
+        ? Date.parse(reportedAtRaw)
+        : Number.NaN;
+      const reportedAt = Number.isFinite(reportedAtMs)
+        ? toIso(new Date(reportedAtMs))
+        : null;
 
       return {
         endpointId: device.endpointId,
